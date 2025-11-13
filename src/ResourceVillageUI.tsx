@@ -561,7 +561,7 @@ export default function ResourceVillageUI() {
   function RowBar({ value, max }: { value: number; max: number }) {
     const p = pct(value, max);
     return (
-      <div className="h-2 rounded bg-slate-200 dark:bg-slate-800 overflow-hidden">
+      <div className="h-2 rounded bg-slate-800 overflow-hidden">
         <div className="h-2 bg-sky-500" style={{ width: `${p}%` }} />
       </div>
     );
@@ -577,7 +577,7 @@ export default function ResourceVillageUI() {
     const rateColor = rate > 0 ? 'text-emerald-500' : rate < 0 ? 'text-red-500' : 'text-slate-500';
     const rateSign = rate > 0 ? '+' : '';
     return (
-      <div className="rounded-2xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-3 shadow-sm">
+      <div className="rounded-2xl border border-slate-700 bg-slate-900 px-4 py-3 shadow-sm">
         <div className="text-xl font-bold select-none flex items-baseline gap-2">
           <span className={valueColor || ''}>{label} {formatShort(value)}{label === 'Pop' ? ` / ${formatShort(cap)}` : ''}</span>
           {workerInfo && <span className="text-xs text-slate-500 font-normal">({workerInfo})</span>}
@@ -589,7 +589,7 @@ export default function ResourceVillageUI() {
           )}
         </div>
         {showBar && (
-          <div className="mt-2 h-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 overflow-hidden">
+          <div className="mt-2 h-4 rounded-xl bg-slate-900 border border-slate-700 overflow-hidden">
             <div className="h-full bg-sky-500" style={{ width: `${pct(value, cap)}%` }} />
           </div>
         )}
@@ -634,18 +634,18 @@ export default function ResourceVillageUI() {
     const effectiveLevel = Math.min(level, workers);
 
     return (
-      <div className={`rounded-xl border ${enabled ? 'border-slate-200 dark:border-slate-800' : 'border-slate-400 dark:border-slate-600 opacity-75'} bg-white dark:bg-slate-900 p-3`}>
+      <div className={`rounded-xl border ${enabled ? 'border-slate-800' : 'border-slate-600 opacity-75'} bg-slate-900 p-3`}>
         <div className="flex items-center gap-3">
           <div className="min-w-0 flex-1">
             <div className="flex items-baseline gap-2 flex-wrap">
               <div className="font-semibold truncate">{name}</div>
-              <div className="text-xs px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800">Lv {level}</div>
+              <div className="text-xs px-1.5 py-0.5 rounded bg-slate-800">Lv {level}</div>
               {workers < requiredWorkers && (
-                <div className="text-xs px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200">
+                <div className="text-xs px-1.5 py-0.5 rounded bg-amber-900 text-amber-200">
                   Effective Lv {effectiveLevel}
                 </div>
               )}
-              <span className="text-[10px] px-1 py-0.5 rounded border border-slate-300 dark:border-slate-700">{meta.short}</span>
+              <span className="text-[10px] px-1 py-0.5 rounded border border-slate-700">{meta.short}</span>
               <div className="text-xs text-slate-500">+{formatRate(rate)} {meta.short}/s</div>
               <div className="text-xs text-slate-500">cap {formatCap(cap)} {meta.short}</div>
               <div className="text-xs text-slate-500">Workers: {workers}/{requiredWorkers}</div>
@@ -663,7 +663,7 @@ export default function ResourceVillageUI() {
               {enabled ? "Disable" : "Enable"}
             </button>
             <button
-              className="px-3 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-slate-100 disabled:opacity-50"
+              className="px-3 py-1.5 rounded-lg bg-slate-700 text-slate-100 disabled:opacity-50"
               onClick={onCollect}
               disabled={stored <= 0 || (warehouseFree as any)[res] <= 0 || !enabled}
               title={(warehouseFree as any)[res] <= 0 ? "Warehouse full for this resource" : `Collect ${meta.name}`}
@@ -700,12 +700,12 @@ export default function ResourceVillageUI() {
     const affordable = enoughWood && enoughStone;
 
     return (
-      <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3">
+      <div className="rounded-xl border border-slate-800 bg-slate-900 p-3">
         <div className="flex items-center gap-3">
           <div className="min-w-0 flex-1">
             <div className="flex items-baseline gap-2">
               <div className="font-semibold truncate">House</div>
-              <div className="text-xs px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800">Lv {house}</div>
+              <div className="text-xs px-1.5 py-0.5 rounded bg-slate-800">Lv {house}</div>
               <div className="text-xs text-slate-500">Capacity: {formatInt(popCap)}</div>
               <div className="text-xs text-slate-500">Workers: 0 (no workers required)</div>
             </div>
@@ -736,7 +736,7 @@ export default function ResourceVillageUI() {
   function TaxesRow() {
     const trendText = popRate > 0 ? `(+${popRate} in 1s)` : popRate < 0 ? `(${popRate} in 1s)` : "(stable)";
     return (
-      <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3">
+      <div className="rounded-xl border border-slate-800 bg-slate-900 p-3">
         <div className="flex items-center gap-3">
           <div className="min-w-0 flex-1">
             <div className="flex items-baseline gap-2 flex-wrap">
@@ -756,10 +756,10 @@ export default function ResourceVillageUI() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <div className="inline-flex rounded-lg overflow-hidden border border-slate-300 dark:border-slate-700">
-              <button onClick={() => setTax('low')} className={`px-3 py-1.5 ${tax==='low' ? 'bg-slate-900 text-white' : 'bg-slate-200 dark:bg-slate-700'}`}>Low</button>
-              <button onClick={() => setTax('normal')} className={`px-3 py-1.5 ${tax==='normal' ? 'bg-slate-900 text-white' : 'bg-slate-200 dark:bg-slate-700'}`}>Normal</button>
-              <button onClick={() => setTax('high')} className={`px-3 py-1.5 ${tax==='high' ? 'bg-slate-900 text-white' : 'bg-slate-200 dark:bg-slate-700'}`}>High</button>
+            <div className="inline-flex rounded-lg overflow-hidden border border-slate-700">
+              <button onClick={() => setTax('low')} className={`px-3 py-1.5 ${tax==='low' ? 'bg-slate-900 text-white' : 'bg-slate-700'}`}>Low</button>
+              <button onClick={() => setTax('normal')} className={`px-3 py-1.5 ${tax==='normal' ? 'bg-slate-900 text-white' : 'bg-slate-700'}`}>Normal</button>
+              <button onClick={() => setTax('high')} className={`px-3 py-1.5 ${tax==='high' ? 'bg-slate-900 text-white' : 'bg-slate-700'}`}>High</button>
             </div>
           </div>
         </div>
@@ -776,12 +776,12 @@ export default function ResourceVillageUI() {
     const affordable = enoughWood && enoughStone;
 
     return (
-      <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3">
+      <div className="rounded-xl border border-slate-800 bg-slate-900 p-3">
         <div className="flex items-center gap-3">
           <div className="min-w-0 flex-1">
             <div className="flex items-baseline gap-2">
               <div className="font-semibold truncate">Warehouse</div>
-              <div className="text-xs px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800">Lv {warehouseLevel}</div>
+              <div className="text-xs px-1.5 py-0.5 rounded bg-slate-800">Lv {warehouseLevel}</div>
               <div className="text-xs text-slate-500">caps W/S/F {formatCap(warehouseCap.wood)} / {formatCap(warehouseCap.stone)} / {formatCap(warehouseCap.food)}</div>
               <div className="ml-2 text-xs text-slate-500">W {formatInt(warehouse.wood)}, S {formatInt(warehouse.stone)}, F {formatInt(warehouse.food)}</div>
             </div>
@@ -880,9 +880,9 @@ export default function ResourceVillageUI() {
   }, []);
 
   return (
-    <div className="min-h-screen w-full bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100 p-4 md:p-8">
+    <div className="min-h-screen w-full bg-slate-950 text-slate-100 p-4 md:p-8">
       {/* Sticky top resource strip */}
-      <div className="sticky top-0 z-50 -mx-4 md:-mx-8 px-4 md:px-8 pb-3 bg-slate-100/95 dark:bg-slate-950/95 backdrop-blur">
+      <div className="sticky top-0 z-50 -mx-4 md:-mx-8 px-4 md:px-8 pb-3 bg-slate-950/95 backdrop-blur">
         <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-3">
           <ResourcePill 
             label="Pop" 
@@ -902,8 +902,8 @@ export default function ResourceVillageUI() {
         </div>
         
         {/* Cheat Area for Testing */}
-        <div className="mt-3 p-3 rounded-lg border-2 border-amber-500 bg-amber-50 dark:bg-amber-950/30">
-          <div className="text-xs font-semibold text-amber-800 dark:text-amber-200 mb-2">🧪 CHEAT PANEL (Testing)</div>
+        <div className="mt-3 p-3 rounded-lg border-2 border-amber-500 bg-amber-950/30">
+          <div className="text-xs font-semibold text-amber-200 mb-2">🧪 CHEAT PANEL (Testing)</div>
           <div className="flex gap-2 flex-wrap">
             <button
               onClick={() => setWarehouse(w => ({ ...w, wood: Math.min(warehouseCap.wood, w.wood + 999) }))}
@@ -929,41 +929,31 @@ export default function ResourceVillageUI() {
 
       <h1 className="text-2xl md:text-3xl font-bold mb-4 mt-2">Village Resources</h1>
 
-      {/* Tabs: Production | Army | Missions */}
+      {/* Navigation Menu */}
       <div className="mb-4 flex items-center gap-3">
-        <div className="inline-flex rounded-xl overflow-hidden border border-slate-300 dark:border-slate-700">
+        <div className="inline-flex rounded-xl overflow-hidden border border-slate-700">
           <button
             onClick={() => setMainTab('production')}
-            className={`px-3 py-1.5 ${mainTab === 'production' ? 'bg-slate-900 text-white' : 'bg-slate-200 dark:bg-slate-700'}`}
+            className={`px-3 py-1.5 ${mainTab === 'production' ? 'bg-slate-900 text-white' : 'bg-slate-700'}`}
           >
             Production
           </button>
           <button
             onClick={() => setMainTab('army')}
-            className={`px-3 py-1.5 ${mainTab === 'army' ? 'bg-slate-900 text-white' : 'bg-slate-200 dark:bg-slate-700'}`}
+            className={`px-3 py-1.5 ${mainTab === 'army' ? 'bg-slate-900 text-white' : 'bg-slate-700'}`}
           >
-            Army
+            Divisions
           </button>
           <button
             onClick={() => setMainTab('missions')}
-            className={`px-3 py-1.5 ${mainTab === 'missions' ? 'bg-slate-900 text-white' : 'bg-slate-200 dark:bg-slate-700'}`}
+            className={`px-3 py-1.5 ${mainTab === 'missions' ? 'bg-slate-900 text-white' : 'bg-slate-700'}`}
           >
             Missions
           </button>
         </div>
-        {mainTab === 'army' && (
-          <div className="inline-flex rounded-xl overflow-hidden border border-slate-300 dark:border-slate-700">
-            <button
-              onClick={() => setArmyTab('divisions')}
-              className={`px-3 py-1.5 ${armyTab === 'divisions' ? 'bg-slate-900 text-white' : 'bg-slate-200 dark:bg-slate-700'}`}
-            >
-              Divisions
-            </button>
-          </div>
-        )}
       </div>
 
-      {/* Buildings List (compact vertical) */}
+      {/* Main Content - Production (Default) */}
       {mainTab==='production' && (
         <section className="space-y-3">
           <h2 className="text-lg font-semibold">Buildings List</h2>
@@ -1013,27 +1003,27 @@ export default function ResourceVillageUI() {
         </section>
       )}
 
-      {mainTab==='army' && armyTab==='divisions' && (
+      {mainTab==='army' && (
         <section className="space-y-3">
           <h2 className="text-lg font-semibold">Army · Divisions</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             {/* Left: add units */}
             <div className="md:col-span-1 space-y-2">
-              <button onClick={() => addUnit('archer')} disabled={draftUnits.length>=8} className="w-full px-3 py-2 rounded-lg bg-slate-200 dark:bg-slate-700 disabled:opacity-50">+ Archers</button>
-              <button onClick={() => addUnit('warrior')} disabled={draftUnits.length>=8} className="w-full px-3 py-2 rounded-lg bg-slate-200 dark:bg-slate-700 disabled:opacity-50">+ Warriors</button>
+              <button onClick={() => addUnit('archer')} disabled={draftUnits.length>=8} className="w-full px-3 py-2 rounded-lg bg-slate-700 disabled:opacity-50">+ Archers</button>
+              <button onClick={() => addUnit('warrior')} disabled={draftUnits.length>=8} className="w-full px-3 py-2 rounded-lg bg-slate-700 disabled:opacity-50">+ Warriors</button>
               <div className="text-xs text-slate-500">Slots used: {draftUnits.length} / 8</div>
               <div className="flex gap-2">
-                <button onClick={removeLastUnit} disabled={draftUnits.length===0} className="px-3 py-1.5 rounded bg-slate-200 dark:bg-slate-700 disabled:opacity-50">Undo</button>
-                <button onClick={clearDraft} disabled={draftUnits.length===0} className="px-3 py-1.5 rounded bg-slate-200 dark:bg-slate-700 disabled:opacity-50">Clear</button>
+                <button onClick={removeLastUnit} disabled={draftUnits.length===0} className="px-3 py-1.5 rounded bg-slate-700 disabled:opacity-50">Undo</button>
+                <button onClick={clearDraft} disabled={draftUnits.length===0} className="px-3 py-1.5 rounded bg-slate-700 disabled:opacity-50">Clear</button>
                 <button onClick={confirmDivision} disabled={draftUnits.length===0} className="ml-auto px-3 py-1.5 rounded bg-emerald-600 text-white disabled:opacity-50">Confirm</button>
               </div>
             </div>
             {/* Right: composition grid */}
-            <div className="md:col-span-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3">
+            <div className="md:col-span-2 rounded-xl border border-slate-800 bg-slate-900 p-3">
               <div className="text-sm text-slate-500 mb-2">Division layout</div>
               <div className="grid grid-cols-4 gap-2">
                 {Array.from({length:8}).map((_,i)=> (
-                  <div key={i} className="h-12 rounded-lg border border-slate-200 dark:border-slate-700 flex items-center justify-center text-xs">
+                  <div key={i} className="h-12 rounded-lg border border-slate-700 flex items-center justify-center text-xs">
                     {draftUnits[i] ? (draftUnits[i]==='archer' ? 'Archer' : 'Warrior') : 'Empty'}
                   </div>
                 ))}
@@ -1048,11 +1038,11 @@ export default function ResourceVillageUI() {
             ) : (
               <div className="space-y-2">
                 {divisions.map((d) => (
-                  <div key={d.id} className="rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-2 grid grid-cols-1 md:grid-cols-3 gap-2 items-center">
+                  <div key={d.id} className="rounded-lg border border-slate-800 bg-slate-900 p-2 grid grid-cols-1 md:grid-cols-3 gap-2 items-center">
                     <div className="font-semibold text-sm">{d.name}</div>
                     <div className="flex gap-1 flex-wrap">
                       {d.units.map((u,idx)=> (
-                        <span key={idx} className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-xs border border-slate-200 dark:border-slate-700">{u==='archer'?'Archer':'Warrior'}</span>
+                        <span key={idx} className="px-2 py-0.5 rounded bg-slate-800 text-xs border border-slate-700">{u==='archer'?'Archer':'Warrior'}</span>
                       ))}
                     </div>
                     <div className="justify-self-end w-full md:w-64">
@@ -1088,7 +1078,7 @@ export default function ResourceVillageUI() {
           <h2 className="text-lg font-semibold">Missions</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             {/* Left: ready divisions to add */}
-            <div className="md:col-span-1 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3">
+            <div className="md:col-span-1 rounded-xl border border-slate-800 bg-slate-900 p-3">
               <div className="text-sm font-semibold mb-2">Ready Divisions</div>
               {divisions.filter(d=>d.status==='ready').length===0 ? (
                 <div className="text-xs text-slate-500">No ready divisions.</div>
@@ -1097,7 +1087,7 @@ export default function ResourceVillageUI() {
                   {divisions.filter(d=>d.status==='ready').map((d)=>(
                     <div key={d.id} className="flex items-center justify-between">
                       <div className="text-sm">{d.name}</div>
-                      <button disabled={selectedMissionId===null} onClick={()=>addDivisionToMission(d.id)} className="px-2 py-1 rounded bg-slate-200 dark:bg-slate-700 disabled:opacity-50">Add</button>
+                      <button disabled={selectedMissionId===null} onClick={()=>addDivisionToMission(d.id)} className="px-2 py-1 rounded bg-slate-700 disabled:opacity-50">Add</button>
                     </div>
                   ))}
                 </div>
@@ -1111,11 +1101,11 @@ export default function ResourceVillageUI() {
                 const canSend = m.status==='available' && m.staged.length>0;
                 const secsLeft = Math.max(0, m.duration - m.elapsed);
                 return (
-                  <div key={m.id} className={`rounded-xl border ${selected? 'border-emerald-500' : 'border-slate-200 dark:border-slate-800'} bg-white dark:bg-slate-900 p-3`}>
+                  <div key={m.id} className={`rounded-xl border ${selected? 'border-emerald-500' : 'border-slate-800'} bg-slate-900 p-3`}>
                     <div className="flex items-center justify-between">
                       <div className="font-semibold">{m.name}</div>
                       <div className="flex items-center gap-2">
-                        <button onClick={()=>setSelectedMissionId(m.id)} className={`px-3 py-1.5 rounded ${selected? 'bg-emerald-600 text-white':'bg-slate-200 dark:bg-slate-700'}`}>{selected? 'Selected' : 'Select'}</button>
+                        <button onClick={()=>setSelectedMissionId(m.id)} className={`px-3 py-1.5 rounded ${selected? 'bg-emerald-600 text-white':'bg-slate-700'}`}>{selected? 'Selected' : 'Select'}</button>
                         {m.status==='available' && <button onClick={()=>confirmSendMission(m.id)} disabled={!canSend} className="px-3 py-1.5 rounded bg-slate-900 text-white disabled:opacity-50">Send</button>}
                         {m.status==='running' && <div className="text-xs text-slate-500">{secsLeft}s left</div>}
                         {m.status==='complete' && <button onClick={()=>setRewardModal({missionId:m.id})} className="px-3 py-1.5 rounded bg-amber-500 text-white">Claim Reward</button>}
@@ -1146,7 +1136,7 @@ export default function ResourceVillageUI() {
       {/* Confirmation Modal */}
       {pendingUpgrade && (
         <div className="fixed inset-0 bg-black/60 grid place-items-center p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white dark:bg-slate-900 p-4 border border-slate-200 dark:border-slate-800">
+          <div className="w-full max-w-md rounded-2xl bg-slate-900 p-4 border border-slate-800">
             <h4 className="text-lg font-semibold mb-2">Confirm Upgrade</h4>
             <p className="text-sm mb-4">
               Upgrade {pendingUpgrade.res === "wood" ? "Lumber Mill" : pendingUpgrade.res === "stone" ? "Quarry" : pendingUpgrade.res === "food" ? "Farm" : pendingUpgrade.res === "house" ? "House" : "Warehouse"}
@@ -1158,7 +1148,7 @@ export default function ResourceVillageUI() {
               <div>Stone: <strong>{formatInt((pendingUpgrade.cost as any).stone)}</strong></div>
             </div>
             <div className="flex gap-2 justify-end">
-              <button onClick={cancelUpgrade} className="px-3 py-2 rounded-xl bg-slate-200 dark:bg-slate-700">Cancel</button>
+              <button onClick={cancelUpgrade} className="px-3 py-2 rounded-xl bg-slate-700">Cancel</button>
               <button onClick={confirmUpgrade} className="px-3 py-2 rounded-xl bg-emerald-600 text-white">Confirm</button>
             </div>
           </div>
@@ -1168,12 +1158,12 @@ export default function ResourceVillageUI() {
       {/* Reward Modal */}
       {rewardModal && (
         <div className="fixed inset-0 bg-black/60 grid place-items-center p-4">
-          <div className="w-full max-w-sm rounded-2xl bg-white dark:bg-slate-900 p-4 border border-slate-200 dark:border-slate-800 text-center">
+          <div className="w-full max-w-sm rounded-2xl bg-slate-900 p-4 border border-slate-800 text-center">
             <h4 className="text-lg font-semibold mb-2">Mission Complete</h4>
             <p className="text-sm mb-4">You received <strong>1 Gold</strong>.</p>
             <div className="flex gap-2 justify-center">
               <button onClick={() => claimMissionReward(rewardModal.missionId)} className="px-3 py-2 rounded-xl bg-amber-500 text-white">Collect</button>
-              <button onClick={() => setRewardModal(null)} className="px-3 py-2 rounded-xl bg-slate-200 dark:bg-slate-700">Close</button>
+              <button onClick={() => setRewardModal(null)} className="px-3 py-2 rounded-xl bg-slate-700">Close</button>
             </div>
           </div>
         </div>
