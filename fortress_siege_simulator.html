@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Fortress Siege Simulator</title>
+<style>
+  :root{--bg:#0f1216;--panel:#171b21;--panel-2:#1e2430;--text:#e0e6f0;--muted:#8390a5;--accent:#2d9cff;--accent-2:#9dffa6;--danger:#ff5d5d;--ok:#8ee59c;--border:#2a313d}
+  *{box-sizing:border-box}
+  body{margin:0;background:#0f1216;color:var(--text);font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial}
+  h1{margin:16px 20px 8px 20px}
+  .wrap{max-width:1100px;margin:0 auto;padding:0 20px 24px}
+  .grid{display:grid;gap:16px}
+  .cols-2{grid-template-columns:1.4fr 1.6fr}
+  @media (max-width:960px){.cols-2{grid-template-columns:1fr}}
+  .card{background:var(--panel);border-radius:16px;padding:14px 16px 16px;border:1px solid var(--border);box-shadow:0 0 0 1px #0008}
+  h3{margin:0 0 4px;font-size:16px}
+  h4{margin:4px 0 4px;font-size:14px}
+  .sub{color:var(--muted);font-size:12px}
+  label{display:block;margin:8px 0 4px;font-weight:600}
+  input[type=number]{width:100%;padding:8px;border-radius:10px;border:1px solid var(--border);background:var(--panel-2);color:var(--text)}
+  .row{display:flex;gap:10px;align-items:center}
+  .btns{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+  button{appearance:none;border:0;border-radius:10px;padding:9px 12px;font-size:12px;font-weight:800;cursor:pointer;background:#2d9cff;color:#051018}
+  button.alt{background:#2a3341;color:var(--text);border:1px solid var(--border)}
+  .kpi{display:grid;gap:10px;grid-template-columns:repeat(4,1fr)}
+  @media (max-width:900px){.kpi{grid-template-columns:repeat(2,1fr)}}
+  .kpi .box{background:#12161d;border:1px dashed var(--border);border-radius:10px;padding:10px}
+  .kpi .n{font-size:18px;font-weight:800}
+  canvas{width:100%;height:220px;background:#0b0e12;border:1px solid var(--border);border-radius:10px}
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  th,td{border:1px solid #222a36;padding:4px 6px;text-align:right}
+  th{background:#131821;font-weight:600}
+  td:first-child,th:first-child{text-align:left}
+  .mono{font-family:Menlo,Consolas,monospace}
+  .badge{display:inline-block;padding:2px 6px;border-radius:999px;font-size:11px;font-weight:700}
+  .badge.win{background:#12371f;color:#89f9a8}
+  .badge.lose{background:#3a1414;color:#ff9c9c}
+  .badge.draw{background:#33384a;color:#e0e6f0}
+</style>
+</head>
+<body>
+<h1>Fortress Siege Simulator</h1>
+<div class="wrap">
+  <div class="grid cols-2">
+    <div class="card">
+      <h3>Fortress setup</h3>
+      <div class="sub">Simulate the siege on the walls and then the inner battle once the fort falls.</div>
+      <h4>Unit stats (per 100 troops)</h4>
+      <div class="row">
+        <div style="flex:1">
+          <h4>Warrior</h4>
+          <label>Skirmish attack</label><input id="w_sa" type="number" step="0.1" value="0">
+          <label>Melee attack</label><input id="w_ma" type="number" step="0.1" value="15">
+        </div>
+        <div style="flex:1">
+          <h4>Archer</h4>
+          <label>Skirmish attack</label><input id="a_sa" type="number" step="0.1" value="15">
+        </div>
+      </div>
+      <div class="btns" style="margin-top:4px">
+        <button class="alt" id="load_default">Load default stats</button>
+      </div>
+      <hr style="border-color:var(--border);margin:12px 0">
+      <h4>Fortress values</h4>
+      <label>Fort HP (walls)</label><input id="fort_hp" type="number" value="1000">
+      <label>Max firing archers on the walls</label><input id="fort_archer_slots" type="number" value="30">
+      <label>Garrison archers (total)</label><input id="garrison_archers" type="number" value="60">
+      <label>Garrison warriors (inside)</label><input id="garrison_warriors" type="number" value="40">
+      <label>Attacking warriors</label><input id="siege_attackers" type="number" value="100">
+      <hr style="border-color:var(--border);margin:12px 0">
+      <h4>Siege parameters</h4>
+      <label>Base casualty rate</label><input id="p_cas" type="number" step="0.01" value="0.7">
+      <label>Max siege rounds</label><input id="p_rounds" type="number" step="1" value="30">
+      <div class="sub" style="margin-top:4px">Inner battle runs until one side breaks, starting with skirmish, then melee, then pursuit.</div>
+      <div class="btns" style="margin-top:8px">
+        <button id="run_siege">Run fortress simulation</button>
+        <button class="alt" id="clear">Clear output</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Result & Timelines</h3>
+      <div class="kpi" id="summary">
+        <div class="box">
+          <div class="sub">Outcome</div>
+          <div id="sum_outcome" class="n mono">—</div>
+        </div>
+        <div class="box">
+          <div class="sub">Siege rounds</div>
+          <div id="sum_rounds" class="n mono">—</div>
+        </div>
+        <div class="box">
+          <div class="sub">Fort HP</div>
+          <div id="sum_fort" class="n mono">—</div>
+        </div>
+        <div class="box">
+          <div class="sub">Attackers left</div>
+          <div id="sum_attackers" class="n mono">—</div>
+        </div>
+      </div>
+      <canvas id="chart1"></canvas>
+      <div class="sub" style="margin-top:4px">Siege: Blue line = Fort HP. Red line = remaining attackers.</div>
+      <canvas id="chart2" style="margin-top:10px"></canvas>
+      <div class="sub" style="margin-top:4px">Inner battle: Blue line = inner defenders. Red line = inner attackers. Phases: skirmish → melee → pursuit.</div>
+      <div id="phase_summary" class="sub" style="margin-top:6px"></div>
+      <div style="max-height:160px;overflow:auto;margin-top:8px">
+        <table id="tbl">
+          <thead>
+            <tr>
+              <th>Round</th>
+              <th>Fort HP</th>
+              <th>Attackers</th>
+              <th>Archers firing</th>
+              <th>Attackers killed</th>
+              <th>Damage to fort</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="sub" style="margin-top:6px">Inner battle log</div>
+      <div style="max-height:160px;overflow:auto;margin-top:4px">
+        <table id="inner_tbl">
+          <thead>
+            <tr>
+              <th>Step</th>
+              <th>Phase</th>
+              <th>Def. warriors</th>
+              <th>Def. archers</th>
+              <th>Defenders total</th>
+              <th>Attackers</th>
+              <th>Atk killed</th>
+              <th>Def killed</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const toNum = el => parseFloat(el.value || 0);
+
+function loadDefault(){
+  $("w_sa").value = 0;
+  $("w_ma").value = 15;
+  $("a_sa").value = 15;
+  
+  // Try to load fortress stats from localStorage (set by the game)
+  const savedStats = localStorage.getItem('fortressSimulatorStats');
+  if (savedStats) {
+    try {
+      const stats = JSON.parse(savedStats);
+      $("fort_hp").value = stats.fortHP || 1000;
+      $("fort_archer_slots").value = stats.fortArcherSlots || 30;
+      $("garrison_archers").value = stats.garrisonArchers || 60;
+      $("garrison_warriors").value = stats.garrisonWarriors || 40;
+      // Clear the saved stats after loading so it doesn't persist
+      localStorage.removeItem('fortressSimulatorStats');
+    } catch (e) {
+      // Fall back to defaults if parsing fails
+      $("fort_hp").value = 1000;
+      $("fort_archer_slots").value = 30;
+      $("garrison_archers").value = 60;
+      $("garrison_warriors").value = 40;
+    }
+  } else {
+    $("fort_hp").value = 1000;
+    $("fort_archer_slots").value = 30;
+    $("garrison_archers").value = 60;
+    $("garrison_warriors").value = 40;
+  }
+  
+  $("siege_attackers").value = 100;
+  $("p_cas").value = 0.7;
+  $("p_rounds").value = 30;
+}
+
+function runSiegeOnly(){
+  const fortHPmax = toNum($("fort_hp"));
+  const archerSlots = toNum($("fort_archer_slots"));
+  const garrisonArchers = toNum($("garrison_archers"));
+  const garrisonWarriors = toNum($("garrison_warriors"));
+  const wSkirmish = toNum($("w_sa"));
+  const wMelee = toNum($("w_ma"));
+  const aSkirmish = toNum($("a_sa"));
+  const baseCas = toNum($("p_cas"));
+  const maxRounds = toNum($("p_rounds"));
+  let attackers = toNum($("siege_attackers"));
+
+  let fortHP = fortHPmax;
+  let rounds = 0;
+  const siegeTimeline = [];
+
+  const activeArchers = Math.min(garrisonArchers, archerSlots);
+
+  while (fortHP > 0 && attackers > 0 && rounds < maxRounds) {
+    rounds++;
+
+    const dmgFromArchers = (activeArchers / 100) * aSkirmish * baseCas;
+    const killed = Math.min(attackers, dmgFromArchers);
+    attackers -= killed;
+
+    const fortDamagePerWarrior = wMelee * 0.2;
+    const dmgToFort = attackers * fortDamagePerWarrior * baseCas;
+    fortHP = Math.max(0, fortHP - dmgToFort);
+
+    siegeTimeline.push({
+      round: rounds,
+      fortHP,
+      attackers,
+      archers: activeArchers,
+      killed,
+      dmgToFort
+    });
+  }
+
+  let innerTimeline = [];
+  if (fortHP <= 0 && attackers > 0 && (garrisonWarriors + garrisonArchers) > 0) {
+    const stats = {
+      warrior: { skirmish: wSkirmish, melee: wMelee },
+      archer: { skirmish: aSkirmish, melee: aSkirmish * 0.3 }
+    };
+    innerTimeline = runInnerBattle(garrisonWarriors, garrisonArchers, attackers, stats, baseCas);
+  }
+
+  renderTable(siegeTimeline);
+  renderInnerTable(innerTimeline);
+  renderSummary(siegeTimeline, fortHPmax, innerTimeline);
+  plotSiege(siegeTimeline, fortHPmax);
+  plotInner(innerTimeline);
+}
+
+function runInnerBattle(defWarriorsStart, defArchersStart, attackersStart, stats, baseCas){
+  let defWarriors = defWarriorsStart;
+  let defArchers = defArchersStart;
+  let attackers = attackersStart;
+  const tl = [];
+  let step = 0;
+
+  const maxSteps = 50; // safety cap so it cannot loop forever
+
+  while (attackers > 0 && (defWarriors + defArchers) > 0 && step < maxSteps) {
+    step++;
+    const defTotal = defWarriors + defArchers;
+
+    let phase;
+    if (step <= 3) {
+      phase = 'skirmish';
+    } else if (step <= 13) { // extended melee phase
+      phase = 'melee';
+    } else {
+      phase = 'pursuit';
+    }
+
+    let killedAtk = 0;
+    let killedDef = 0;
+
+    if (phase === 'skirmish') {
+      const defDmg = ((defArchers / 100) * stats.archer.skirmish + (defWarriors / 100) * stats.warrior.skirmish * 0.3) * baseCas;
+      killedAtk = Math.min(attackers, defDmg);
+      const atkDmg = (attackers / 100) * stats.warrior.skirmish * baseCas * 0.4;
+      killedDef = Math.min(defTotal, atkDmg);
+    } else if (phase === 'melee') {
+      const defDmg = (defTotal / 100) * stats.warrior.melee * baseCas;
+      const atkDmg = (attackers / 100) * stats.warrior.melee * baseCas;
+      killedAtk = Math.min(attackers, defDmg);
+      killedDef = Math.min(defTotal, atkDmg);
+    } else if (phase === 'pursuit') {
+      if (attackers > defTotal) {
+        const atkDmg = (attackers / 100) * stats.warrior.melee * baseCas * 1.2;
+        killedDef = Math.min(defTotal, atkDmg);
+      } else {
+        const defDmg = (defTotal / 100) * stats.warrior.melee * baseCas * 1.2;
+        killedAtk = Math.min(attackers, defDmg);
+      }
+    }
+
+    if (defTotal > 0 && killedDef > 0) {
+      const wShare = defWarriors / defTotal;
+      const aShare = defArchers / defTotal;
+      const kW = Math.min(defWarriors, killedDef * wShare);
+      const kA = Math.min(defArchers, killedDef * aShare);
+      defWarriors -= kW;
+      defArchers -= kA;
+    }
+
+    attackers = Math.max(0, attackers - killedAtk);
+
+    tl.push({
+      step,
+      phase,
+      defWarriors,
+      defArchers,
+      defenders: defWarriors + defArchers,
+      attackers,
+      killedAttackers: killedAtk,
+      killedDefenders: killedDef
+    });
+  }
+
+  return tl;
+}
+
+function renderTable(tl){
+  const tbody = $("tbl").querySelector('tbody');
+  tbody.innerHTML='';
+  for (const r of tl) {
+    const tr = document.createElement('tr');
+    tr.innerHTML =
+      `<td>${r.round}</td>`+
+      `<td style="color:#2d9cff">${r.fortHP.toFixed(1)}</td>`+
+      `<td style="color:#ff5d5d">${r.attackers.toFixed(1)}</td>`+
+      `<td style="color:#2d9cff">${r.archers}</td>`+
+      `<td style="color:#ff5d5d">${r.killed.toFixed(1)}</td>`+
+      `<td style="color:#2d9cff">${r.dmgToFort.toFixed(1)}</td>`;
+    tbody.appendChild(tr);
+  }
+}
+
+function renderInnerTable(tl){
+  const tbody = $("inner_tbl").querySelector('tbody');
+  tbody.innerHTML='';
+  for (const r of tl) {
+    const tr = document.createElement('tr');
+    tr.innerHTML =
+      `<td>${r.step}</td>`+
+      `<td>${r.phase}</td>`+
+      `<td style="color:#2d9cff">${r.defWarriors.toFixed(1)}</td>`+
+      `<td style="color:#2d9cff">${r.defArchers.toFixed(1)}</td>`+
+      `<td style="color:#2d9cff">${r.defenders.toFixed(1)}</td>`+
+      `<td style="color:#ff5d5d">${r.attackers.toFixed(1)}</td>`+
+      `<td style="color:#ff5d5d">${r.killedAttackers.toFixed(1)}</td>`+
+      `<td style="color:#2d9cff">${r.killedDefenders.toFixed(1)}</td>`;
+    tbody.appendChild(tr);
+  }
+}
+
+function renderSummary(siegeTl, fortHPmax, innerTl){
+  const phaseBox = $("phase_summary");
+  if (!siegeTl.length) {
+    $("sum_outcome").textContent = '—';
+    $("sum_rounds").textContent = '—';
+    $("sum_fort").textContent = '—';
+    $("sum_attackers").textContent = '—';
+    if (phaseBox) phaseBox.textContent = '';
+    return;
+  }
+  const lastSiege = siegeTl[siegeTl.length - 1];
+  let finalFortHP = lastSiege.fortHP;
+  let finalAttackers = lastSiege.attackers;
+  let outcome = 'Stalemate';
+  let badgeClass = 'badge draw';
+
+  if (lastSiege.attackers <= 0 && lastSiege.fortHP > 0) {
+    outcome = 'Fortress holds (walls hold)';
+    badgeClass = 'badge win';
+  } else if (lastSiege.fortHP <= 0 && lastSiege.attackers > 0) {
+    if (innerTl && innerTl.length) {
+      const lastInner = innerTl[innerTl.length - 1];
+      finalFortHP = 0;
+      finalAttackers = lastInner.attackers;
+      const defRemain = lastInner.defenders;
+      if (defRemain > 0 && finalAttackers <= 0) {
+        outcome = 'Fortress holds (after inner battle)';
+        badgeClass = 'badge win';
+      } else if (finalAttackers > 0 && defRemain <= 0) {
+        outcome = 'Fortress falls';
+        badgeClass = 'badge lose';
+      } else {
+        outcome = 'Stalemate inside';
+        badgeClass = 'badge draw';
+      }
+    } else {
+      outcome = 'Fortress falls';
+      badgeClass = 'badge lose';
+    }
+  }
+
+  $("sum_outcome").innerHTML = `<span class="${badgeClass}">${outcome}</span>`;
+  $("sum_rounds").textContent = lastSiege.round.toFixed(0);
+  $("sum_fort").textContent = `${finalFortHP.toFixed(1)} / ${fortHPmax.toFixed(1)}`;
+  $("sum_attackers").textContent = finalAttackers.toFixed(1);
+
+  const gW = toNum($("garrison_warriors"));
+  const gA = toNum($("garrison_archers"));
+  const gTotal = gW + gA;
+
+  let siegeLine = `Siege phase: fort <span style="color:#2d9cff">${lastSiege.fortHP.toFixed(1)} / ${fortHPmax.toFixed(1)}</span>, attackers <span style="color:#ff5d5d">${lastSiege.attackers.toFixed(1)}</span>.`;
+
+  let innerLine = '';
+  if (lastSiege.fortHP > 0 || lastSiege.attackers <= 0) {
+    innerLine = 'Inner phase: not triggered (attackers broken during the siege).';
+  } else if (!innerTl || !innerTl.length) {
+    if (gTotal <= 0) {
+      innerLine = 'Inner phase: not triggered (no inner garrison).';
+    } else {
+      innerLine = `Inner phase: not simulated (garrison ${gTotal.toFixed(1)}).`;
+    }
+  } else {
+    const lastInner = innerTl[innerTl.length - 1];
+    innerLine = `Inner phase: defenders <span style="color:#2d9cff">${lastInner.defenders.toFixed(1)} (W ${lastInner.defWarriors.toFixed(1)}, A ${lastInner.defArchers.toFixed(1)})</span>, attackers <span style="color:#ff5d5d">${lastInner.attackers.toFixed(1)}</span>.`;
+  }
+
+  if (phaseBox) phaseBox.innerHTML = `${siegeLine}<br>${innerLine}`;
+}
+
+function plotSiege(tl, fortHPmax){
+  const canvas = $("chart1");
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  const w = canvas.width = canvas.clientWidth * 2;
+  const h = canvas.height = canvas.clientHeight * 2;
+  ctx.clearRect(0,0,w,h);
+  if (!tl.length) return;
+
+  const maxAttackers = Math.max(...tl.map(r => r.attackers), 1);
+  const rounds = tl[tl.length-1].round;
+
+  const mapX = t => (t/rounds)*(w-40)+20;
+  const mapY = (v,max) => h-20-(v/max)*(h-40);
+
+  ctx.strokeStyle = '#555'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(20,10); ctx.lineTo(20,h-20); ctx.lineTo(w-10,h-20); ctx.stroke();
+
+  function drawLine(values, max, colour){
+    ctx.strokeStyle = colour; ctx.lineWidth = 1.5; ctx.beginPath();
+    values.forEach((v,i)=>{
+      const t = tl[i].round;
+      const x = mapX(t), y = mapY(v,max);
+      if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    });
+    ctx.stroke();
+  }
+
+  drawLine(tl.map(r=>r.fortHP), fortHPmax, '#2d9cff');
+  drawLine(tl.map(r=>r.attackers), maxAttackers, '#ff5d5d');
+}
+
+function plotInner(tl){
+  const canvas = $("chart2");
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  const w = canvas.width = canvas.clientWidth * 2;
+  const h = canvas.height = canvas.clientHeight * 2;
+  ctx.clearRect(0,0,w,h);
+  if (!tl.length) return;
+
+  const maxDef = Math.max(...tl.map(r => r.defenders), 1);
+  const maxAtk = Math.max(...tl.map(r => r.attackers), 1);
+  const steps = tl[tl.length-1].step;
+
+  const mapX = t => (t/steps)*(w-40)+20;
+  const mapY = (v,max) => h-20-(v/max)*(h-40);
+
+  ctx.strokeStyle = '#555'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(20,10); ctx.lineTo(20,h-20); ctx.lineTo(w-10,h-20); ctx.stroke();
+
+  function drawLine(values, max, colour){
+    ctx.strokeStyle = colour; ctx.lineWidth = 1.5; ctx.beginPath();
+    values.forEach((v,i)=>{
+      const t = tl[i].step;
+      const x = mapX(t), y = mapY(v,max);
+      if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    });
+    ctx.stroke();
+  }
+
+  drawLine(tl.map(r=>r.defenders), maxDef, '#2d9cff');
+  drawLine(tl.map(r=>r.attackers), maxAtk, '#ff5d5d');
+}
+
+$("load_default").addEventListener('click', loadDefault);
+$("run_siege").addEventListener('click', runSiegeOnly);
+$("clear").addEventListener('click', ()=>{
+  $("tbl").querySelector('tbody').innerHTML='';
+  $("inner_tbl").querySelector('tbody').innerHTML='';
+  const c1=$("chart1"), x1=c1.getContext('2d');
+  x1.clearRect(0,0,c1.width,c1.height);
+  const c2=$("chart2"), x2=c2.getContext('2d');
+  x2.clearRect(0,0,c2.width,c2.height);
+  $("sum_outcome").textContent='—';
+  $("sum_rounds").textContent='—';
+  $("sum_fort").textContent='—';
+  $("sum_attackers").textContent='—';
+  $("phase_summary").textContent='';
+});
+
+// init
+loadDefault();
+</script>
+</body>
+</html>
+

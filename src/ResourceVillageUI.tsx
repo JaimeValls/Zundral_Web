@@ -56,8 +56,9 @@ function getProgression(
 
 function getBuildingCost(res: "wood" | "stone" | "food", levelTo: number) {
   // Cost to reach `levelTo` from (levelTo-1) for the specific building.
-  // We intentionally map to the *next level's row* so that at Lv1 you see Lv2.
-  const stepIndex = Math.max(0, levelTo - 1); // 0 => Lv2 row, 1 => Lv3 row, ...
+  // stepIndex 0 = L1→L2, stepIndex 1 = L2→L3, etc.
+  // For levelTo=2, we want stepIndex=0 (L1→L2 cost)
+  const stepIndex = Math.max(0, levelTo - 2); // levelTo=2 → stepIndex=0 (L1→L2), levelTo=3 → stepIndex=1 (L2→L3)
   const table = (BUILDING_COST_TABLE as any)[res] as { wood: number[]; stone: number[] } | undefined;
   if (table && table.wood[stepIndex] != null && table.stone[stepIndex] != null) {
     return { wood: table.wood[stepIndex], stone: table.stone[stepIndex] };
@@ -104,6 +105,7 @@ type Banner = {
   recruited: number;
   type: 'regular' | 'mercenary'; // Banner type: regular (men-at-arms) or mercenary
   reinforcingSquadId?: number; // ID of squad being reinforced (for regular banners)
+  trainingPaused?: boolean; // Whether training is paused
 };
 
 type Mission = {
@@ -117,6 +119,80 @@ type Mission = {
   elapsed: number; // seconds progressed
   enemyComposition?: { warrior: number; archer: number }; // For combat missions
   battleResult?: BattleResult; // Store battle result
+};
+
+type ExpeditionState = 'available' | 'funding' | 'readyToLaunch' | 'travelling' | 'completed';
+
+type FortressBuilding = {
+  id: string;
+  name: string;
+  level: number;
+  maxLevel: number;
+  description: string; // e.g., "+400 Fort HP"
+  getEffect: (level: number) => { fortHP?: number; archerSlots?: number; garrisonWarriors?: number; garrisonArchers?: number; storedSquads?: number };
+  getUpgradeCost: (level: number) => { wood: number; stone: number };
+};
+
+type FortressStats = {
+  fortHP: number;
+  archerSlots: number;
+  garrisonWarriors: number;
+  garrisonArchers: number;
+  storedSquads: number;
+};
+
+type SiegeRound = {
+  round: number;
+  fortHP: number;
+  attackers: number;
+  archers: number;
+  killed: number;
+  dmgToFort: number;
+};
+
+type InnerBattleStep = {
+  step: number;
+  phase: 'skirmish' | 'melee' | 'pursuit';
+  defWarriors: number;
+  defArchers: number;
+  defenders: number;
+  attackers: number;
+  killedAttackers: number;
+  killedDefenders: number;
+};
+
+type SiegeBattleResult = {
+  outcome: 'fortress_holds_walls' | 'fortress_holds_inner' | 'fortress_falls' | 'stalemate';
+  siegeRounds: number;
+  finalFortHP: number;
+  finalAttackers: number;
+  finalDefenders: number;
+  siegeTimeline: SiegeRound[];
+  innerTimeline: InnerBattleStep[];
+  initialFortHP: number;
+  initialAttackers: number;
+  initialGarrison: { warriors: number; archers: number };
+};
+
+type Expedition = {
+  expeditionId: string;
+  title: string;
+  shortSummary: string;
+  description: string;
+  state: ExpeditionState;
+  requirements: {
+    wood: { required: number; current: number };
+    stone: { required: number; current: number };
+    food: { required: number; current: number };
+    population: { required: number; current: number };
+  };
+  travelProgress: number; // 0-100 for travelling state
+  fortress?: {
+    buildings: FortressBuilding[];
+    stats: FortressStats;
+    garrison: number[]; // Array of banner IDs stationed in the fortress
+    lastBattle?: SiegeBattleResult; // Last siege battle result
+  };
 };
 
 type BattleResult = {
@@ -273,7 +349,7 @@ function getSquadColorClass(health: SquadHealthState): string {
 }
 
 // Initialize squads from units array (for backward compatibility)
-function initializeSquadsFromUnits(units: string[], squadSeq: number): { squads: Squad[]; nextSeq: number } {
+function initializeSquadsFromUnits(units: string[], squadSeq: number, startEmpty: boolean = false): { squads: Squad[]; nextSeq: number } {
   const squads: Squad[] = [];
   let seq = squadSeq;
   units.forEach((unit) => {
@@ -281,7 +357,7 @@ function initializeSquadsFromUnits(units: string[], squadSeq: number): { squads:
       id: seq++,
       type: unit as 'warrior' | 'archer',
       maxSize: 10,
-      currentSize: 10
+      currentSize: startEmpty ? 0 : 10
     });
   });
   return { squads, nextSeq: seq };
@@ -507,6 +583,167 @@ function BattleChart({ timeline }: { timeline: BattleResult['timeline'] }) {
   );
 }
 
+// Graph drawing functions (defined outside component for reuse)
+function drawSiegeGraph(canvas: HTMLCanvasElement, timeline: SiegeRound[], fortHPmax: number) {
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  
+  const w = canvas.width = canvas.clientWidth * 2;
+  const h = canvas.height = canvas.clientHeight * 2;
+  ctx.clearRect(0, 0, w, h);
+  if (!timeline.length) return;
+
+  const maxAttackers = Math.max(...timeline.map(r => r.attackers), 1);
+  const rounds = timeline[timeline.length - 1].round;
+
+  const mapX = (t: number) => (t / rounds) * (w - 40) + 20;
+  const mapY = (v: number, max: number) => h - 20 - (v / max) * (h - 40);
+
+  // Draw axes
+  ctx.strokeStyle = '#555';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(20, 10);
+  ctx.lineTo(20, h - 20);
+  ctx.lineTo(w - 10, h - 20);
+  ctx.stroke();
+
+  // Draw lines
+  function drawLine(values: number[], max: number, colour: string) {
+    ctx.strokeStyle = colour;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    values.forEach((v, i) => {
+      const t = timeline[i].round;
+      const x = mapX(t);
+      const y = mapY(v, max);
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+  }
+
+  drawLine(timeline.map(r => r.fortHP), fortHPmax, '#2d9cff');
+  drawLine(timeline.map(r => r.attackers), maxAttackers, '#ff5d5d');
+}
+
+function drawInnerBattleGraph(canvas: HTMLCanvasElement, timeline: InnerBattleStep[]) {
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  
+  const w = canvas.width = canvas.clientWidth * 2;
+  const h = canvas.height = canvas.clientHeight * 2;
+  ctx.clearRect(0, 0, w, h);
+  if (!timeline.length) return;
+
+  const maxDef = Math.max(...timeline.map(r => r.defenders), 1);
+  const maxAtk = Math.max(...timeline.map(r => r.attackers), 1);
+  const steps = timeline[timeline.length - 1].step;
+
+  const mapX = (t: number) => (t / steps) * (w - 40) + 20;
+  const mapY = (v: number, max: number) => h - 20 - (v / max) * (h - 40);
+
+  // Draw axes
+  ctx.strokeStyle = '#555';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(20, 10);
+  ctx.lineTo(20, h - 20);
+  ctx.lineTo(w - 10, h - 20);
+  ctx.stroke();
+
+  // Draw lines
+  function drawLine(values: number[], max: number, colour: string) {
+    ctx.strokeStyle = colour;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    values.forEach((v, i) => {
+      const t = timeline[i].step;
+      const x = mapX(t);
+      const y = mapY(v, max);
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+  }
+
+  drawLine(timeline.map(r => r.defenders), maxDef, '#2d9cff');
+  drawLine(timeline.map(r => r.attackers), maxAtk, '#ff5d5d');
+}
+
+// Graph canvas components
+function SiegeGraphCanvas({ timeline, fortHPmax }: { timeline: SiegeRound[]; fortHPmax: number }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    if (canvasRef.current && timeline.length > 0) {
+      // Small delay to ensure canvas is properly sized
+      const timer = setTimeout(() => {
+        if (canvasRef.current) {
+          drawSiegeGraph(canvasRef.current, timeline, fortHPmax);
+        }
+      }, 10);
+      return () => clearTimeout(timer);
+    }
+  }, [timeline, fortHPmax]);
+
+  if (timeline.length === 0) return null;
+
+  return (
+    <details className="mt-3 pt-3 border-t border-slate-700">
+      <summary className="text-slate-400 cursor-pointer hover:text-slate-300 text-[11px] font-semibold">
+        Siege Graph
+      </summary>
+      <div className="mt-2">
+        <canvas 
+          ref={canvasRef}
+          className="w-full h-[220px] bg-slate-950 border border-slate-700 rounded-lg"
+          style={{ imageRendering: 'crisp-edges' }}
+        />
+        <div className="text-[10px] text-slate-400 mt-1">
+          Blue line = Fort HP. Red line = remaining attackers.
+        </div>
+      </div>
+    </details>
+  );
+}
+
+function InnerBattleGraphCanvas({ timeline }: { timeline: InnerBattleStep[] }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    if (canvasRef.current && timeline.length > 0) {
+      // Small delay to ensure canvas is properly sized
+      const timer = setTimeout(() => {
+        if (canvasRef.current) {
+          drawInnerBattleGraph(canvasRef.current, timeline);
+        }
+      }, 10);
+      return () => clearTimeout(timer);
+    }
+  }, [timeline]);
+
+  if (timeline.length === 0) return null;
+
+  return (
+    <details className="mt-3 pt-3 border-t border-slate-700">
+      <summary className="text-slate-400 cursor-pointer hover:text-slate-300 text-[11px] font-semibold">
+        Inner Battle Graph
+      </summary>
+      <div className="mt-2">
+        <canvas 
+          ref={canvasRef}
+          className="w-full h-[220px] bg-slate-950 border border-slate-700 rounded-lg"
+          style={{ imageRendering: 'crisp-edges' }}
+        />
+        <div className="text-[10px] text-slate-400 mt-1">
+          Blue line = inner defenders. Red line = inner attackers. Phases: skirmish → melee → pursuit
+        </div>
+      </div>
+    </details>
+  );
+}
+
 export default function ResourceVillageUI() {
   // === Warehouse (resources + level) ===
   const [warehouse, setWarehouse] = useState<WarehouseState>({ wood: 0, stone: 0, food: 0, iron: 0, gold: 0 });
@@ -545,6 +782,7 @@ export default function ResourceVillageUI() {
   // === Population & Taxes ===
   // EMERGENCY RULE: Population minimum is 1 (never zero)
   const [population, setPopulation] = useState(5); // starts at 5
+  const [recruitmentMode, setRecruitmentMode] = useState<'regular' | 'forced'>('regular'); // Recruitment mode: regular (free workers only) or forced (can use working workers)
   const [tax, setTax] = useState<'low' | 'normal' | 'high'>('normal');
   const popCap = useMemo(() => getHouseCapacity(house), [house]);
 
@@ -606,7 +844,7 @@ export default function ResourceVillageUI() {
   }, [tax, happiness]);
 
   // === Tabs ===
-  const [mainTab, setMainTab] = useState<'production' | 'army' | 'missions'>('production');
+  const [mainTab, setMainTab] = useState<'production' | 'army' | 'missions' | 'expeditions'>('production');
   const [armyTab, setArmyTab] = useState<'banners'>('banners');
 
   // Ensure army tab is only accessible when barracks is built
@@ -627,6 +865,24 @@ export default function ResourceVillageUI() {
   useEffect(() => {
     squadSeqRef.current = squadSeq;
   }, [squadSeq]);
+
+  // === Expeditions ===
+  const [expeditions, setExpeditions] = useState<Expedition[]>([
+    {
+      expeditionId: "godonis_mountain_expedition",
+      title: "Whispers in the Mountains of Godonis",
+      shortSummary: "Investigate the disappearances in the mountains of Godonis.",
+      description: `During the night, people, and sometimes entire villages, disappear in the mountains of Godonis. The mountain clans are begging for help. We must send an expedition to find out what is happening.`,
+      state: 'available',
+      requirements: {
+        wood: { required: 500, current: 0 },
+        stone: { required: 250, current: 0 },
+        food: { required: 1000, current: 0 },
+        population: { required: 5, current: 0 },
+      },
+      travelProgress: 0,
+    },
+  ]);
 
   // === Missions ===
   const [missions, setMissions] = useState<Mission[]>([
@@ -669,6 +925,10 @@ export default function ResourceVillageUI() {
   const [battleReport, setBattleReport] = useState<{ missionId: number; result: BattleResult } | null>(null);
   const [blacksmithOpen, setBlacksmithOpen] = useState(false);
   const [technologiesOpen, setTechnologiesOpen] = useState(false);
+  const [deleteBannerModal, setDeleteBannerModal] = useState<number | null>(null); // Banner ID to delete
+  const [reinforcementModal, setReinforcementModal] = useState<{ bannerId: number; squadId: number; goldCost: number; soldiersNeeded: number; bannerName: string; squadType: string } | null>(null);
+  const [hireAndRefillModal, setHireAndRefillModal] = useState<{ bannerId: number; hireCost: number; refillCost: number; totalCost: number; bannerName: string } | null>(null);
+  const [siegeAttackModal, setSiegeAttackModal] = useState<{ expeditionId: string; attackers: number } | null>(null);
 
   // === Army helpers ===
   function addSquad(t: 'archer' | 'warrior') {
@@ -679,8 +939,8 @@ export default function ResourceVillageUI() {
   function confirmBanner() {
     if (draftSquads.length === 0) return;
     
-    // Initialize squads with health tracking
-    const { squads, nextSeq } = initializeSquadsFromUnits(draftSquads, squadSeq);
+    // Initialize squads with health tracking - start empty (0/10) since banner hasn't been trained yet
+    const { squads, nextSeq } = initializeSquadsFromUnits(draftSquads, squadSeq, true);
     
     const next: Banner = {
       id: bannerSeq,
@@ -698,7 +958,55 @@ export default function ResourceVillageUI() {
     setDraftSquads([]);
   }
   function startTraining(id: number) {
-    setBanners((bs) => bs.map((b) => (b.id === id && b.status === 'idle' ? { ...b, status: 'training' } : b)));
+    setBanners((bs) => bs.map((b) => {
+      if (b.id === id && b.status === 'idle') {
+        // Reset all squads to 0/10 when training starts
+        const resetSquads = b.squads.map(s => ({ ...s, currentSize: 0 }));
+        return { ...b, status: 'training', squads: resetSquads, recruited: 0, trainingPaused: false };
+      }
+      return b;
+    }));
+  }
+
+  function toggleTrainingPause(id: number) {
+    setBanners((bs) => bs.map((b) => {
+      if (b.id === id && b.status === 'training') {
+        return { ...b, trainingPaused: !b.trainingPaused };
+      }
+      return b;
+    }));
+  }
+
+  function confirmDeleteBanner() {
+    if (deleteBannerModal === null) return;
+    const id = deleteBannerModal;
+    
+    setBanners((bs) => {
+      const banner = bs.find(b => b.id === id);
+      if (!banner) return bs;
+      
+      // Return population to the village (only for regular banners, not mercenaries)
+      if (banner.type === 'regular' && banner.recruited > 0) {
+        setPopulation(p => p + banner.recruited);
+      }
+      
+      // Remove banner from missions if deployed
+      if (banner.status === 'deployed') {
+        setMissions((ms) => ms.map((m) => ({
+          ...m,
+          staged: m.staged.filter(bid => bid !== id),
+          deployed: m.deployed.filter(bid => bid !== id),
+        })));
+      }
+      
+      return bs.filter(b => b.id !== id);
+    });
+    
+    setDeleteBannerModal(null);
+  }
+
+  function deleteBanner(id: number) {
+    setDeleteBannerModal(id);
   }
 
   // === Missions helpers ===
@@ -714,11 +1022,467 @@ export default function ResourceVillageUI() {
     if (staged.length === 0) return;
     setMissions((ms) => ms.map((m) => m.id === missionId ? { ...m, status: 'running', deployed: staged, staged: [], elapsed: 0 } : m));
     setBanners((bs) => bs.map((b) => staged.includes(b.id) ? { ...b, status: 'deployed' } : b));
+    
+    // Remove banners from fortress garrisons if they're being deployed on a mission
+    setExpeditions((exps) => exps.map((exp) => {
+      if (!exp.fortress) return exp;
+      const garrison = exp.fortress.garrison || [];
+      const updatedGarrison = garrison.filter(id => !staged.includes(id));
+      if (updatedGarrison.length === garrison.length) return exp;
+      return {
+        ...exp,
+        fortress: {
+          ...exp.fortress,
+          garrison: updatedGarrison
+        }
+      };
+    }));
   }
   function claimMissionReward(missionId: number) {
     setWarehouse((w) => ({ ...w, gold: w.gold + 1 }));
     setMissions((ms) => ms.map((m) => m.id === missionId ? { ...m, status: 'available', elapsed: 0, deployed: [], staged: [], battleResult: undefined } : m));
     setRewardModal(null);
+  }
+
+  // === Fortress Building Definitions ===
+  function createInitialFortressBuildings(): FortressBuilding[] {
+    return [
+      {
+        id: 'palisade_wall',
+        name: 'Palisade Wall',
+        level: 1,
+        maxLevel: 5,
+        description: '+400 Fort HP',
+        getEffect: (level) => ({ fortHP: 400 * level }),
+        getUpgradeCost: (level) => ({ wood: 150 * level, stone: 75 * level }),
+      },
+      {
+        id: 'watch_post',
+        name: 'Watch Post',
+        level: 1,
+        maxLevel: 5,
+        description: '+5 Archer slots',
+        getEffect: (level) => ({ archerSlots: 5 * level }),
+        getUpgradeCost: (level) => ({ wood: 100 * level, stone: 50 * level }),
+      },
+      {
+        id: 'garrison_hut',
+        name: 'Garrison Hut',
+        level: 1,
+        maxLevel: 5,
+        description: '+5 Garrison capacity',
+        getEffect: (level) => ({ garrisonWarriors: 5 * level, garrisonArchers: 5 * level }),
+        getUpgradeCost: (level) => ({ wood: 120 * level, stone: 60 * level }),
+      },
+    ];
+  }
+
+  function calculateFortressStats(buildings: FortressBuilding[]): FortressStats {
+    const stats: FortressStats = {
+      fortHP: 0,
+      archerSlots: 0,
+      garrisonWarriors: 0,
+      garrisonArchers: 0,
+      storedSquads: 1, // Base value
+    };
+
+    buildings.forEach(building => {
+      const effect = building.getEffect(building.level);
+      if (effect.fortHP) stats.fortHP += effect.fortHP;
+      if (effect.archerSlots) stats.archerSlots += effect.archerSlots;
+      if (effect.garrisonWarriors) stats.garrisonWarriors += effect.garrisonWarriors;
+      if (effect.garrisonArchers) stats.garrisonArchers += effect.garrisonArchers;
+      if (effect.storedSquads) stats.storedSquads += effect.storedSquads;
+    });
+
+    return stats;
+  }
+
+  // === Expeditions helpers ===
+  function acceptExpedition(expeditionId: string) {
+    setExpeditions((exps) => exps.map((exp) => 
+      exp.expeditionId === expeditionId ? { ...exp, state: 'funding' } : exp
+    ));
+  }
+
+  function sendResourceToExpedition(expeditionId: string, resourceType: 'wood' | 'stone' | 'food' | 'population') {
+    const expedition = expeditions.find(exp => exp.expeditionId === expeditionId);
+    if (!expedition || expedition.state !== 'funding') return;
+
+    const req = expedition.requirements[resourceType];
+    const remaining = req.required - req.current;
+    if (remaining <= 0) return;
+
+    let amountToSend = 0;
+    let newWarehouse = { ...warehouse };
+    let newPopulation = population;
+
+    if (resourceType === 'population') {
+      amountToSend = Math.min(remaining, newPopulation);
+      newPopulation = Math.max(0, newPopulation - amountToSend);
+      setPopulation(newPopulation);
+    } else {
+      const currentStock = warehouse[resourceType];
+      amountToSend = Math.min(remaining, currentStock);
+      newWarehouse = { ...newWarehouse, [resourceType]: Math.max(0, currentStock - amountToSend) };
+      setWarehouse(newWarehouse);
+    }
+
+    if (amountToSend > 0) {
+      setExpeditions((exps) => exps.map((exp) => {
+        if (exp.expeditionId !== expeditionId) return exp;
+        const newReq = { ...exp.requirements };
+        newReq[resourceType] = { ...newReq[resourceType], current: newReq[resourceType].current + amountToSend };
+        
+        // Check if all requirements are met
+        const allComplete = 
+          newReq.wood.current >= newReq.wood.required &&
+          newReq.stone.current >= newReq.stone.required &&
+          newReq.food.current >= newReq.food.required &&
+          newReq.population.current >= newReq.population.required;
+
+        return {
+          ...exp,
+          requirements: newReq,
+          state: allComplete ? 'readyToLaunch' : 'funding',
+        };
+      }));
+    }
+  }
+
+  function launchExpedition(expeditionId: string) {
+    setExpeditions((exps) => exps.map((exp) => 
+      exp.expeditionId === expeditionId ? { ...exp, state: 'travelling', travelProgress: 0 } : exp
+    ));
+
+    // Start 3-second timer
+    let progress = 0;
+    const interval = setInterval(() => {
+      progress += 100 / 30; // 30 updates over 3 seconds (100ms each)
+      if (progress >= 100) {
+        progress = 100;
+        clearInterval(interval);
+        // Initialize fortress when expedition completes
+        setExpeditions((exps) => exps.map((exp) => {
+          if (exp.expeditionId !== expeditionId) return exp;
+          const buildings = createInitialFortressBuildings();
+          const stats = calculateFortressStats(buildings);
+          return { 
+            ...exp, 
+            state: 'completed', 
+            travelProgress: 100,
+            fortress: { buildings, stats, garrison: [] }
+          };
+        }));
+      } else {
+        setExpeditions((exps) => exps.map((exp) => 
+          exp.expeditionId === expeditionId ? { ...exp, travelProgress: progress } : exp
+        ));
+      }
+    }, 100);
+  }
+
+  function upgradeFortressBuilding(expeditionId: string, buildingId: string) {
+    setExpeditions((exps) => exps.map((exp) => {
+      if (exp.expeditionId !== expeditionId || !exp.fortress) return exp;
+      
+      const building = exp.fortress.buildings.find(b => b.id === buildingId);
+      if (!building || building.level >= building.maxLevel) return exp;
+
+      const nextLevel = building.level + 1;
+      const cost = building.getUpgradeCost(nextLevel);
+      
+      // Check if player has enough resources
+      if (warehouse.wood < cost.wood || warehouse.stone < cost.stone) return exp;
+
+      // Deduct resources
+      setWarehouse(w => ({
+        ...w,
+        wood: Math.max(0, w.wood - cost.wood),
+        stone: Math.max(0, w.stone - cost.stone),
+      }));
+
+      // Upgrade building
+      const updatedBuildings = exp.fortress.buildings.map(b =>
+        b.id === buildingId ? { ...b, level: nextLevel } : b
+      );
+
+      // Recalculate stats
+      const stats = calculateFortressStats(updatedBuildings);
+
+      return {
+        ...exp,
+        fortress: {
+          buildings: updatedBuildings,
+          stats,
+        },
+      };
+    }));
+  }
+
+  function assignBannerToFortress(expeditionId: string, bannerId: number) {
+    const expedition = expeditions.find(exp => exp.expeditionId === expeditionId);
+    if (!expedition?.fortress) return;
+    
+    const banner = banners.find(b => b.id === bannerId);
+    if (!banner || banner.status !== 'ready') return;
+    
+    // Check if banner is already in garrison
+    if (expedition.fortress.garrison.includes(bannerId)) return;
+    
+    // Add banner to garrison
+    setExpeditions((exps) => exps.map((exp) => {
+      if (exp.expeditionId !== expeditionId || !exp.fortress) return exp;
+      return {
+        ...exp,
+        fortress: {
+          ...exp.fortress,
+          garrison: [...(exp.fortress.garrison || []), bannerId]
+        }
+      };
+    }));
+    
+    // Update banner status to deployed
+    setBanners((bs) => bs.map((b) => 
+      b.id === bannerId ? { ...b, status: 'deployed' } : b
+    ));
+  }
+
+  function calculateGarrisonFromBanners(garrisonBannerIds: number[]): { warriors: number; archers: number } {
+    let warriors = 0;
+    let archers = 0;
+    
+    garrisonBannerIds.forEach(bannerId => {
+      const banner = banners.find(b => b.id === bannerId);
+      if (!banner || !banner.squads) return;
+      
+      banner.squads.forEach(squad => {
+        if (squad.type === 'warrior') {
+          warriors += squad.currentSize;
+        } else if (squad.type === 'archer') {
+          archers += squad.currentSize;
+        }
+      });
+    });
+    
+    return { warriors, archers };
+  }
+
+  function runSiegeBattle(
+    expeditionId: string,
+    attackers: number
+  ): SiegeBattleResult {
+    const expedition = expeditions.find(exp => exp.expeditionId === expeditionId);
+    if (!expedition?.fortress) {
+      throw new Error('Fortress not found');
+    }
+
+    const stats = getUnitStats();
+    const p = getBattleParams();
+    const baseCas = p.base_casualty_rate || 0.7;
+    const maxRounds = 30;
+
+    const fortHPmax = expedition.fortress.stats.fortHP;
+    const archerSlots = expedition.fortress.stats.archerSlots;
+    
+    // Calculate actual garrison from stationed banners
+    const garrisonBannerIds = expedition.fortress.garrison || [];
+    const actualGarrison = calculateGarrisonFromBanners(garrisonBannerIds);
+    
+    // Use actual garrison or fallback to stats
+    const garrisonArchers = actualGarrison.archers || expedition.fortress.stats.garrisonArchers;
+    const garrisonWarriors = actualGarrison.warriors || expedition.fortress.stats.garrisonWarriors;
+
+    // Unit stats for siege
+    const wSkirmish = stats.warrior?.skirmish_attack || 0;
+    const wMelee = stats.warrior?.melee_attack || 15;
+    const aSkirmish = stats.archer?.skirmish_attack || 15;
+
+    let fortHP = fortHPmax;
+    let remainingAttackers = attackers;
+    const siegeTimeline: SiegeRound[] = [];
+    const activeArchers = Math.min(garrisonArchers, archerSlots);
+
+    // Siege phase
+    let rounds = 0;
+    while (fortHP > 0 && remainingAttackers > 0 && rounds < maxRounds) {
+      rounds++;
+
+      const dmgFromArchers = (activeArchers / 100) * aSkirmish * baseCas;
+      const killed = Math.min(remainingAttackers, dmgFromArchers);
+      remainingAttackers -= killed;
+
+      const fortDamagePerWarrior = wMelee * 0.2;
+      const dmgToFort = remainingAttackers * fortDamagePerWarrior * baseCas;
+      fortHP = Math.max(0, fortHP - dmgToFort);
+
+      siegeTimeline.push({
+        round: rounds,
+        fortHP,
+        attackers: remainingAttackers,
+        archers: activeArchers,
+        killed,
+        dmgToFort
+      });
+    }
+
+    // Inner battle phase (if walls fall)
+    let innerTimeline: InnerBattleStep[] = [];
+    if (fortHP <= 0 && remainingAttackers > 0 && (garrisonWarriors + garrisonArchers) > 0) {
+      const battleStats = {
+        warrior: { skirmish: wSkirmish, melee: wMelee },
+        archer: { skirmish: aSkirmish, melee: aSkirmish * 0.3 }
+      };
+      innerTimeline = runInnerBattle(garrisonWarriors, garrisonArchers, remainingAttackers, battleStats, baseCas);
+    }
+
+    // Determine outcome
+    const lastSiege = siegeTimeline[siegeTimeline.length - 1];
+    let outcome: SiegeBattleResult['outcome'];
+    let finalAttackers = lastSiege.attackers;
+    let finalDefenders = garrisonWarriors + garrisonArchers;
+
+    if (lastSiege.attackers <= 0 && lastSiege.fortHP > 0) {
+      outcome = 'fortress_holds_walls';
+    } else if (lastSiege.fortHP <= 0 && lastSiege.attackers > 0) {
+      if (innerTimeline.length > 0) {
+        const lastInner = innerTimeline[innerTimeline.length - 1];
+        finalAttackers = lastInner.attackers;
+        finalDefenders = lastInner.defenders;
+        if (finalDefenders > 0 && finalAttackers <= 0) {
+          outcome = 'fortress_holds_inner';
+        } else if (finalAttackers > 0 && finalDefenders <= 0) {
+          outcome = 'fortress_falls';
+        } else {
+          outcome = 'stalemate';
+        }
+      } else {
+        outcome = 'fortress_falls';
+      }
+    } else {
+      outcome = 'stalemate';
+    }
+
+    return {
+      outcome,
+      siegeRounds: rounds,
+      finalFortHP: lastSiege.fortHP,
+      finalAttackers,
+      finalDefenders,
+      siegeTimeline,
+      innerTimeline,
+      initialFortHP: fortHPmax,
+      initialAttackers: attackers,
+      initialGarrison: { warriors: garrisonWarriors, archers: garrisonArchers }
+    };
+  }
+
+  function runInnerBattle(
+    defWarriorsStart: number,
+    defArchersStart: number,
+    attackersStart: number,
+    stats: { warrior: { skirmish: number; melee: number }; archer: { skirmish: number; melee: number } },
+    baseCas: number
+  ): InnerBattleStep[] {
+    let defWarriors = defWarriorsStart;
+    let defArchers = defArchersStart;
+    let attackers = attackersStart;
+    const tl: InnerBattleStep[] = [];
+    let step = 0;
+    const maxSteps = 50;
+
+    while (attackers > 0 && (defWarriors + defArchers) > 0 && step < maxSteps) {
+      step++;
+      const defTotal = defWarriors + defArchers;
+
+      let phase: 'skirmish' | 'melee' | 'pursuit';
+      if (step <= 3) {
+        phase = 'skirmish';
+      } else if (step <= 13) {
+        phase = 'melee';
+      } else {
+        phase = 'pursuit';
+      }
+
+      let killedAtk = 0;
+      let killedDef = 0;
+
+      if (phase === 'skirmish') {
+        const defDmg = ((defArchers / 100) * stats.archer.skirmish + (defWarriors / 100) * stats.warrior.skirmish * 0.3) * baseCas;
+        killedAtk = Math.min(attackers, defDmg);
+        const atkDmg = (attackers / 100) * stats.warrior.skirmish * baseCas * 0.4;
+        killedDef = Math.min(defTotal, atkDmg);
+      } else if (phase === 'melee') {
+        // Calculate weighted average melee stat for defenders (warriors + archers)
+        const warriorShare = defTotal > 0 ? defWarriors / defTotal : 0;
+        const archerShare = defTotal > 0 ? defArchers / defTotal : 0;
+        const avgDefMelee = (warriorShare * stats.warrior.melee) + (archerShare * stats.archer.melee);
+        
+        const defDmg = (defTotal / 100) * avgDefMelee * baseCas;
+        const atkDmg = (attackers / 100) * stats.warrior.melee * baseCas;
+        killedAtk = Math.min(attackers, defDmg);
+        killedDef = Math.min(defTotal, atkDmg);
+      } else if (phase === 'pursuit') {
+        // Calculate weighted average melee stat for defenders in pursuit
+        const warriorShare = defTotal > 0 ? defWarriors / defTotal : 0;
+        const archerShare = defTotal > 0 ? defArchers / defTotal : 0;
+        const avgDefMelee = (warriorShare * stats.warrior.melee) + (archerShare * stats.archer.melee);
+        
+        if (attackers > defTotal) {
+          const atkDmg = (attackers / 100) * stats.warrior.melee * baseCas * 1.2;
+          killedDef = Math.min(defTotal, atkDmg);
+        } else {
+          const defDmg = (defTotal / 100) * avgDefMelee * baseCas * 1.2;
+          killedAtk = Math.min(attackers, defDmg);
+        }
+      }
+
+      if (defTotal > 0 && killedDef > 0) {
+        const wShare = defWarriors / defTotal;
+        const aShare = defArchers / defTotal;
+        const kW = Math.min(defWarriors, killedDef * wShare);
+        const kA = Math.min(defArchers, killedDef * aShare);
+        defWarriors -= kW;
+        defArchers -= kA;
+      }
+
+      attackers = Math.max(0, attackers - killedAtk);
+
+      tl.push({
+        step,
+        phase,
+        defWarriors,
+        defArchers,
+        defenders: defWarriors + defArchers,
+        attackers,
+        killedAttackers: killedAtk,
+        killedDefenders: killedDef
+      });
+    }
+
+    return tl;
+  }
+
+  function removeBannerFromFortress(expeditionId: string, bannerId: number) {
+    const expedition = expeditions.find(exp => exp.expeditionId === expeditionId);
+    if (!expedition?.fortress) return;
+    
+    // Remove banner from garrison
+    setExpeditions((exps) => exps.map((exp) => {
+      if (exp.expeditionId !== expeditionId || !exp.fortress) return exp;
+      return {
+        ...exp,
+        fortress: {
+          ...exp.fortress,
+          garrison: (exp.fortress.garrison || []).filter(id => id !== bannerId)
+        }
+      };
+    }));
+    
+    // Update banner status back to ready
+    setBanners((bs) => bs.map((b) => 
+      b.id === bannerId ? { ...b, status: 'ready' } : b
+    ));
   }
 
   // Create reinforcement training entry
@@ -743,50 +1507,19 @@ export default function ResourceVillageUI() {
     
     // Handle mercenary vs regular banners differently
     if (banner.type === 'mercenary') {
-      // Mercenary: Show confirmation and create barracks queue entry
+      // Mercenary: Show internal confirmation modal
       if (!barracks) return;
       
       const goldCost = missing;
-      const confirmed = confirm(
-        `Reinforce ${squad.type === 'archer' ? 'Archer' : 'Warrior'} Squad in ${banner.name}?\n\n` +
-        `Soldiers needed: ${missing}\n` +
-        `Gold cost: ${goldCost}\n\n` +
-        `This will consume ${goldCost} gold over time as the squad is reinforced.`
-      );
-      
-      if (!confirmed) return;
-      
-      // Check if this squad already has a reinforcement entry
-      const hasActiveReinforcement = barracks.trainingQueue.some(
-        entry => entry.type === 'reinforcement' && entry.bannerId === bannerId && entry.squadId === squadId
-      );
-      if (hasActiveReinforcement) {
-        return;
-      }
-      
-      // Check if training slots are available
-      const activeEntries = barracks.trainingQueue.filter(e => e.status === 'training' || e.status === 'arriving');
-      const availableSlots = barracks.trainingSlots - activeEntries.length;
-      
-      // Create reinforcement training entry in barracks queue
-      const reinforcementEntry: TrainingEntry = {
-        id: Date.now(),
-        type: 'reinforcement',
+      setReinforcementModal({
         bannerId,
         squadId,
+        goldCost,
         soldiersNeeded: missing,
-        soldiersTrained: 0,
-        elapsedTime: 0,
-        status: availableSlots > 0 ? 'training' : 'arriving',
-      };
-      
-      setBarracks(prev => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          trainingQueue: [...prev.trainingQueue, reinforcementEntry],
-        };
+        bannerName: banner.name,
+        squadType: squad.type === 'archer' ? 'Archer' : 'Warrior'
       });
+      return;
     } else {
       // Regular banner: Use normal training system (status: 'training')
       // Check if banner is already training
@@ -1547,17 +2280,42 @@ export default function ResourceVillageUI() {
         const bb: Banner = { ...b };
         // Training can only consume population if there's more than 1 (emergency rule: keep at least 1)
         // Only process regular banners (mercenaries use barracks queue)
-        if (bb.type === 'regular' && bb.status === 'training' && bb.recruited < bb.reqPop && nextPop > 1) {
-          bb.recruited += 1; // 1 pop / sec / training banner
-          nextPop = Math.max(1, nextPop - 1);
-          bannersChanged = true;
+        if (bb.type === 'regular' && bb.status === 'training' && !bb.trainingPaused && bb.recruited < bb.reqPop && nextPop > 1) {
+          // Check recruitment mode
+          // Calculate current free workers
+          const currentActualWorkers = lumberMill.workers + quarry.workers + farm.workers;
+          const currentFreeWorkers = Math.max(0, population - currentActualWorkers);
           
-          // Update squad currentSize when training regular banners for reinforcement
-          if (bb.squads && bb.squads.length > 0 && bb.reinforcingSquadId !== undefined) {
-            // Find the specific squad being reinforced
-            const squadToReinforce = bb.squads.find(s => s.id === bb.reinforcingSquadId);
-            if (squadToReinforce && squadToReinforce.currentSize < squadToReinforce.maxSize) {
-              squadToReinforce.currentSize = Math.min(squadToReinforce.maxSize, squadToReinforce.currentSize + 1);
+          const canRecruit = recruitmentMode === 'regular' 
+            ? currentFreeWorkers > 0  // Regular: only use free workers (keep at least 1 free)
+            : true;  // Forced: can use working workers too (but still keep at least 1 total pop)
+          
+          if (canRecruit) {
+            bb.recruited += 1; // 1 pop / sec / training banner
+            nextPop = Math.max(1, nextPop - 1);
+            bannersChanged = true;
+            
+            // Update squad currentSize as training progresses
+            if (bb.squads && bb.squads.length > 0) {
+              if (bb.reinforcingSquadId !== undefined) {
+                // Reinforcement: update specific squad
+                const squadToReinforce = bb.squads.find(s => s.id === bb.reinforcingSquadId);
+                if (squadToReinforce && squadToReinforce.currentSize < squadToReinforce.maxSize) {
+                  squadToReinforce.currentSize = Math.min(squadToReinforce.maxSize, squadToReinforce.currentSize + 1);
+                }
+              } else {
+                // New training: distribute recruited population across squads (1 per second per squad)
+                // Each squad gets 1 soldier per second until full, then move to next squad
+                let remainingToAssign = 1; // We recruited 1 person this second
+                for (let i = 0; i < bb.squads.length && remainingToAssign > 0; i++) {
+                  const squad = bb.squads[i];
+                  if (squad.currentSize < squad.maxSize) {
+                    const canAdd = Math.min(remainingToAssign, squad.maxSize - squad.currentSize);
+                    squad.currentSize += canAdd;
+                    remainingToAssign -= canAdd;
+                  }
+                }
+              }
             }
           }
         }
@@ -1831,7 +2589,7 @@ export default function ResourceVillageUI() {
       setPopulation(Math.max(1, nextPop));
     }, 1000);
     return () => clearInterval(id);
-  }, [lumberRate, stoneRate, foodRate, foodConsumption, netFoodRate, lumberCap, stoneCap, foodCap, netPopulationChange, population, banners, missions, warehouse.food, farm.stored, popCap, barracks, bannerTemplates, bannerSeq]);
+  }, [lumberRate, stoneRate, foodRate, foodConsumption, netFoodRate, lumberCap, stoneCap, foodCap, netPopulationChange, population, banners, missions, warehouse.food, farm.stored, popCap, barracks, bannerTemplates, bannerSeq, recruitmentMode, lumberMill.workers, quarry.workers, farm.workers]);
 
   // Clamp resources if capacity changes
   useEffect(() => {
@@ -2019,14 +2777,14 @@ export default function ResourceVillageUI() {
   function RowBar({ value, max }: { value: number; max: number }) {
     const p = pct(value, max);
     return (
-      <div className="h-2 rounded bg-slate-800 overflow-hidden">
-        <div className="h-2 bg-sky-500" style={{ width: `${p}%` }} />
+      <div className="h-1.5 rounded bg-slate-800 overflow-hidden">
+        <div className="h-1.5 bg-sky-500" style={{ width: `${p}%` }} />
       </div>
     );
   }
 
   function CostBadge({ ok, children }: { ok: boolean; children: React.ReactNode }) {
-    return <span className={`text-xs font-semibold ${ok ? "text-emerald-600" : "text-red-600"}`}>{children}</span>;
+    return <span className={`text-[10px] font-semibold ${ok ? "text-emerald-600" : "text-red-600"}`}>{children}</span>;
   }
 
   // === Top resource strip ===
@@ -2035,19 +2793,25 @@ export default function ResourceVillageUI() {
     const rateColor = rate > 0 ? 'text-emerald-500' : rate < 0 ? 'text-red-500' : 'text-slate-500';
     const rateSign = rate > 0 ? '+' : '';
     return (
-      <div className="rounded-2xl border border-slate-700 bg-slate-900 px-4 py-3 shadow-sm">
-        <div className="text-xl font-bold select-none flex items-baseline gap-2">
+      <div className="rounded-xl border border-slate-700 bg-slate-900 px-2 py-1.5 shadow-sm">
+        {/* First line: Main value */}
+        <div className="text-sm font-bold select-none">
           <span className={valueColor || ''}>{label} {formatShort(value)}{label === 'Pop' ? ` / ${formatShort(cap)}` : ''}</span>
-          {workerInfo && <span className="text-xs text-slate-500 font-normal">({workerInfo})</span>}
-          {rate !== 0 && <span className={`${rateColor} text-xs font-semibold`}>{rateSign}{formatRate(rate)}/s</span>}
-          {trend && (
-            <span className={`text-xs ${trend.includes('-') ? 'text-red-500' : trend.includes('+') ? 'text-emerald-500' : 'text-slate-500'}`}>
-              {trend}
-            </span>
-          )}
         </div>
+        {/* Second line: Extra data */}
+        {(workerInfo || rate !== 0 || trend) && (
+          <div className="text-[10px] text-slate-500 font-normal flex items-center gap-1.5 flex-wrap mt-0.5">
+            {workerInfo && <span>({workerInfo})</span>}
+            {rate !== 0 && <span className={rateColor}>{rateSign}{formatRate(rate)}/s</span>}
+            {trend && (
+              <span className={trend.includes('-') ? 'text-red-500' : trend.includes('+') ? 'text-emerald-500' : 'text-slate-500'}>
+                {trend}
+              </span>
+            )}
+          </div>
+        )}
         {showBar && (
-          <div className="mt-2 h-4 rounded-xl bg-slate-900 border border-slate-700 overflow-hidden">
+          <div className="mt-1 h-2 rounded-lg bg-slate-900 border border-slate-700 overflow-hidden">
             <div className="h-full bg-sky-500" style={{ width: `${pct(value, cap)}%` }} />
           </div>
         )}
@@ -2092,28 +2856,28 @@ export default function ResourceVillageUI() {
     const effectiveLevel = Math.min(level, workers);
 
     return (
-      <div className={`rounded-xl border ${enabled ? 'border-slate-800' : 'border-slate-600 opacity-75'} bg-slate-900 p-3`}>
-        <div className="flex items-center gap-3">
+      <div className={`rounded-lg border ${enabled ? 'border-slate-800' : 'border-slate-600 opacity-75'} bg-slate-900 p-2`}>
+        <div className="flex items-center gap-2">
           <div className="min-w-0 flex-1">
-            <div className="flex items-baseline gap-2 flex-wrap">
-              <div className="font-semibold truncate">{name}</div>
-              <div className="text-xs px-1.5 py-0.5 rounded bg-slate-800">Lv {level}</div>
+            <div className="flex items-baseline gap-1.5 flex-wrap">
+              <div className="text-sm font-semibold truncate">{name}</div>
+              <div className="text-[10px] px-1 py-0.5 rounded bg-slate-800">Lv {level}</div>
               {workers < requiredWorkers && (
-                <div className="text-xs px-1.5 py-0.5 rounded bg-amber-900 text-amber-200">
+                <div className="text-[10px] px-1 py-0.5 rounded bg-amber-900 text-amber-200">
                   Effective Lv {effectiveLevel}
                 </div>
               )}
-              <span className="text-[10px] px-1 py-0.5 rounded border border-slate-700">{meta.short}</span>
-              <div className="text-xs text-slate-500">+{formatRate(rate)} {meta.short}/s</div>
-              <div className="text-xs text-slate-500">cap {formatCap(cap)} {meta.short}</div>
-              <div className="text-xs text-slate-500">Workers: {workers}/{requiredWorkers}</div>
-              <div className="ml-2 text-xs text-slate-500">{formatInt(stored)} / {formatCap(cap)} · {pct(stored, cap)}%</div>
+              <span className="text-[9px] px-0.5 py-0.5 rounded border border-slate-700">{meta.short}</span>
+              <div className="text-[10px] text-slate-500">+{formatRate(rate)} {meta.short}/s</div>
+              <div className="text-[10px] text-slate-500">cap {formatCap(cap)} {meta.short}</div>
+              <div className="text-[10px] text-slate-500">Workers: {workers}/{requiredWorkers}</div>
+              <div className="ml-1.5 text-[10px] text-slate-500">{formatInt(stored)} / {formatCap(cap)} · {pct(stored, cap)}%</div>
             </div>
-            <div className="mt-2"><RowBar value={stored} max={cap} /></div>
+            <div className="mt-1"><RowBar value={stored} max={cap} /></div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <button
-              className={`px-3 py-1.5 rounded-lg ${enabled ? 'bg-red-600 hover:bg-red-700' : 'bg-emerald-600 hover:bg-emerald-700'} text-white disabled:opacity-50 disabled:cursor-not-allowed`}
+              className={`px-2 py-1 rounded-lg text-xs ${enabled ? 'bg-red-600 hover:bg-red-700' : 'bg-emerald-600 hover:bg-emerald-700'} text-white disabled:opacity-50 disabled:cursor-not-allowed`}
               onClick={onToggle}
               disabled={toggleDisabled}
               title={toggleDisabled ? "Farm cannot be disabled (required for survival)" : enabled ? "Disable building (releases workers)" : "Enable building"}
@@ -2121,7 +2885,7 @@ export default function ResourceVillageUI() {
               {enabled ? "Disable" : "Enable"}
             </button>
             <button
-              className="px-3 py-1.5 rounded-lg bg-slate-700 text-slate-100 disabled:opacity-50"
+              className="px-2 py-1 rounded-lg text-xs bg-slate-700 text-slate-100 disabled:opacity-50"
               onClick={onCollect}
               disabled={stored <= 0 || (warehouseFree as any)[res] <= 0 || !enabled}
               title={(warehouseFree as any)[res] <= 0 ? "Warehouse full for this resource" : `Collect ${meta.name}`}
@@ -2129,13 +2893,13 @@ export default function ResourceVillageUI() {
               Collect {meta.name}
             </button>
             <div className="text-right">
-              <div className="text-xs text-slate-500 mb-1">Next: <strong>Lvl {nextLevel}</strong></div>
-              <div className="flex gap-2 justify-end">
+              <div className="text-[10px] text-slate-500 mb-0.5">Next: <strong>Lvl {nextLevel}</strong></div>
+              <div className="flex gap-1 justify-end">
                 <CostBadge ok={enoughWood}>W {formatInt(nextCost.wood)}</CostBadge>
                 <CostBadge ok={enoughStone}>S {formatInt(nextCost.stone)}</CostBadge>
               </div>
               <button
-                className="mt-1 px-3 py-1.5 w-full rounded-lg bg-slate-900 text-white disabled:opacity-50"
+                className="mt-0.5 px-2 py-1 w-full rounded-lg text-xs bg-slate-900 text-white disabled:opacity-50"
                 onClick={() => requestUpgrade(res, level)}
                 disabled={!affordable}
                 title={!affordable ? `Need more Wood/Stone in warehouse` : `Upgrade to Lvl ${nextLevel}`}
@@ -2158,25 +2922,25 @@ export default function ResourceVillageUI() {
     const affordable = enoughWood && enoughStone;
 
     return (
-      <div className="rounded-xl border border-slate-800 bg-slate-900 p-3">
-        <div className="flex items-center gap-3">
+      <div className="rounded-lg border border-slate-800 bg-slate-900 p-2">
+        <div className="flex items-center gap-2">
           <div className="min-w-0 flex-1">
-            <div className="flex items-baseline gap-2">
-              <div className="font-semibold truncate">House</div>
-              <div className="text-xs px-1.5 py-0.5 rounded bg-slate-800">Lv {house}</div>
-              <div className="text-xs text-slate-500">Capacity: {formatInt(popCap)}</div>
-              <div className="text-xs text-slate-500">Workers: 0 (no workers required)</div>
+            <div className="flex items-baseline gap-1.5">
+              <div className="text-sm font-semibold truncate">House</div>
+              <div className="text-[10px] px-1 py-0.5 rounded bg-slate-800">Lv {house}</div>
+              <div className="text-[10px] text-slate-500">Capacity: {formatInt(popCap)}</div>
+              <div className="text-[10px] text-slate-500">Workers: 0 (no workers required)</div>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <div className="text-right">
-              <div className="text-xs text-slate-500 mb-1">Next: <strong>Lvl {nextLevel}</strong></div>
-              <div className="flex gap-2 justify-end">
+              <div className="text-[10px] text-slate-500 mb-0.5">Next: <strong>Lvl {nextLevel}</strong></div>
+              <div className="flex gap-1 justify-end">
                 <CostBadge ok={enoughWood}>W {formatInt(nextCost.wood)}</CostBadge>
                 <CostBadge ok={enoughStone}>S {formatInt(nextCost.stone)}</CostBadge>
               </div>
               <button
-                className="mt-1 px-3 py-1.5 w-full rounded-lg bg-slate-900 text-white disabled:opacity-50"
+                className="mt-0.5 px-2 py-1 w-full rounded-lg text-xs bg-slate-900 text-white disabled:opacity-50"
                 onClick={() => requestUpgrade("house", house)}
                 disabled={!affordable}
                 title={!affordable ? "Not enough resources" : `Upgrade to Lvl ${nextLevel} (+5 capacity)`}
@@ -2200,36 +2964,36 @@ export default function ResourceVillageUI() {
     const affordable = canUpgrade && enoughWood && enoughStone;
 
     return (
-      <div className="rounded-xl border border-slate-800 bg-slate-900 p-3">
-        <div className="flex items-center gap-3">
+      <div className="rounded-lg border border-slate-800 bg-slate-900 p-2">
+        <div className="flex items-center gap-2">
           <div className="min-w-0 flex-1">
-            <div className="flex items-baseline gap-2">
-              <div className="font-semibold truncate">Town Hall</div>
-              <div className="text-xs px-1.5 py-0.5 rounded bg-slate-800">Lv {townHall.level}</div>
-              <div className="text-xs text-slate-500">Net Pop Change: {netPopulationChange > 0 ? '+' : ''}{netPopulationChange.toFixed(1)}/s</div>
-              <div className="text-xs text-slate-500">Happiness: {happiness}</div>
+            <div className="flex items-baseline gap-1.5">
+              <div className="text-sm font-semibold truncate">Town Hall</div>
+              <div className="text-[10px] px-1 py-0.5 rounded bg-slate-800">Lv {townHall.level}</div>
+              <div className="text-[10px] text-slate-500">Net Pop Change: {netPopulationChange > 0 ? '+' : ''}{netPopulationChange.toFixed(1)}/s</div>
+              <div className="text-[10px] text-slate-500">Happiness: {happiness}</div>
             </div>
             {townHall.level >= 2 && (
-              <div className="text-xs text-slate-400 mt-1">
+              <div className="text-[10px] text-slate-400 mt-0.5">
                 Unlocks: Barracks, Tavern
               </div>
             )}
             {townHall.level >= 3 && (
-              <div className="text-xs text-slate-400 mt-1">
+              <div className="text-[10px] text-slate-400 mt-0.5">
                 Unlocks: Market, Guard Tower (planned)
               </div>
             )}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             {canUpgrade && nextCost && (
               <div className="text-right">
-                <div className="text-xs text-slate-500 mb-1">Next: <strong>Lvl {nextLevel}</strong></div>
-                <div className="flex gap-2 justify-end">
+                <div className="text-[10px] text-slate-500 mb-0.5">Next: <strong>Lvl {nextLevel}</strong></div>
+                <div className="flex gap-1 justify-end">
                   <CostBadge ok={enoughWood}>W {formatInt(nextCost.wood)}</CostBadge>
                   <CostBadge ok={enoughStone}>S {formatInt(nextCost.stone)}</CostBadge>
                 </div>
                 <button
-                  className="mt-1 px-3 py-1.5 w-full rounded-lg bg-slate-900 text-white disabled:opacity-50"
+                  className="mt-0.5 px-2 py-1 w-full rounded-lg text-xs bg-slate-900 text-white disabled:opacity-50"
                   onClick={() => requestTownHallUpgrade(townHall.level)}
                   disabled={!affordable}
                 >
@@ -2253,17 +3017,17 @@ export default function ResourceVillageUI() {
       const canAfford = hasEnoughWood && hasEnoughStone;
       
       return (
-        <div className="rounded-xl border border-slate-800 bg-slate-900 p-3">
+        <div className="rounded-lg border border-slate-800 bg-slate-900 p-2">
           <div className="flex items-center justify-between">
             <div className="flex-1">
-              <div className="font-semibold">Barracks</div>
+              <div className="text-sm font-semibold">Barracks</div>
               {!canBuild && (
-                <div className="text-xs text-red-400">Requires Town Hall Level 2</div>
+                <div className="text-[10px] text-red-400">Requires Town Hall Level 2</div>
               )}
               {canBuild && (
-                <div className="mt-2 space-y-1">
-                  <div className="text-xs text-slate-400">Build Cost:</div>
-                  <div className="text-xs">
+                <div className="mt-1 space-y-0.5">
+                  <div className="text-[10px] text-slate-400">Build Cost:</div>
+                  <div className="text-[10px]">
                     <span className={hasEnoughWood ? 'text-emerald-400' : 'text-red-400'}>
                       {formatInt(buildCost.wood)} Wood
                     </span>
@@ -2279,7 +3043,7 @@ export default function ResourceVillageUI() {
               <button
                 onClick={buildBarracks}
                 disabled={!canAfford}
-                className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-2 py-1 rounded-lg text-xs bg-slate-900 hover:bg-slate-800 text-white disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Build ({formatInt(buildCost.wood)}W, {formatInt(buildCost.stone)}S)
               </button>
@@ -2297,25 +3061,25 @@ export default function ResourceVillageUI() {
     const affordable = canUpgrade && enoughWood && enoughStone;
 
     return (
-      <div className="rounded-xl border border-slate-800 bg-slate-900 p-3">
-        <div className="flex items-center gap-3">
+      <div className="rounded-lg border border-slate-800 bg-slate-900 p-2">
+        <div className="flex items-center gap-2">
           <div className="min-w-0 flex-1">
-            <div className="flex items-baseline gap-2">
-              <div className="font-semibold truncate">Barracks</div>
-              <div className="text-xs px-1.5 py-0.5 rounded bg-slate-800">Lv {barracks.level}</div>
-              <div className="text-xs text-slate-500">Training Slots: {barracks.trainingSlots}</div>
-              <div className="text-xs text-slate-500">Active: {barracks.trainingQueue.length}/{barracks.trainingSlots}</div>
+            <div className="flex items-baseline gap-1.5">
+              <div className="text-sm font-semibold truncate">Barracks</div>
+              <div className="text-[10px] px-1 py-0.5 rounded bg-slate-800">Lv {barracks.level}</div>
+              <div className="text-[10px] text-slate-500">Training Slots: {barracks.trainingSlots}</div>
+              <div className="text-[10px] text-slate-500">Active: {barracks.trainingQueue.length}/{barracks.trainingSlots}</div>
             </div>
           </div>
           {canUpgrade && nextCost && (
             <div className="text-right">
-              <div className="text-xs text-slate-500 mb-1">Next: <strong>Lvl {nextLevel}</strong></div>
-              <div className="flex gap-2 justify-end">
+              <div className="text-[10px] text-slate-500 mb-0.5">Next: <strong>Lvl {nextLevel}</strong></div>
+              <div className="flex gap-1 justify-end">
                 <CostBadge ok={enoughWood}>W {formatInt(nextCost.wood)}</CostBadge>
                 <CostBadge ok={enoughStone}>S {formatInt(nextCost.stone)}</CostBadge>
               </div>
               <button
-                className="mt-1 px-3 py-1.5 w-full rounded-lg bg-slate-900 text-white disabled:opacity-50"
+                className="mt-0.5 px-2 py-1 w-full rounded-lg text-xs bg-slate-900 text-white disabled:opacity-50"
                 onClick={() => requestBarracksUpgrade(barracks.level)}
                 disabled={!affordable}
               >
@@ -2338,17 +3102,17 @@ export default function ResourceVillageUI() {
       const canAfford = hasEnoughWood && hasEnoughStone;
       
       return (
-        <div className="rounded-xl border border-slate-800 bg-slate-900 p-3">
+        <div className="rounded-lg border border-slate-800 bg-slate-900 p-2">
           <div className="flex items-center justify-between">
             <div className="flex-1">
-              <div className="font-semibold">Tavern</div>
+              <div className="text-sm font-semibold">Tavern</div>
               {!canBuild && (
-                <div className="text-xs text-red-400">Requires Town Hall Level 2</div>
+                <div className="text-[10px] text-red-400">Requires Town Hall Level 2</div>
               )}
               {canBuild && (
-                <div className="mt-2 space-y-1">
-                  <div className="text-xs text-slate-400">Build Cost:</div>
-                  <div className="text-xs">
+                <div className="mt-1 space-y-0.5">
+                  <div className="text-[10px] text-slate-400">Build Cost:</div>
+                  <div className="text-[10px]">
                     <span className={hasEnoughWood ? 'text-emerald-400' : 'text-red-400'}>
                       {formatInt(buildCost.wood)} Wood
                     </span>
@@ -2364,7 +3128,7 @@ export default function ResourceVillageUI() {
               <button
                 onClick={buildTavern}
                 disabled={!canAfford}
-                className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-2 py-1 rounded-lg text-xs bg-slate-900 hover:bg-slate-800 text-white disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Build ({formatInt(buildCost.wood)}W, {formatInt(buildCost.stone)}S)
               </button>
@@ -2383,25 +3147,25 @@ export default function ResourceVillageUI() {
     const festivalActive = tavern.activeFestival && Date.now() < tavern.festivalEndTime;
 
     return (
-      <div className="rounded-xl border border-slate-800 bg-slate-900 p-3">
-        <div className="flex items-center gap-3">
+      <div className="rounded-lg border border-slate-800 bg-slate-900 p-2">
+        <div className="flex items-center gap-2">
           <div className="min-w-0 flex-1">
-            <div className="flex items-baseline gap-2">
-              <div className="font-semibold truncate">Tavern</div>
-              <div className="text-xs px-1.5 py-0.5 rounded bg-slate-800">Lv {tavern.level}</div>
-              <div className="text-xs text-slate-500">Happiness Bonus: +{tavern.level === 1 ? 10 : tavern.level === 2 ? 20 : 25}</div>
+            <div className="flex items-baseline gap-1.5">
+              <div className="text-sm font-semibold truncate">Tavern</div>
+              <div className="text-[10px] px-1 py-0.5 rounded bg-slate-800">Lv {tavern.level}</div>
+              <div className="text-[10px] text-slate-500">Happiness Bonus: +{tavern.level === 1 ? 10 : tavern.level === 2 ? 20 : 25}</div>
               {festivalActive && (
-                <div className="text-xs text-amber-400">Festival Active!</div>
+                <div className="text-[10px] text-amber-400">Festival Active!</div>
               )}
             </div>
-            <div className="text-xs text-slate-400 mt-1">
+            <div className="text-[10px] text-slate-400 mt-0.5">
               Total Happiness: {happiness} ({happiness >= 70 ? 'Happy' : happiness <= 40 ? 'Unhappy' : 'Neutral'})
             </div>
             {tavern.level >= 1 && !festivalActive && (
               <button
                 onClick={startFestival}
                 disabled={warehouse.gold < 50}
-                className="mt-2 px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-sm disabled:opacity-50"
+                className="mt-1 px-2 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs disabled:opacity-50"
               >
                 Start Festival (50 Gold)
               </button>
@@ -2409,13 +3173,13 @@ export default function ResourceVillageUI() {
           </div>
           {canUpgrade && nextCost && (
             <div className="text-right">
-              <div className="text-xs text-slate-500 mb-1">Next: <strong>Lvl {nextLevel}</strong></div>
-              <div className="flex gap-2 justify-end">
+              <div className="text-[10px] text-slate-500 mb-0.5">Next: <strong>Lvl {nextLevel}</strong></div>
+              <div className="flex gap-1 justify-end">
                 <CostBadge ok={enoughWood}>W {formatInt(nextCost.wood)}</CostBadge>
                 <CostBadge ok={enoughStone}>S {formatInt(nextCost.stone)}</CostBadge>
               </div>
               <button
-                className="mt-1 px-3 py-1.5 w-full rounded-lg bg-slate-900 text-white disabled:opacity-50"
+                className="mt-0.5 px-2 py-1 w-full rounded-lg text-xs bg-slate-900 text-white disabled:opacity-50"
                 onClick={() => requestTavernUpgrade(tavern.level)}
                 disabled={!affordable}
               >
@@ -2432,13 +3196,13 @@ export default function ResourceVillageUI() {
   function TaxesRow() {
     const trendText = netPopulationChange > 0 ? `(+${netPopulationChange.toFixed(1)} in 1s)` : netPopulationChange < 0 ? `(${netPopulationChange.toFixed(1)} in 1s)` : "(stable)";
     return (
-      <div className="rounded-xl border border-slate-800 bg-slate-900 p-3">
-        <div className="flex items-center gap-3">
+      <div className="rounded-lg border border-slate-800 bg-slate-900 p-2">
+        <div className="flex items-center gap-2">
           <div className="min-w-0 flex-1">
-            <div className="flex items-baseline gap-2 flex-wrap">
-              <div className="font-semibold truncate">Taxes</div>
-              <div className="text-xs text-slate-500">Population: {formatInt(population)} / {formatInt(popCap)}</div>
-              <div className={`text-xs ${workerDeficit > 0 ? 'text-red-500 font-semibold' : 'text-slate-500'}`}>
+            <div className="flex items-baseline gap-1.5 flex-wrap">
+              <div className="text-sm font-semibold truncate">Taxes</div>
+              <div className="text-[10px] text-slate-500">Population: {formatInt(population)} / {formatInt(popCap)}</div>
+              <div className={`text-[10px] ${workerDeficit > 0 ? 'text-red-500 font-semibold' : 'text-slate-500'}`}>
                 Workers: {workerSurplus >= 0 ? `+${workerSurplus}` : `-${workerDeficit}`}
                 {workerDeficit > 0 && (
                   <span className="ml-1" title="Too many enabled buildings are competing for staff. Disable some buildings to focus labor on priority buildings.">
@@ -2446,19 +3210,19 @@ export default function ResourceVillageUI() {
                   </span>
                 )}
               </div>
-              <div className={`text-xs ${netPopulationChange < 0 ? 'text-red-500' : 'text-slate-500'}`}>
+              <div className={`text-[10px] ${netPopulationChange < 0 ? 'text-red-500' : 'text-slate-500'}`}>
                 {trendText}
               </div>
-              <div className="text-xs text-slate-500">
+              <div className="text-[10px] text-slate-500">
                 Happiness: {happiness} ({happiness >= 70 ? 'Happy' : happiness <= 40 ? 'Unhappy' : 'Neutral'})
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <div className="inline-flex rounded-lg overflow-hidden border border-slate-700">
-              <button onClick={() => setTax('low')} className={`px-3 py-1.5 ${tax==='low' ? 'bg-slate-900 text-white' : 'bg-slate-700'}`}>Low</button>
-              <button onClick={() => setTax('normal')} className={`px-3 py-1.5 ${tax==='normal' ? 'bg-slate-900 text-white' : 'bg-slate-700'}`}>Normal</button>
-              <button onClick={() => setTax('high')} className={`px-3 py-1.5 ${tax==='high' ? 'bg-slate-900 text-white' : 'bg-slate-700'}`}>High</button>
+              <button onClick={() => setTax('low')} className={`px-2 py-1 text-xs ${tax==='low' ? 'bg-slate-900 text-white' : 'bg-slate-700'}`}>Low</button>
+              <button onClick={() => setTax('normal')} className={`px-2 py-1 text-xs ${tax==='normal' ? 'bg-slate-900 text-white' : 'bg-slate-700'}`}>Normal</button>
+              <button onClick={() => setTax('high')} className={`px-2 py-1 text-xs ${tax==='high' ? 'bg-slate-900 text-white' : 'bg-slate-700'}`}>High</button>
             </div>
           </div>
         </div>
@@ -2475,19 +3239,19 @@ export default function ResourceVillageUI() {
     const affordable = enoughWood && enoughStone;
 
     return (
-      <div className="rounded-xl border border-slate-800 bg-slate-900 p-3">
-        <div className="flex items-center gap-3">
+      <div className="rounded-lg border border-slate-800 bg-slate-900 p-2">
+        <div className="flex items-center gap-2">
           <div className="min-w-0 flex-1">
-            <div className="flex items-baseline gap-2">
-              <div className="font-semibold truncate">Warehouse</div>
-              <div className="text-xs px-1.5 py-0.5 rounded bg-slate-800">Lv {warehouseLevel}</div>
-              <div className="text-xs text-slate-500">caps W/S/F {formatCap(warehouseCap.wood)} / {formatCap(warehouseCap.stone)} / {formatCap(warehouseCap.food)}</div>
-              <div className="ml-2 text-xs text-slate-500">W {formatInt(warehouse.wood)}, S {formatInt(warehouse.stone)}, F {formatInt(warehouse.food)}</div>
+            <div className="flex items-baseline gap-1.5">
+              <div className="text-sm font-semibold truncate">Warehouse</div>
+              <div className="text-[10px] px-1 py-0.5 rounded bg-slate-800">Lv {warehouseLevel}</div>
+              <div className="text-[10px] text-slate-500">caps W/S/F {formatCap(warehouseCap.wood)} / {formatCap(warehouseCap.stone)} / {formatCap(warehouseCap.food)}</div>
+              <div className="ml-1.5 text-[10px] text-slate-500">W {formatInt(warehouse.wood)}, S {formatInt(warehouse.stone)}, F {formatInt(warehouse.food)}</div>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <button
-              className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white disabled:opacity-50"
+              className="px-2 py-1 rounded-lg text-xs bg-emerald-600 text-white disabled:opacity-50"
               onClick={collectAll}
               disabled={
                 lumberMill.stored + quarry.stored + farm.stored === 0 ||
@@ -2497,13 +3261,13 @@ export default function ResourceVillageUI() {
               Collect All
             </button>
             <div className="text-right">
-              <div className="text-xs text-slate-500 mb-1">Next: <strong>Lvl {nextLevel}</strong></div>
-              <div className="flex gap-2 justify-end">
+              <div className="text-[10px] text-slate-500 mb-0.5">Next: <strong>Lvl {nextLevel}</strong></div>
+              <div className="flex gap-1 justify-end">
                 <CostBadge ok={enoughWood}>W {formatInt(nextCost.wood)}</CostBadge>
                 <CostBadge ok={enoughStone}>S {formatInt(nextCost.stone)}</CostBadge>
               </div>
               <button
-                className="mt-1 px-3 py-1.5 w-full rounded-lg bg-slate-900 text-white disabled:opacity-50"
+                className="mt-0.5 px-2 py-1 w-full rounded-lg text-xs bg-slate-900 text-white disabled:opacity-50"
                 onClick={() => requestUpgrade("warehouse", warehouseLevel)}
                 disabled={!affordable}
                 title={!affordable ? "Not enough resources" : `Upgrade to Lvl ${nextLevel}`}
@@ -2527,19 +3291,20 @@ export default function ResourceVillageUI() {
       console.assert(Math.abs(getProgression("food", 1, "production") - 5) < 1e-6, "Food base prod");
       console.assert(Math.abs(getProgression("food", 2, "production") - 6.25) < 1e-6, "Food L2 prod");
 
-      // Building cost checks vs doc seeds & tables (aligned to show the *next level* row)
-      const qc = getBuildingCost("stone", 2); // Quarry Lv2 row
-      console.assert(qc.wood === 75 && qc.stone === 60, "Quarry next row (Lv2)");
-      const fc = getBuildingCost("food", 2); // Farm Lv2 row
-      console.assert(fc.wood === 105 && fc.stone === 53, "Farm next row (Lv2)");
-      const lc2 = getBuildingCost("wood", 2); // Lumber Lv2 row
-      console.assert(lc2.wood === 101 && lc2.stone === 41, "Lumber next row (Lv2)");
-      const lc3 = getBuildingCost("wood", 3); // Lv3 row
-      console.assert(lc3.wood === 151 && lc3.stone === 61, "Lumber next row (Lv3)");
-      const lc4 = getBuildingCost("wood", 4); // Lv4 row
-      console.assert(lc4.wood === 226 && lc4.stone === 91, "Lumber next row (Lv4)");
-      const lc5 = getBuildingCost("wood", 5); // Lv5 row
-      console.assert(lc5.wood === 339 && lc5.stone === 137, "Lumber next row (Lv5)");
+      // Building cost checks vs doc seeds & tables
+      // getBuildingCost(res, levelTo) returns cost to go from (levelTo-1) → levelTo
+      const qc = getBuildingCost("stone", 2); // Quarry L1→L2 cost
+      console.assert(qc.wood === 75 && qc.stone === 60, "Quarry L1→L2 cost");
+      const fc = getBuildingCost("food", 2); // Farm L1→L2 cost
+      console.assert(fc.wood === 105 && fc.stone === 53, "Farm L1→L2 cost");
+      const lc2 = getBuildingCost("wood", 2); // Lumber L1→L2 cost
+      console.assert(lc2.wood === 67 && lc2.stone === 27, "Lumber L1→L2 cost");
+      const lc3 = getBuildingCost("wood", 3); // Lumber L2→L3 cost
+      console.assert(lc3.wood === 101 && lc3.stone === 41, "Lumber L2→L3 cost");
+      const lc4 = getBuildingCost("wood", 4); // Lumber L3→L4 cost
+      console.assert(lc4.wood === 151 && lc4.stone === 61, "Lumber L3→L4 cost");
+      const lc5 = getBuildingCost("wood", 5); // Lumber L4→L5 cost
+      console.assert(lc5.wood === 226 && lc5.stone === 91, "Lumber L4→L5 cost");
 
       // Banner cap test (max 8 squads)
       {
@@ -2580,9 +3345,10 @@ export default function ResourceVillageUI() {
 
   return (
     <div className="min-h-screen w-full bg-slate-950 text-slate-100 p-4 md:p-8">
-      {/* Sticky top resource strip */}
-      <div className="sticky top-0 z-50 -mx-4 md:-mx-8 px-4 md:px-8 pb-3 bg-slate-950/95 backdrop-blur">
-        <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-8 gap-3">
+      {/* Fixed Top Menu - Resources, Cheat Panel, and Navigation */}
+      <div className="fixed top-0 left-0 right-0 z-50 px-4 md:px-8 py-2 bg-slate-950/95 backdrop-blur border-b border-slate-800">
+        {/* Resource Bar */}
+        <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-8 gap-2 mb-1.5">
           <ResourcePill 
             label="Pop" 
             value={population} 
@@ -2593,12 +3359,12 @@ export default function ResourceVillageUI() {
             statusColor={workerDeficit > 0 ? 'red' : workerSurplus > 0 ? 'green' : 'yellow'}
             workerInfo={`${actualWorkers} working, ${Math.max(0, freeWorkers)} free`}
           />
-          <div className="rounded-2xl border border-slate-700 bg-slate-900 px-4 py-3 shadow-sm">
-            <div className="text-xl font-bold select-none flex items-baseline gap-2">
+          <div className="rounded-xl border border-slate-700 bg-slate-900 px-2 py-1.5 shadow-sm">
+            <div className="text-sm font-bold select-none flex items-baseline gap-1">
               <span className={happiness >= 70 ? 'text-emerald-500' : happiness <= 40 ? 'text-red-500' : 'text-yellow-500'}>
                 😊 {happiness}
               </span>
-              <span className="text-xs text-slate-500">
+              <span className="text-[10px] text-slate-500">
                 {happiness >= 70 ? 'Happy' : happiness <= 40 ? 'Unhappy' : 'Neutral'}
               </span>
             </div>
@@ -2612,113 +3378,148 @@ export default function ResourceVillageUI() {
         </div>
         
         {/* Cheat Area for Testing */}
-        <div className="mt-3 p-3 rounded-lg border-2 border-amber-500 bg-amber-950/30">
-          <div className="text-xs font-semibold text-amber-200 mb-2">🧪 CHEAT PANEL (Testing)</div>
-          <div className="flex gap-2 flex-wrap">
+        <div className="mb-1.5 p-2 rounded-lg border-2 border-amber-500 bg-amber-950/30">
+          <div className="text-[10px] font-semibold text-amber-200 mb-1">🧪 CHEAT PANEL (Testing)</div>
+          <div className="flex gap-1.5 flex-wrap">
             <button
               onClick={() => setWarehouse(w => ({ ...w, wood: Math.min(warehouseCap.wood, w.wood + 999) }))}
-              className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-sm font-semibold"
+              className="px-2 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold"
             >
               +999 Wood
             </button>
             <button
               onClick={() => setWarehouse(w => ({ ...w, stone: Math.min(warehouseCap.stone, w.stone + 999) }))}
-              className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-sm font-semibold"
+              className="px-2 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold"
             >
               +999 Stone
             </button>
             <button
               onClick={() => setWarehouse(w => ({ ...w, food: Math.min(warehouseCap.food, w.food + 999) }))}
-              className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-sm font-semibold"
+              className="px-2 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold"
             >
               +999 Food
             </button>
             <button
               onClick={() => setWarehouse(w => ({ ...w, iron: Math.min(warehouseCap.iron, w.iron + 999) }))}
-              className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-sm font-semibold"
+              className="px-2 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold"
             >
               +999 Iron
             </button>
             <button
               onClick={() => setWarehouse(w => ({ ...w, gold: Math.min(warehouseCap.gold, w.gold + 999) }))}
-              className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-sm font-semibold"
+              className="px-2 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold"
             >
               +999 Gold
             </button>
             <button
               onClick={() => setSkillPoints(prev => prev + 5)}
-              className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-sm font-semibold"
+              className="px-2 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold"
             >
               +5 Skill Points
             </button>
           </div>
         </div>
-      </div>
 
-      <h1 className="text-2xl md:text-3xl font-bold mb-4 mt-2">Village Resources</h1>
+        {/* Village Resources Header and Navigation */}
+        <div>
+          <h1 className="text-lg md:text-xl font-bold mb-1.5">Village Resources</h1>
 
-      {/* Navigation Menu */}
-      <div className="mb-4 flex items-center gap-3">
-        <div className="inline-flex rounded-xl overflow-hidden border border-slate-700">
-          <button
-            onClick={() => setMainTab('production')}
-            className={`px-3 py-1.5 ${mainTab === 'production' ? 'bg-slate-900 text-white' : 'bg-slate-700'}`}
-          >
-            Production
-          </button>
-          <button
-            onClick={() => {
-              if (barracks && barracks.level >= 1) {
-                setMainTab('army');
-              }
-            }}
-            disabled={!barracks || barracks.level < 1}
-            className={`px-3 py-1.5 ${
-              !barracks || barracks.level < 1
-                ? 'bg-red-900 text-red-300 cursor-not-allowed opacity-75'
-                : mainTab === 'army'
-                ? 'bg-slate-900 text-white'
-                : 'bg-slate-700'
-            }`}
-            title={!barracks || barracks.level < 1 ? 'Requires Barracks Level 1' : 'Army'}
-          >
-            Army
-          </button>
-          <button
-            onClick={() => setMainTab('missions')}
-            className={`px-3 py-1.5 ${mainTab === 'missions' ? 'bg-slate-900 text-white' : 'bg-slate-700'}`}
-          >
-            Missions
-          </button>
-          <button
-            onClick={() => setBlacksmithOpen(true)}
-            className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600"
-          >
-            Blacksmith
-          </button>
-          <button
-            onClick={() => setTechnologiesOpen(true)}
-            className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600"
-          >
-            Technologies
-          </button>
+          {/* Navigation Menu */}
+          <div className="mb-1 flex items-center gap-2">
+            <div className="inline-flex rounded-lg overflow-hidden border border-slate-700">
+              <button
+                onClick={() => setMainTab('production')}
+                className={`px-2 py-1 text-xs ${mainTab === 'production' ? 'bg-slate-900 text-white' : 'bg-slate-700'}`}
+              >
+                Production
+              </button>
+              <button
+                onClick={() => {
+                  if (barracks && barracks.level >= 1) {
+                    setMainTab('army');
+                  }
+                }}
+                disabled={!barracks || barracks.level < 1}
+                className={`px-2 py-1 text-xs ${
+                  !barracks || barracks.level < 1
+                    ? 'bg-red-900 text-red-300 cursor-not-allowed opacity-75'
+                    : mainTab === 'army'
+                    ? 'bg-slate-900 text-white'
+                    : 'bg-slate-700'
+                }`}
+                title={!barracks || barracks.level < 1 ? 'Requires Barracks Level 1' : 'Army'}
+              >
+                Army
+              </button>
+              <button
+                onClick={() => setMainTab('missions')}
+                className={`px-2 py-1 text-xs ${mainTab === 'missions' ? 'bg-slate-900 text-white' : 'bg-slate-700'}`}
+              >
+                Missions
+              </button>
+              <button
+                onClick={() => setMainTab('expeditions')}
+                className={`px-2 py-1 text-xs ${mainTab === 'expeditions' ? 'bg-slate-900 text-white' : 'bg-slate-700'}`}
+              >
+                Expeditions
+              </button>
+              <button
+                onClick={() => setBlacksmithOpen(true)}
+                className="px-2 py-1 text-xs bg-slate-700 hover:bg-slate-600"
+              >
+                Blacksmith
+              </button>
+              <button
+                onClick={() => setTechnologiesOpen(true)}
+                className="px-2 py-1 text-xs bg-slate-700 hover:bg-slate-600"
+              >
+                Technologies
+              </button>
+            </div>
+
+            {/* Simulator shortcuts */}
+            <div className="ml-auto flex items-center gap-2">
+              <a
+                href="/fortress_siege_simulator.html"
+                target="_blank"
+                rel="noreferrer"
+                onClick={(e) => {
+                  // Find the Godonis expedition fortress stats
+                  const godonisExp = expeditions.find(exp => exp.expeditionId === 'godonis_mountain_expedition');
+                  if (godonisExp?.fortress?.stats) {
+                    const stats = godonisExp.fortress.stats;
+                    localStorage.setItem('fortressSimulatorStats', JSON.stringify({
+                      fortHP: stats.fortHP,
+                      fortArcherSlots: stats.archerSlots,
+                      garrisonArchers: stats.garrisonArchers,
+                      garrisonWarriors: stats.garrisonWarriors,
+                    }));
+                  }
+                }}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 text-xs font-semibold text-slate-100 hover:bg-slate-800 transition"
+              >
+                🏰 Fortress Simulator
+              </a>
+              <a
+                href="/ck_3_style_battle_simulator_ui_single_file_html.html"
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 text-xs font-semibold text-slate-100 hover:bg-slate-800 transition"
+              >
+                ⚔ Combat Simulator
+              </a>
+            </div>
+          </div>
         </div>
-
-        {/* Combat Simulator shortcut */}
-        <a
-          href="/ck_3_style_battle_simulator_ui_single_file_html.html"
-          target="_blank"
-          rel="noreferrer"
-          className="ml-auto inline-flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-3 py-1.5 text-sm font-semibold text-slate-100 hover:bg-slate-800 transition"
-        >
-          ⚔ Combat Simulator
-        </a>
       </div>
+
+      {/* Spacer to prevent content from going under fixed header */}
+      <div className="h-[200px]"></div>
 
       {/* Main Content - Production (Default) */}
       {mainTab==='production' && (
-        <section className="space-y-3">
-          <h2 className="text-lg font-semibold">Buildings List</h2>
+        <section className="space-y-2">
+          <h2 className="text-sm font-semibold">Buildings List</h2>
           <BuildingRow 
             name="Lumber Mill" 
             res="wood" 
@@ -2874,7 +3675,14 @@ export default function ResourceVillageUI() {
                 <div className="mt-4 space-y-2">
                   <h4 className="text-sm font-semibold text-red-400">YOUR MERCENARY BANNERS</h4>
                   {banners.filter(b => b.type === 'mercenary').map((b) => (
-                    <div key={b.id} className="rounded-lg border border-slate-700 bg-slate-800 p-3 grid grid-cols-1 md:grid-cols-3 gap-2 items-center">
+                    <div key={b.id} className="rounded-lg border border-slate-700 bg-slate-800 p-3 grid grid-cols-1 md:grid-cols-3 gap-2 items-center relative">
+                      <button
+                        onClick={() => setDeleteBannerModal(b.id)}
+                        className="absolute top-2 right-2 w-5 h-5 rounded-full bg-red-600 hover:bg-red-700 text-white text-xs flex items-center justify-center font-bold"
+                        title="Dismiss banner (no population returned)"
+                      >
+                        ×
+                      </button>
                       <div className="font-semibold text-sm">{b.name}</div>
                       <div className="flex gap-1 flex-wrap">
                         {(() => {
@@ -2927,12 +3735,84 @@ export default function ResourceVillageUI() {
                           });
                         })()}
                       </div>
-                      <div className="justify-self-end w-full md:w-64">
+                      <div className="justify-self-end w-full md:w-64 flex flex-col items-end gap-2">
+                        {(() => {
+                          // Calculate button state
+                          let displaySquads = b.squads;
+                          if (!displaySquads || displaySquads.length === 0) {
+                            const { squads } = initializeSquadsFromUnits(b.units, squadSeqRef.current);
+                            displaySquads = squads;
+                          }
+                          
+                          // Calculate refill cost (1 gold per missing soldier)
+                          const refillCost = displaySquads.reduce((sum, squad) => {
+                            return sum + (squad.maxSize - squad.currentSize);
+                          }, 0);
+                          
+                          // Determine button state (only refill, no hiring)
+                          const hasLosses = refillCost > 0;
+                          const hasEnoughGold = warehouse.gold >= refillCost;
+                          
+                          // State A: No losses (all squads full)
+                          if (!hasLosses) {
+                            return (
+                              <button
+                                disabled
+                                className="px-3 py-1.5 rounded text-xs bg-slate-600 text-slate-400 cursor-not-allowed"
+                                title="Banner at full strength"
+                              >
+                                Reinforce
+                              </button>
+                            );
+                          }
+                          
+                          // State B: Losses present and enough gold
+                          if (hasLosses && hasEnoughGold) {
+                            return (
+                              <button
+                                onClick={() => {
+                                  if (!barracks) return;
+                                  setHireAndRefillModal({
+                                    bannerId: b.id,
+                                    hireCost: 0,
+                                    refillCost,
+                                    totalCost: refillCost,
+                                    bannerName: b.name
+                                  });
+                                }}
+                                className="px-3 py-1.5 rounded text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
+                                title="Reinforce this banner"
+                              >
+                                Reinforce
+                              </button>
+                            );
+                          }
+                          
+                          // State C: Losses present but NOT enough gold
+                          return (
+                            <button
+                              onClick={() => {
+                                if (!barracks) return;
+                                setHireAndRefillModal({
+                                  bannerId: b.id,
+                                  hireCost: 0,
+                                  refillCost,
+                                  totalCost: refillCost,
+                                  bannerName: b.name
+                                });
+                              }}
+                              className="px-3 py-1.5 rounded text-xs bg-slate-700 hover:bg-slate-600 text-white"
+                              title="Not enough gold to fully reinforce"
+                            >
+                              Reinforce
+                            </button>
+                          );
+                        })()}
                         {b.status === 'ready' && (
-                          <div className="text-emerald-600 text-xs font-semibold text-right">Ready</div>
+                          <div className="text-emerald-600 text-xs font-semibold">Ready</div>
                         )}
                         {b.status === 'deployed' && (
-                          <div className="text-amber-500 text-xs font-semibold text-right">Deployed</div>
+                          <div className="text-amber-500 text-xs font-semibold">Deployed</div>
                         )}
                       </div>
                     </div>
@@ -2980,12 +3860,49 @@ export default function ResourceVillageUI() {
             {/* Your Banners Section - Inside Men at Arms */}
             <div className="mt-4 space-y-2">
               <h4 className="text-sm font-semibold text-red-400">YOUR REGULAR BANNERS</h4>
+              
+              {/* Recruitment Mode Selection - Moved down near training area */}
+              <div className="flex gap-2 items-center flex-wrap mb-3 pb-3 border-b border-slate-700">
+                <span className="text-xs text-slate-400">Recruitment Mode:</span>
+                <button
+                  onClick={() => setRecruitmentMode('regular')}
+                  className={`px-3 py-1.5 rounded text-sm ${
+                    recruitmentMode === 'regular'
+                      ? 'bg-emerald-600 text-white'
+                      : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                  }`}
+                >
+                  Regular Recruitment
+                </button>
+                <button
+                  onClick={() => setRecruitmentMode('forced')}
+                  className={`px-3 py-1.5 rounded text-sm ${
+                    recruitmentMode === 'forced'
+                      ? 'bg-red-600 text-white'
+                      : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                  }`}
+                >
+                  Forced Recruitment
+                </button>
+                <span className="text-xs text-slate-500">
+                  {recruitmentMode === 'regular' 
+                    ? '(Consuming only free workers)' 
+                    : '(Consuming working workers)'}
+                </span>
+              </div>
               {banners.filter(b => b.type === 'regular').length === 0 ? (
                 <div className="text-xs text-slate-500">No banners available yet.</div>
               ) : (
                 <div className="space-y-2">
                   {banners.filter(b => b.type === 'regular').map((b) => (
-                  <div key={b.id} className="rounded-lg border border-slate-700 bg-slate-800 p-3 grid grid-cols-1 md:grid-cols-3 gap-2 items-center">
+                  <div key={b.id} className="rounded-lg border border-slate-700 bg-slate-800 p-3 grid grid-cols-1 md:grid-cols-3 gap-2 items-center relative">
+                    <button
+                      onClick={() => deleteBanner(b.id)}
+                      className="absolute top-2 right-2 w-5 h-5 rounded-full bg-red-600 hover:bg-red-700 text-white text-xs flex items-center justify-center font-bold"
+                      title="Delete banner (returns recruited population)"
+                    >
+                      ×
+                    </button>
                     <div className="font-semibold text-sm">{b.name}</div>
                     <div className="flex gap-1 flex-wrap">
                       {(() => {
@@ -3049,10 +3966,16 @@ export default function ResourceVillageUI() {
                         <div>
                           <div className="text-xs mb-1">Recruiting {b.recruited} / {b.reqPop}</div>
                           <RowBar value={b.recruited} max={b.reqPop} />
+                          <button
+                            onClick={() => toggleTrainingPause(b.id)}
+                            className="mt-1 px-2 py-1 rounded text-xs bg-amber-600 hover:bg-amber-700 text-white"
+                          >
+                            {b.trainingPaused ? '▶ Resume' : '⏸ Pause'}
+                          </button>
                         </div>
                       )}
                       {b.status === 'ready' && (
-                        <div className="text-emerald-600 text-xs font-semibold text-right">Ready</div>
+                        <div className="text-emerald-600 text-xs font-semibold">Ready</div>
                       )}
                       {b.status === 'deployed' && (
                         <div className="text-amber-500 text-xs font-semibold text-right">Deployed</div>
@@ -3133,6 +4056,586 @@ export default function ResourceVillageUI() {
         </section>
       )}
 
+      {mainTab==='expeditions' && (
+        <section className="space-y-4">
+          <h2 className="text-sm font-semibold">Expeditions</h2>
+          <div className="space-y-3">
+            {expeditions.map((exp) => {
+              return (
+                <div key={exp.expeditionId} className="rounded-xl border border-slate-800 bg-slate-900 p-3">
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="flex-1">
+                      <div className="font-semibold text-sm mb-1">{exp.title}</div>
+                      <div className="text-xs text-slate-400 mb-2">{exp.shortSummary}</div>
+                      {(exp.state === 'available' || exp.state === 'funding' || exp.state === 'readyToLaunch') && (
+                        <div className="text-xs text-slate-300 whitespace-pre-line mt-2">{exp.description}</div>
+                      )}
+                    </div>
+                    {exp.state === 'completed' && (
+                      <div className="text-xs px-2 py-1 rounded bg-emerald-900 text-emerald-200">Completed</div>
+                    )}
+                  </div>
+
+                  {/* Available state: Show Accept button */}
+                  {exp.state === 'available' && (
+                    <div className="mt-3">
+                      <div className="text-xs text-slate-300 mb-3">
+                        Preparation requires 500 Wood, 250 Stone, 1000 Food and 5 Population.
+                      </div>
+                      <button
+                        onClick={() => acceptExpedition(exp.expeditionId)}
+                        className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs"
+                      >
+                        Accept Expedition
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Funding state: Show requirements with progress bars */}
+                  {exp.state === 'funding' && (
+                    <div className="mt-3 space-y-2">
+                      <div className="text-xs font-semibold text-slate-300 mb-2">Resource Progress:</div>
+                      {(['wood', 'stone', 'food', 'population'] as const).map((resourceType) => {
+                        const req = exp.requirements[resourceType];
+                        const isComplete = req.current >= req.required;
+                        const currentStock = resourceType === 'population' 
+                          ? population 
+                          : warehouse[resourceType];
+                        const canSend = currentStock > 0 && !isComplete;
+                        const progress = Math.min(100, (req.current / req.required) * 100);
+
+                        return (
+                          <div key={resourceType} className="flex items-center gap-2 text-xs">
+                            <span className="capitalize w-20">{resourceType === 'population' ? 'Population' : resourceType.charAt(0).toUpperCase() + resourceType.slice(1)}:</span>
+                            <span className={isComplete ? 'text-emerald-400' : 'text-slate-300'}>
+                              {formatInt(req.current)} / {formatInt(req.required)}
+                            </span>
+                            <div className="flex-1 h-1.5 rounded bg-slate-800 overflow-hidden">
+                              <div 
+                                className={`h-full ${isComplete ? 'bg-emerald-500' : 'bg-sky-500'}`}
+                                style={{ width: `${progress}%` }}
+                              />
+                            </div>
+                            {!isComplete && (
+                              <button
+                                onClick={() => sendResourceToExpedition(exp.expeditionId, resourceType)}
+                                disabled={!canSend}
+                                className={`px-1.5 py-0.5 rounded text-xs font-bold ${
+                                  canSend 
+                                    ? 'bg-emerald-600 hover:bg-emerald-700 text-white' 
+                                    : 'bg-red-900 text-red-300 cursor-not-allowed opacity-75'
+                                }`}
+                                title={canSend ? `Send ${resourceType}` : `Insufficient ${resourceType}`}
+                              >
+                                +
+                              </button>
+                            )}
+                            {isComplete && <span className="text-emerald-400 text-[10px]">✓</span>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* ReadyToLaunch state: Show completed requirements and Launch button */}
+                  {exp.state === 'readyToLaunch' && (
+                    <div className="mt-3 space-y-3">
+                      <div className="space-y-2">
+                        <div className="text-xs font-semibold text-slate-300 mb-2">Resource Progress:</div>
+                        {(['wood', 'stone', 'food', 'population'] as const).map((resourceType) => {
+                          const req = exp.requirements[resourceType];
+                          return (
+                            <div key={resourceType} className="flex items-center gap-2 text-xs">
+                              <span className="capitalize w-20">{resourceType === 'population' ? 'Population' : resourceType.charAt(0).toUpperCase() + resourceType.slice(1)}:</span>
+                              <span className="text-emerald-400">
+                                {formatInt(req.current)} / {formatInt(req.required)}
+                              </span>
+                              <div className="flex-1 h-1.5 rounded bg-slate-800 overflow-hidden">
+                                <div className="h-full bg-emerald-500" style={{ width: '100%' }} />
+                              </div>
+                              <span className="text-emerald-400 text-[10px]">✓</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <button
+                        onClick={() => launchExpedition(exp.expeditionId)}
+                        className="w-full px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold"
+                      >
+                        Launch Expedition
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Travelling state: Show progress bar */}
+                  {exp.state === 'travelling' && (
+                    <div className="mt-3">
+                      <div className="text-xs text-slate-300 mb-2">The expedition is travelling through the mountain passes of Godonis...</div>
+                      <div className="h-2 rounded bg-slate-800 overflow-hidden">
+                        <div 
+                          className="h-full bg-sky-500 transition-all duration-100" 
+                          style={{ width: `${exp.travelProgress}%` }} 
+                        />
+                      </div>
+                      <div className="text-[10px] text-slate-400 mt-1">Travelling</div>
+                    </div>
+                  )}
+
+                  {/* Completed state: Show completion message and fortress section */}
+                  {exp.state === 'completed' && exp.fortress && (
+                    <div className="mt-3 space-y-4">
+                      <div className="text-xs text-emerald-400">
+                        The expedition has returned. The expedition is complete. A frontier fortress has been established in the mountains of Godonis.
+                      </div>
+
+                      {/* Frontier Fortress Section */}
+                      <div className="mt-4 pt-4 border-t border-slate-700">
+                        <div className="text-sm font-semibold mb-3">Frontier Fortress of Godonis</div>
+                        
+                        {/* Fortress Stats Summary */}
+                        <div className="text-xs text-slate-300 mb-3">
+                          Fort HP: <span className="text-slate-100">{formatInt(exp.fortress.stats.fortHP)}</span> | 
+                          Archer Slots: <span className="text-slate-100">{formatInt(exp.fortress.stats.archerSlots)}</span> | 
+                          Garrison: <span className="text-slate-100">{formatInt(exp.fortress.stats.garrisonWarriors)} Warriors, {formatInt(exp.fortress.stats.garrisonArchers)} Archers</span> | 
+                          Stored Squads: <span className="text-slate-100">{formatInt(exp.fortress.stats.storedSquads)}</span>
+                        </div>
+                        <div className="text-[10px] text-slate-500 mb-3">
+                          These stats feed the Fortress Simulator.
+                        </div>
+
+                        {/* Fortress Buildings List */}
+                        <div className="space-y-2">
+                          {exp.fortress.buildings.map((building) => {
+                            const nextLevel = building.level + 1;
+                            const canUpgrade = nextLevel <= building.maxLevel;
+                            const nextCost = canUpgrade ? building.getUpgradeCost(nextLevel) : null;
+                            const enoughWood = nextCost ? warehouse.wood >= nextCost.wood : false;
+                            const enoughStone = nextCost ? warehouse.stone >= nextCost.stone : false;
+                            const affordable = canUpgrade && enoughWood && enoughStone;
+                            const nextEffect = canUpgrade ? building.getEffect(nextLevel) : null;
+                            const currentEffect = building.getEffect(building.level);
+
+                            return (
+                              <div key={building.id} className="rounded-lg border border-slate-800 bg-slate-800 p-2">
+                                <div className="flex items-center gap-2">
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex items-baseline gap-1.5 flex-wrap">
+                                      <div className="text-sm font-semibold truncate">{building.name}</div>
+                                      <div className="text-[10px] px-1 py-0.5 rounded bg-slate-700">Lv {building.level}</div>
+                                      <div className="text-[10px] text-slate-400">{building.description}</div>
+                                    </div>
+                                    {canUpgrade && nextEffect && (
+                                      <div className="text-[10px] text-slate-500 mt-1">
+                                        Next level: {
+                                          nextEffect.fortHP ? `+${nextEffect.fortHP - (currentEffect.fortHP || 0)} Fort HP` :
+                                          nextEffect.archerSlots ? `+${nextEffect.archerSlots - (currentEffect.archerSlots || 0)} Archer slots` :
+                                          nextEffect.garrisonWarriors ? `+${nextEffect.garrisonWarriors - (currentEffect.garrisonWarriors || 0)} Garrison capacity` :
+                                          ''
+                                        }
+                                      </div>
+                                    )}
+                                  </div>
+                                  {canUpgrade && nextCost && (
+                                    <div className="text-right">
+                                      <div className="text-[10px] text-slate-500 mb-0.5">Cost: W {formatInt(nextCost.wood)} S {formatInt(nextCost.stone)}</div>
+                                      <button
+                                        className="px-2 py-1 rounded-lg text-xs bg-slate-900 text-white disabled:opacity-50"
+                                        onClick={() => upgradeFortressBuilding(exp.expeditionId, building.id)}
+                                        disabled={!affordable}
+                                        title={!affordable ? "Not enough resources" : `Upgrade to Lvl ${nextLevel}`}
+                                      >
+                                        Upgrade
+                                      </button>
+                                    </div>
+                                  )}
+                                  {!canUpgrade && (
+                                    <div className="text-[10px] text-slate-500">Max Level</div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {/* Fortress Garrison Section */}
+                        <div className="mt-4 pt-4 border-t border-slate-700">
+                          <div className="text-sm font-semibold mb-2">Fortress Garrison</div>
+                          
+                          {/* Currently Stationed Banners */}
+                          {(exp.fortress.garrison?.length ?? 0) > 0 && (
+                            <div className="mb-3">
+                              <div className="text-xs text-slate-400 mb-1.5">Stationed Banners:</div>
+                              <div className="space-y-1.5">
+                                {(exp.fortress.garrison || []).map((bannerId) => {
+                                  const banner = banners.find(b => b.id === bannerId);
+                                  if (!banner) return null;
+                                  
+                                  // Calculate total troops
+                                  const totalTroops = banner.squads?.reduce((sum, squad) => sum + squad.currentSize, 0) || 0;
+                                  
+                                  return (
+                                    <div key={bannerId} className="flex items-center justify-between rounded-lg border border-slate-700 bg-slate-800 p-1.5">
+                                      <div className="flex items-center gap-2">
+                                        <div className="text-xs font-semibold">{banner.name}</div>
+                                        <div className="text-[10px] text-slate-400">
+                                          {totalTroops} troops
+                                        </div>
+                                      </div>
+                                      <button
+                                        onClick={() => removeBannerFromFortress(exp.expeditionId, bannerId)}
+                                        className="px-2 py-0.5 rounded text-[10px] bg-red-900 hover:bg-red-800 text-red-200"
+                                        title="Remove from fortress"
+                                      >
+                                        Remove
+                                      </button>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Available Ready Banners */}
+                          {(() => {
+                            const garrison = exp.fortress.garrison || [];
+                            const readyBanners = banners.filter(b => 
+                              b.status === 'ready' && 
+                              !garrison.includes(b.id)
+                            );
+                            
+                            if (readyBanners.length === 0 && garrison.length === 0) {
+                              return (
+                                <div className="text-xs text-slate-500">
+                                  No ready banners available. Train banners in the Army section to assign them to the fortress.
+                                </div>
+                              );
+                            }
+                            
+                            if (readyBanners.length === 0) {
+                              return null;
+                            }
+                            
+                            return (
+                              <div>
+                                <div className="text-xs text-slate-400 mb-1.5">Available Banners:</div>
+                                <div className="space-y-1.5">
+                                  {readyBanners.map((banner) => {
+                                    const totalTroops = banner.squads?.reduce((sum, squad) => sum + squad.currentSize, 0) || 0;
+                                    
+                                    return (
+                                      <div key={banner.id} className="flex items-center justify-between rounded-lg border border-slate-700 bg-slate-800 p-1.5">
+                                        <div className="flex items-center gap-2">
+                                          <div className="text-xs font-semibold">{banner.name}</div>
+                                          <div className="text-[10px] text-slate-400">
+                                            {totalTroops} troops
+                                          </div>
+                                        </div>
+                                        <button
+                                          onClick={() => assignBannerToFortress(exp.expeditionId, banner.id)}
+                                          className="px-2 py-0.5 rounded text-[10px] bg-emerald-700 hover:bg-emerald-600 text-white"
+                                          title="Assign to fortress"
+                                        >
+                                          Assign
+                                        </button>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            );
+                          })()}
+                        </div>
+
+                        {/* Attack Button */}
+                        <div className="mt-3 pt-3 border-t border-slate-700">
+                          <button
+                            onClick={() => setSiegeAttackModal({ expeditionId: exp.expeditionId, attackers: 100 })}
+                            className="w-full px-3 py-2 rounded-lg bg-red-700 hover:bg-red-600 text-white text-sm font-semibold"
+                          >
+                            ⚔ Attack Fortress
+                          </button>
+                        </div>
+
+                        {/* Battle Report */}
+                        {exp.fortress.lastBattle && (
+                          <div className="mt-4 pt-4 border-t border-slate-700">
+                            <div className="text-sm font-semibold mb-3">Battle Report</div>
+                            {(() => {
+                              const battle = exp.fortress.lastBattle!;
+                              const firstRound = battle.siegeTimeline[0];
+                              const lastRound = battle.siegeTimeline[battle.siegeTimeline.length - 1];
+                              
+                              // Calculate totals
+                              const totalAttackersKilled = battle.initialAttackers - lastRound.attackers;
+                              const totalDamageToFort = battle.initialFortHP - lastRound.fortHP;
+                              const wallsDestroyed = lastRound.fortHP <= 0;
+                              
+                              // Outcome descriptions
+                              const outcomeInfo = {
+                                fortress_holds_walls: {
+                                  title: 'Fortress Holds',
+                                  color: 'text-emerald-400',
+                                  description: 'The attackers were repelled before breaching the walls.'
+                                },
+                                fortress_holds_inner: {
+                                  title: 'Fortress Holds',
+                                  color: 'text-emerald-400',
+                                  description: 'The walls were breached, but the garrison successfully defended the inner fortress.'
+                                },
+                                fortress_falls: {
+                                  title: 'Fortress Falls',
+                                  color: 'text-red-400',
+                                  description: 'The attackers breached the walls and overwhelmed the defenders.'
+                                },
+                                stalemate: {
+                                  title: 'Stalemate',
+                                  color: 'text-amber-400',
+                                  description: 'Both sides suffered heavy losses with no clear victor.'
+                                }
+                              };
+                              
+                              const outcome = outcomeInfo[battle.outcome];
+
+                              return (
+                                <div className="space-y-3 text-xs">
+                                  {/* Outcome */}
+                                  <div className="p-2 rounded-lg bg-slate-800 border border-slate-700">
+                                    <div className="flex items-center gap-2 mb-1">
+                                      <span className="text-slate-400">Result:</span>
+                                      <span className={`font-semibold ${outcome.color}`}>
+                                        {outcome.title}
+                                      </span>
+                                    </div>
+                                    <div className="text-slate-300 text-[11px]">
+                                      {outcome.description}
+                                    </div>
+                                  </div>
+
+                                  {/* Siege Phase Summary */}
+                                  <div className="p-2 rounded-lg bg-slate-800 border border-slate-700">
+                                    <div className="font-semibold text-slate-300 mb-2">Siege on the Walls</div>
+                                    <div className="space-y-1.5 text-[11px] text-slate-300">
+                                      <div>
+                                        The attackers ({formatInt(battle.initialAttackers)} warriors) assaulted the fortress walls over <strong>{battle.siegeRounds}</strong> rounds.
+                                      </div>
+                                      <div>
+                                        The defenders' archers on the walls killed <span className="text-red-300 font-semibold">{formatInt(totalAttackersKilled)}</span> attackers.
+                                      </div>
+                                      <div>
+                                        The attackers damaged the walls, reducing fort HP from <span className="text-blue-300">{formatInt(battle.initialFortHP)}</span> to <span className="text-blue-300">{formatInt(lastRound.fortHP)}</span> ({formatInt(totalDamageToFort)} damage).
+                                      </div>
+                                      {wallsDestroyed ? (
+                                        <div className="text-amber-400 font-semibold">
+                                          The walls were breached! The attackers broke through.
+                                        </div>
+                                      ) : (
+                                        <div className="text-emerald-400 font-semibold">
+                                          The walls held strong. The attackers were repelled.
+                                        </div>
+                                      )}
+                                    </div>
+                                    
+                                    {/* Siege Phase Detailed Logs */}
+                                    <details className="mt-3 pt-3 border-t border-slate-700" open>
+                                      <summary className="text-slate-400 cursor-pointer hover:text-slate-300 text-[11px] font-semibold">
+                                        Siege Logs ({battle.siegeTimeline.length} rounds)
+                                      </summary>
+                                      <div className="mt-2 max-h-60 overflow-y-auto">
+                                        <table className="w-full text-[10px] border-collapse">
+                                          <thead>
+                                            <tr className="bg-slate-900 border-b border-slate-700">
+                                              <th className="p-1 text-left text-slate-300">Round</th>
+                                              <th className="p-1 text-right text-slate-300">Wall HP</th>
+                                              <th className="p-1 text-right text-slate-300">Attackers</th>
+                                              <th className="p-1 text-right text-slate-300">Archers</th>
+                                              <th className="p-1 text-right text-slate-300">Killed</th>
+                                              <th className="p-1 text-right text-slate-300">Wall Dmg</th>
+                                            </tr>
+                                          </thead>
+                                          <tbody>
+                                            {battle.siegeTimeline.map((round, idx) => {
+                                              const prevRound = idx > 0 ? battle.siegeTimeline[idx - 1] : null;
+                                              const attackersAtStart = prevRound ? prevRound.attackers : battle.initialAttackers;
+                                              const fortHPAtStart = prevRound ? prevRound.fortHP : battle.initialFortHP;
+                                              
+                                              return (
+                                                <tr key={idx} className="border-b border-slate-800 hover:bg-slate-900">
+                                                  <td className="p-1 text-slate-200 font-semibold">{round.round}</td>
+                                                  <td className="p-1 text-right">
+                                                    <span className="text-blue-300">{formatInt(round.fortHP)}</span>
+                                                    <span className="text-slate-500">/{formatInt(battle.initialFortHP)}</span>
+                                                    {prevRound && (
+                                                      <span className="text-red-400 text-[9px] ml-1">
+                                                        (-{formatInt(fortHPAtStart - round.fortHP)})
+                                                      </span>
+                                                    )}
+                                                  </td>
+                                                  <td className="p-1 text-right">
+                                                    <span className="text-red-300">{formatInt(round.attackers)}</span>
+                                                    {prevRound && (
+                                                      <span className="text-red-400 text-[9px] ml-1">
+                                                        (-{formatInt(attackersAtStart - round.attackers)})
+                                                      </span>
+                                                    )}
+                                                  </td>
+                                                  <td className="p-1 text-right text-blue-200">{formatInt(round.archers)}</td>
+                                                  <td className="p-1 text-right text-red-400">{formatInt(round.killed)}</td>
+                                                  <td className="p-1 text-right text-amber-300">{formatInt(round.dmgToFort)}</td>
+                                                </tr>
+                                              );
+                                            })}
+                                          </tbody>
+                                        </table>
+                                      </div>
+                                      
+                                      {/* Siege Graph */}
+                                      <SiegeGraphCanvas 
+                                        timeline={battle.siegeTimeline} 
+                                        fortHPmax={battle.initialFortHP}
+                                      />
+                                    </details>
+                                  </div>
+
+                                  {/* Inner Battle Summary */}
+                                  {battle.innerTimeline.length > 0 && (
+                                    <div className="p-2 rounded-lg bg-slate-800 border border-slate-700">
+                                      <div className="font-semibold text-slate-300 mb-2">Inner Battle</div>
+                                      {(() => {
+                                        const firstInner = battle.innerTimeline[0];
+                                        const lastInner = battle.innerTimeline[battle.innerTimeline.length - 1];
+                                        const defendersKilled = battle.initialGarrison.warriors + battle.initialGarrison.archers - lastInner.defenders;
+                                        const attackersKilledInInner = firstInner.attackers - lastInner.attackers;
+                                        
+                                        return (
+                                          <>
+                                            <div className="space-y-1.5 text-[11px] text-slate-300">
+                                              <div>
+                                                After breaching the walls, <span className="text-red-300 font-semibold">{formatInt(firstInner.attackers)}</span> attackers engaged the garrison ({formatInt(battle.initialGarrison.warriors)} warriors, {formatInt(battle.initialGarrison.archers)} archers) inside the fortress.
+                                              </div>
+                                              <div>
+                                                The battle lasted <strong>{battle.innerTimeline.length}</strong> steps through skirmish, melee, and pursuit phases.
+                                              </div>
+                                              <div>
+                                                The defenders lost <span className="text-blue-300 font-semibold">{formatInt(defendersKilled)}</span> troops.
+                                              </div>
+                                              <div>
+                                                The attackers lost <span className="text-red-300 font-semibold">{formatInt(attackersKilledInInner)}</span> more troops in the inner battle.
+                                              </div>
+                                              <div className="mt-2 pt-2 border-t border-slate-700">
+                                                <div className="text-slate-400">Final State:</div>
+                                                <div className="flex gap-4 mt-1">
+                                                  <div>
+                                                    <span className="text-slate-400">Defenders:</span>{' '}
+                                                    <span className="text-blue-300 font-semibold">{formatInt(lastInner.defenders)}</span> remaining
+                                                  </div>
+                                                  <div>
+                                                    <span className="text-slate-400">Attackers:</span>{' '}
+                                                    <span className="text-red-300 font-semibold">{formatInt(lastInner.attackers)}</span> remaining
+                                                  </div>
+                                                </div>
+                                              </div>
+                                            </div>
+                                            
+                                            {/* Inner Battle Detailed Logs */}
+                                            <details className="mt-3 pt-3 border-t border-slate-700" open>
+                                              <summary className="text-slate-400 cursor-pointer hover:text-slate-300 text-[11px] font-semibold">
+                                                Inner Battle Logs ({battle.innerTimeline.length} steps)
+                                              </summary>
+                                              <div className="mt-2 max-h-60 overflow-y-auto">
+                                                <table className="w-full text-[10px] border-collapse">
+                                                  <thead>
+                                                    <tr className="bg-slate-900 border-b border-slate-700">
+                                                      <th className="p-1 text-left text-slate-300">Step</th>
+                                                      <th className="p-1 text-left text-slate-300">Phase</th>
+                                                      <th className="p-1 text-right text-slate-300">Def. Warriors</th>
+                                                      <th className="p-1 text-right text-slate-300">Def. Archers</th>
+                                                      <th className="p-1 text-right text-slate-300">Def. Total</th>
+                                                      <th className="p-1 text-right text-slate-300">Attackers</th>
+                                                      <th className="p-1 text-right text-slate-300">Def. Killed</th>
+                                                      <th className="p-1 text-right text-slate-300">Atk. Killed</th>
+                                                    </tr>
+                                                  </thead>
+                                                  <tbody>
+                                                    {battle.innerTimeline.map((step, idx) => {
+                                                      const prevStep = idx > 0 ? battle.innerTimeline[idx - 1] : null;
+                                                      const defendersAtStart = prevStep ? prevStep.defenders : (battle.initialGarrison.warriors + battle.initialGarrison.archers);
+                                                      const attackersAtStart = prevStep ? prevStep.attackers : firstInner.attackers;
+                                                      
+                                                      return (
+                                                        <tr key={idx} className="border-b border-slate-800 hover:bg-slate-900">
+                                                          <td className="p-1 text-slate-200 font-semibold">{step.step}</td>
+                                                          <td className="p-1 text-slate-300 capitalize">{step.phase}</td>
+                                                          <td className="p-1 text-right text-blue-200">{formatInt(step.defWarriors)}</td>
+                                                          <td className="p-1 text-right text-blue-200">{formatInt(step.defArchers)}</td>
+                                                          <td className="p-1 text-right">
+                                                            <span className="text-blue-300">{formatInt(step.defenders)}</span>
+                                                            {prevStep && (
+                                                              <span className="text-red-400 text-[9px] ml-1">
+                                                                (-{formatInt(defendersAtStart - step.defenders)})
+                                                              </span>
+                                                            )}
+                                                          </td>
+                                                          <td className="p-1 text-right">
+                                                            <span className="text-red-300">{formatInt(step.attackers)}</span>
+                                                            {prevStep && (
+                                                              <span className="text-red-400 text-[9px] ml-1">
+                                                                (-{formatInt(attackersAtStart - step.attackers)})
+                                                              </span>
+                                                            )}
+                                                          </td>
+                                                          <td className="p-1 text-right text-blue-400">{formatInt(step.killedDefenders)}</td>
+                                                          <td className="p-1 text-right text-red-400">{formatInt(step.killedAttackers)}</td>
+                                                        </tr>
+                                                      );
+                                                    })}
+                                                  </tbody>
+                                                </table>
+                                              </div>
+                                              
+                                              {/* Inner Battle Graph */}
+                                              <InnerBattleGraphCanvas 
+                                                timeline={battle.innerTimeline}
+                                              />
+                                            </details>
+                                          </>
+                                        );
+                                      })()}
+                                    </div>
+                                  )}
+
+                                  {/* Final Statistics */}
+                                  <div className="p-2 rounded-lg bg-slate-800 border border-slate-700">
+                                    <div className="font-semibold text-slate-300 mb-2">Casualties</div>
+                                    <div className="grid grid-cols-2 gap-2 text-[11px]">
+                                      <div>
+                                        <div className="text-slate-400">Attackers Lost:</div>
+                                        <div className="text-red-300 font-semibold">
+                                          {formatInt(battle.initialAttackers - battle.finalAttackers)} / {formatInt(battle.initialAttackers)}
+                                        </div>
+                                      </div>
+                                      <div>
+                                        <div className="text-slate-400">Defenders Lost:</div>
+                                        <div className="text-blue-300 font-semibold">
+                                          {formatInt((battle.initialGarrison.warriors + battle.initialGarrison.archers) - battle.finalDefenders)} / {formatInt(battle.initialGarrison.warriors + battle.initialGarrison.archers)}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })()}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
       {/* Confirmation Modal */}
       {pendingUpgrade && (
         <div className="fixed inset-0 bg-black/60 grid place-items-center p-4">
@@ -3150,6 +4653,281 @@ export default function ResourceVillageUI() {
             <div className="flex gap-2 justify-end">
               <button onClick={cancelUpgrade} className="px-3 py-2 rounded-xl bg-slate-700">Cancel</button>
               <button onClick={confirmUpgrade} className="px-3 py-2 rounded-xl bg-emerald-600 text-white">Confirm</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Banner Confirmation Modal */}
+      {deleteBannerModal !== null && (() => {
+        const banner = banners.find(b => b.id === deleteBannerModal);
+        if (!banner) return null;
+        return (
+          <div className="fixed inset-0 bg-black/60 grid place-items-center p-4 z-50">
+            <div className="w-full max-w-md rounded-2xl bg-slate-900 p-4 border border-slate-800">
+              <h4 className="text-lg font-semibold mb-2">{banner.type === 'mercenary' ? 'Dismiss Banner' : 'Delete Banner'}</h4>
+              <p className="text-sm mb-4">
+                Are you sure you want to {banner.type === 'mercenary' ? 'dismiss' : 'delete'} <strong>{banner.name}</strong>?
+              </p>
+              <div className="text-sm mb-4 space-y-1">
+                <div>This will:</div>
+                <div>• Erase the banner permanently</div>
+                {banner.type === 'regular' && banner.recruited > 0 && (
+                  <div>• Return <strong>{banner.recruited}</strong> population to the village</div>
+                )}
+                {banner.type === 'mercenary' && (
+                  <div className="text-slate-400">• No population will be returned (mercenary banner)</div>
+                )}
+                {banner.status === 'deployed' && (
+                  <div className="text-amber-400">• Remove banner from active mission</div>
+                )}
+              </div>
+              <div className="flex gap-2 justify-end">
+                <button 
+                  onClick={() => setDeleteBannerModal(null)} 
+                  className="px-3 py-2 rounded-xl bg-slate-700 hover:bg-slate-600"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={confirmDeleteBanner} 
+                  className="px-3 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Siege Attack Modal */}
+      {siegeAttackModal && (() => {
+        const expedition = expeditions.find(exp => exp.expeditionId === siegeAttackModal.expeditionId);
+        if (!expedition?.fortress) return null;
+        
+        const garrison = calculateGarrisonFromBanners(expedition.fortress.garrison || []);
+        const totalGarrison = garrison.warriors + garrison.archers;
+        
+        return (
+          <div className="fixed inset-0 bg-black/60 grid place-items-center p-4 z-50">
+            <div className="w-full max-w-md rounded-2xl bg-slate-900 p-4 border border-slate-800">
+              <h4 className="text-lg font-semibold mb-2">Attack Fortress</h4>
+              <div className="text-sm mb-4 space-y-2">
+                <div>
+                  <div className="text-slate-400">Fortress Stats:</div>
+                  <div className="text-xs text-slate-300 ml-2">
+                    Fort HP: {formatInt(expedition.fortress.stats.fortHP)} | 
+                    Archer Slots: {formatInt(expedition.fortress.stats.archerSlots)} | 
+                    Garrison: {formatInt(garrison.warriors)} Warriors, {formatInt(garrison.archers)} Archers
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold mb-1">Number of Attackers:</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={siegeAttackModal.attackers}
+                    onChange={(e) => setSiegeAttackModal({ ...siegeAttackModal, attackers: parseInt(e.target.value) || 100 })}
+                    className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white"
+                  />
+                </div>
+              </div>
+              <div className="flex gap-2 justify-end">
+                <button 
+                  onClick={() => setSiegeAttackModal(null)} 
+                  className="px-3 py-2 rounded-xl bg-slate-700 hover:bg-slate-600"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={() => {
+                    try {
+                      const result = runSiegeBattle(siegeAttackModal.expeditionId, siegeAttackModal.attackers);
+                      setExpeditions((exps) => exps.map((exp) => 
+                        exp.expeditionId === siegeAttackModal.expeditionId && exp.fortress
+                          ? { ...exp, fortress: { ...exp.fortress, lastBattle: result } }
+                          : exp
+                      ));
+                      setSiegeAttackModal(null);
+                    } catch (error) {
+                      console.error('Siege battle error:', error);
+                      alert('Error running siege battle. Please try again.');
+                    }
+                  }}
+                  className="px-3 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white"
+                >
+                  Launch Attack
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Mercenary Reinforcement Confirmation Modal */}
+      {reinforcementModal && (
+        <div className="fixed inset-0 bg-black/60 grid place-items-center p-4 z-50">
+          <div className="w-full max-w-md rounded-2xl bg-slate-900 p-4 border border-slate-800">
+            <h4 className="text-lg font-semibold mb-2">Reinforce Squad</h4>
+            <p className="text-sm mb-4">
+              Reinforce <strong>{reinforcementModal.squadType} Squad</strong> in <strong>{reinforcementModal.bannerName}</strong>?
+            </p>
+            <div className="text-sm mb-4 space-y-1">
+              <div>Soldiers needed: <strong>{reinforcementModal.soldiersNeeded}</strong></div>
+              <div>Gold cost: <strong className={warehouse.gold >= reinforcementModal.goldCost ? 'text-emerald-400' : 'text-red-400'}>{reinforcementModal.goldCost}</strong></div>
+              <div className="text-xs text-slate-400 mt-2">
+                This will consume {reinforcementModal.goldCost} gold over time as the squad is reinforced.
+              </div>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button 
+                onClick={() => setReinforcementModal(null)} 
+                className="px-3 py-2 rounded-xl bg-slate-700 hover:bg-slate-600"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={() => {
+                  // Create reinforcement entry
+                  const { bannerId, squadId, soldiersNeeded } = reinforcementModal;
+                  if (!barracks) {
+                    setReinforcementModal(null);
+                    return;
+                  }
+                  
+                  // Check if this squad already has a reinforcement entry
+                  const hasActiveReinforcement = barracks.trainingQueue.some(
+                    entry => entry.type === 'reinforcement' && entry.bannerId === bannerId && entry.squadId === squadId
+                  );
+                  if (hasActiveReinforcement) {
+                    setReinforcementModal(null);
+                    return;
+                  }
+                  
+                  // Check if training slots are available
+                  const activeEntries = barracks.trainingQueue.filter(e => e.status === 'training' || e.status === 'arriving');
+                  const availableSlots = barracks.trainingSlots - activeEntries.length;
+                  
+                  // Create reinforcement training entry in barracks queue
+                  const reinforcementEntry: TrainingEntry = {
+                    id: Date.now(),
+                    type: 'reinforcement',
+                    bannerId,
+                    squadId,
+                    soldiersNeeded,
+                    soldiersTrained: 0,
+                    elapsedTime: 0,
+                    status: availableSlots > 0 ? 'training' : 'arriving',
+                  };
+                  
+                  setBarracks(prev => {
+                    if (!prev) return prev;
+                    return {
+                      ...prev,
+                      trainingQueue: [...prev.trainingQueue, reinforcementEntry],
+                    };
+                  });
+                  
+                  setReinforcementModal(null);
+                }}
+                disabled={warehouse.gold < reinforcementModal.goldCost}
+                className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reinforce Modal */}
+      {hireAndRefillModal && (
+        <div className="fixed inset-0 bg-black/60 grid place-items-center p-4 z-50">
+          <div className="w-full max-w-md rounded-2xl bg-slate-900 p-4 border border-slate-800">
+            <h4 className="text-lg font-semibold mb-2">Reinforce</h4>
+            <p className="text-sm mb-4">
+              Refill all damaged squads in <strong>{hireAndRefillModal.bannerName}</strong>?
+            </p>
+            <div className="text-sm mb-4 space-y-1">
+              <div>Refill damaged squads: <strong>{hireAndRefillModal.refillCost}</strong> Gold</div>
+              <div className="mt-2 pt-2 border-t border-slate-700">
+                Total cost: <strong className={warehouse.gold >= hireAndRefillModal.totalCost ? 'text-emerald-400' : 'text-red-400'}>{hireAndRefillModal.totalCost}</strong> Gold
+              </div>
+              {warehouse.gold < hireAndRefillModal.totalCost && (
+                <div className="text-xs text-red-400 mt-1">
+                  Insufficient gold. You need {hireAndRefillModal.totalCost - warehouse.gold} more gold.
+                </div>
+              )}
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button 
+                onClick={() => setHireAndRefillModal(null)} 
+                className="px-3 py-2 rounded-xl bg-slate-700 hover:bg-slate-600"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={() => {
+                  if (!barracks || warehouse.gold < hireAndRefillModal.totalCost) {
+                    setHireAndRefillModal(null);
+                    return;
+                  }
+                  
+                  // Deduct gold
+                  setWarehouse(w => ({ ...w, gold: w.gold - hireAndRefillModal.totalCost }));
+                  
+                  // Refill all damaged squads in the existing banner
+                  const banner = banners.find(b => b.id === hireAndRefillModal.bannerId);
+                  if (banner) {
+                      let displaySquads = banner.squads;
+                      if (!displaySquads || displaySquads.length === 0) {
+                        const { squads } = initializeSquadsFromUnits(banner.units, squadSeqRef.current);
+                        displaySquads = squads;
+                      }
+                      
+                      // Create reinforcement entries for all damaged squads
+                      displaySquads.forEach(squad => {
+                        if (squad.currentSize < squad.maxSize) {
+                          const missing = squad.maxSize - squad.currentSize;
+                          // Check if already has reinforcement entry
+                          const hasActiveReinforcement = barracks.trainingQueue.some(
+                            entry => entry.type === 'reinforcement' && entry.bannerId === banner.id && entry.squadId === squad.id
+                          );
+                          if (!hasActiveReinforcement) {
+                            const activeEntries = barracks.trainingQueue.filter(e => e.status === 'training' || e.status === 'arriving');
+                            const availableSlots = barracks.trainingSlots - activeEntries.length;
+                            
+                            const reinforcementEntry: TrainingEntry = {
+                              id: Date.now() + Math.random(), // Unique ID
+                              type: 'reinforcement',
+                              bannerId: banner.id,
+                              squadId: squad.id,
+                              soldiersNeeded: missing,
+                              soldiersTrained: 0,
+                              elapsedTime: 0,
+                              status: availableSlots > 0 ? 'training' : 'arriving',
+                            };
+                            
+                            setBarracks(prev => {
+                              if (!prev) return prev;
+                              return {
+                                ...prev,
+                                trainingQueue: [...prev.trainingQueue, reinforcementEntry],
+                              };
+                            });
+                          }
+                        }
+                      });
+                    }
+                  
+                  setHireAndRefillModal(null);
+                }}
+                disabled={warehouse.gold < hireAndRefillModal.totalCost}
+                className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Confirm
+              </button>
             </div>
           </div>
         </div>
