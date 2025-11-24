@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState, useRef } from "react";
 import BlacksmithUI from './BlacksmithUI';
 import TechnologiesUI from './TechnologiesUI';
+import { persistence, simulateOfflineProgression, createDefaultGameState, GameState } from './persistence';
 
 // === Progression (matches the document) ===
 // Buildings:
@@ -106,6 +107,14 @@ type Banner = {
   type: 'regular' | 'mercenary'; // Banner type: regular (men-at-arms) or mercenary
   reinforcingSquadId?: number; // ID of squad being reinforced (for regular banners)
   trainingPaused?: boolean; // Whether training is paused
+  customNamed?: boolean; // Whether the player has manually edited the name
+};
+
+type BannerLossNotice = {
+  id: string;
+  bannerName: string;
+  bannerType: Banner['type'];
+  message: string;
 };
 
 type Mission = {
@@ -172,6 +181,7 @@ type SiegeBattleResult = {
   initialFortHP: number;
   initialAttackers: number;
   initialGarrison: { warriors: number; archers: number };
+  finalGarrison: { warriors: number; archers: number };
 };
 
 type Expedition = {
@@ -433,6 +443,68 @@ function calculateBannerLosses(
   const initialTotal = battleResult.playerInitial.total;
   const finalTotal = battleResult.playerFinal.total;
   return Math.max(0, Math.floor(initialTotal - finalTotal));
+}
+
+type LossEntry = { bannerId: number; count: number };
+
+function distributeTypeLossesAcrossBanners(entries: LossEntry[], totalLosses: number): Map<number, number> {
+  const allocation = new Map<number, number>();
+  const roundedLosses = Math.round(totalLosses);
+  if (roundedLosses <= 0 || entries.length === 0) return allocation;
+  
+  const total = entries.reduce((sum, entry) => sum + entry.count, 0);
+  if (total <= 0) return allocation;
+  
+  const safeLosses = Math.min(roundedLosses, total);
+  let allocated = 0;
+  const fractionalShares: Array<{ bannerId: number; capacity: number; fractional: number }> = [];
+  
+  entries.forEach(entry => {
+    const exactShare = (entry.count / total) * safeLosses;
+    const baseLoss = Math.min(entry.count, Math.floor(exactShare));
+    allocation.set(entry.bannerId, baseLoss);
+    allocated += baseLoss;
+    fractionalShares.push({
+      bannerId: entry.bannerId,
+      capacity: entry.count,
+      fractional: exactShare - Math.floor(exactShare),
+    });
+  });
+  
+  let remaining = safeLosses - allocated;
+  fractionalShares
+    .sort((a, b) => b.fractional - a.fractional)
+    .forEach(entry => {
+      if (remaining <= 0) return;
+      const current = allocation.get(entry.bannerId) || 0;
+      if (current < entry.capacity) {
+        allocation.set(entry.bannerId, current + 1);
+        remaining--;
+      }
+    });
+  
+  return allocation;
+}
+
+function trimSquadsByType(squads: Squad[], type: 'warrior' | 'archer', losses: number) {
+  let remaining = Math.round(losses);
+  if (remaining <= 0) return;
+  
+  const targets = squads.filter(s => s.type === type);
+  if (targets.length === 0) return;
+  
+  while (remaining > 0) {
+    let appliedThisCycle = false;
+    for (const squad of targets) {
+      if (remaining <= 0) break;
+      if (squad.currentSize > 0) {
+        squad.currentSize = Math.max(0, squad.currentSize - 1);
+        remaining--;
+        appliedThisCycle = true;
+      }
+    }
+    if (!appliedThisCycle) break;
+  }
 }
 
 // Initial building costs
@@ -744,6 +816,60 @@ function InnerBattleGraphCanvas({ timeline }: { timeline: InnerBattleStep[] }) {
   );
 }
 
+// ============================================================================
+// Banner Auto-Naming Functions
+// ============================================================================
+
+function getOrdinal(n: number): string {
+  const s = ['th', 'st', 'nd', 'rd'];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+}
+
+function getBannerRole(squads: Squad[]): string {
+  if (squads.length === 0) return 'Mixed';
+  
+  const warriorCount = squads.filter(s => s.type === 'warrior').length;
+  const archerCount = squads.filter(s => s.type === 'archer').length;
+  const total = squads.length;
+  
+  const warriorPercent = (warriorCount / total) * 100;
+  const archerPercent = (archerCount / total) * 100;
+  
+  if (warriorPercent >= 60) return 'Warrior';
+  if (archerPercent >= 60) return 'Archer';
+  return 'Mixed';
+}
+
+function getBannerComposition(squads: Squad[]): string {
+  if (squads.length === 0) return '';
+  
+  // Count squads by type
+  const counts: Record<string, number> = {};
+  squads.forEach(squad => {
+    const typeName = squad.type === 'warrior' ? 'Warrior' : 'Archer';
+    counts[typeName] = (counts[typeName] || 0) + 1;
+  });
+  
+  // Sort by count (highest first), then by name
+  const entries = Object.entries(counts)
+    .filter(([_, count]) => count > 0)
+    .sort((a, b) => {
+      if (b[1] !== a[1]) return b[1] - a[1]; // Higher count first
+      return a[0].localeCompare(b[0]); // Alphabetical if same count
+    });
+  
+  return entries.map(([type, count]) => `${count} ${type}`).join(', ');
+}
+
+function generateBannerName(bannerId: number, squads: Squad[]): string {
+  const ordinal = getOrdinal(bannerId);
+  const role = getBannerRole(squads);
+  const composition = getBannerComposition(squads);
+  
+  return `${ordinal} ${role} Banner${composition ? ` (${composition})` : ''}`;
+}
+
 export default function ResourceVillageUI() {
   // === Warehouse (resources + level) ===
   const [warehouse, setWarehouse] = useState<WarehouseState>({ wood: 0, stone: 0, food: 0, iron: 0, gold: 0 });
@@ -860,6 +986,12 @@ export default function ResourceVillageUI() {
   const [bannerSeq, setBannerSeq] = useState(1);
   const [squadSeq, setSquadSeq] = useState(1); // Global squad ID counter
   const squadSeqRef = useRef(1); // Ref to track current squadSeq for closures
+  const [bannerLossNotices, setBannerLossNotices] = useState<BannerLossNotice[]>([]);
+  
+  // Debug: Log notification state changes
+  useEffect(() => {
+    console.log('[STATE] bannerLossNotices changed. Count:', bannerLossNotices.length, 'Notices:', bannerLossNotices);
+  }, [bannerLossNotices]);
   
   // Keep ref in sync with state
   useEffect(() => {
@@ -929,6 +1061,241 @@ export default function ResourceVillageUI() {
   const [reinforcementModal, setReinforcementModal] = useState<{ bannerId: number; squadId: number; goldCost: number; soldiersNeeded: number; bannerName: string; squadType: string } | null>(null);
   const [hireAndRefillModal, setHireAndRefillModal] = useState<{ bannerId: number; hireCost: number; refillCost: number; totalCost: number; bannerName: string } | null>(null);
   const [siegeAttackModal, setSiegeAttackModal] = useState<{ expeditionId: string; attackers: number } | null>(null);
+  const [editingBannerName, setEditingBannerName] = useState<number | null>(null); // Banner ID being edited
+
+  // === Persistence ===
+  // Serialize current component state to GameState
+  function serializeGameState(): GameState {
+    return {
+      version: 1,
+      lastSaveUtc: Date.now(),
+      totalPlayTime: 0, // TODO: Track play time
+      
+      warehouse,
+      warehouseLevel,
+      skillPoints,
+      
+      population,
+      populationCap: popCap,
+      recruitmentMode,
+      tax,
+      happiness,
+      
+      lumberMill,
+      quarry,
+      farm,
+      house,
+      townHall,
+      barracks,
+      tavern: tavern ? {
+        level: tavern.level,
+        activeFestival: tavern.activeFestival || false,
+        festivalEndTime: tavern.festivalEndTime || 0,
+      } : null,
+      
+      banners: banners.map(b => ({
+        id: b.id,
+        name: b.name,
+        units: b.units,
+        squads: b.squads,
+        status: b.status,
+        reqPop: b.reqPop,
+        recruited: b.recruited,
+        type: b.type,
+        reinforcingSquadId: b.reinforcingSquadId,
+        trainingPaused: b.trainingPaused,
+        customNamed: b.customNamed || false,
+      })),
+      bannerSeq,
+      squadSeq,
+      bannerLossNotices,
+      
+      missions: missions.map(m => ({
+        id: m.id,
+        name: m.name,
+        description: m.description,
+        duration: m.duration,
+        status: m.status,
+        staged: m.staged,
+        deployed: m.deployed,
+        elapsed: m.elapsed,
+        enemyComposition: m.enemyComposition,
+        battleResult: m.battleResult,
+        startTime: m.startTime,
+      })),
+      
+      expeditions: expeditions.map(exp => ({
+        expeditionId: exp.expeditionId,
+        title: exp.title,
+        shortSummary: exp.shortSummary,
+        description: exp.description,
+        state: exp.state,
+        requirements: exp.requirements,
+        travelProgress: exp.travelProgress,
+        fortress: exp.fortress ? {
+          buildings: exp.fortress.buildings.map(b => ({
+            id: b.id,
+            name: b.name,
+            level: b.level,
+            maxLevel: b.maxLevel,
+            description: b.description,
+            // Functions are not serialized - will be reconstructed on load
+          })),
+          stats: exp.fortress.stats,
+          garrison: exp.fortress.garrison || [],
+          lastBattle: exp.fortress.lastBattle,
+        } : undefined,
+      })),
+      
+      mainTab,
+      armyTab,
+      
+      tutorialCompleted: false,
+      debugFlags: {},
+    };
+  }
+
+  // Load GameState into component state
+  function loadGameState(state: GameState) {
+    setWarehouse(state.warehouse);
+    setWarehouseLevel(state.warehouseLevel);
+    setSkillPoints(state.skillPoints);
+    
+    setPopulation(state.population);
+    setRecruitmentMode(state.recruitmentMode);
+    setTax(state.tax);
+    setHappiness(state.happiness);
+    
+    setLumberMill(state.lumberMill);
+    setQuarry(state.quarry);
+    setFarm(state.farm);
+    setHouse(state.house);
+    setTownHall(state.townHall);
+    setBarracks(state.barracks);
+    setTavern(state.tavern);
+    
+    setBanners(state.banners.map(b => ({
+      ...b,
+      units: b.units || [],
+      squads: b.squads || [],
+    })));
+    setBannerSeq(state.bannerSeq);
+    setSquadSeq(state.squadSeq);
+    setBannerLossNotices(state.bannerLossNotices);
+    
+    setMissions(state.missions.map(m => ({
+      ...m,
+      description: m.description || '',
+      enemyComposition: m.enemyComposition || { warrior: 0, archer: 0 },
+    })));
+    
+    setExpeditions(state.expeditions.map(exp => {
+      if (!exp.fortress) return exp;
+      
+      // Reconstruct fortress buildings with proper functions
+      const buildingTemplates = createInitialFortressBuildings();
+      const reconstructedBuildings = exp.fortress.buildings.map(savedBuilding => {
+        const template = buildingTemplates.find(t => t.id === savedBuilding.id);
+        if (template) {
+          return {
+            ...template,
+            level: savedBuilding.level,
+          };
+        }
+        // Fallback if template not found
+        return {
+          id: savedBuilding.id,
+          name: savedBuilding.name,
+          level: savedBuilding.level,
+          maxLevel: savedBuilding.maxLevel,
+          description: savedBuilding.description,
+          getEffect: (level: number) => {
+            // Reconstruct effect based on building type
+            if (savedBuilding.id === 'palisade_wall') return { fortHP: 400 * level };
+            if (savedBuilding.id === 'watch_post') return { archerSlots: 5 * level };
+            if (savedBuilding.id === 'garrison_hut') return { garrisonWarriors: 5 * level, garrisonArchers: 5 * level };
+            return {};
+          },
+          getUpgradeCost: (level: number) => {
+            if (savedBuilding.id === 'palisade_wall') return { wood: 150 * level, stone: 75 * level };
+            if (savedBuilding.id === 'watch_post') return { wood: 100 * level, stone: 50 * level };
+            if (savedBuilding.id === 'garrison_hut') return { wood: 120 * level, stone: 60 * level };
+            return { wood: 0, stone: 0 };
+          },
+        };
+      });
+      
+      return {
+        ...exp,
+        fortress: {
+          ...exp.fortress,
+          buildings: reconstructedBuildings,
+          garrison: exp.fortress.garrison || [],
+        },
+      };
+    }));
+    
+    setMainTab(state.mainTab);
+    setArmyTab(state.armyTab);
+  }
+
+  // Load state on mount
+  useEffect(() => {
+    const saved = persistence.loadState();
+    if (saved) {
+      // Calculate offline time
+      const now = Date.now();
+      const deltaSeconds = Math.max(0, (now - saved.lastSaveUtc) / 1000);
+      
+      console.log(`[PERSISTENCE] Loading save. Offline time: ${deltaSeconds.toFixed(1)} seconds`);
+      
+      // Run offline simulation
+      const simulated = simulateOfflineProgression(saved, deltaSeconds);
+      
+      // Load into component
+      loadGameState(simulated);
+      
+      // Save after state has been updated (use setTimeout to ensure state is set)
+      setTimeout(() => {
+        const currentState = serializeGameState();
+        persistence.saveState(currentState);
+        console.log('[PERSISTENCE] Re-saved state after offline simulation');
+      }, 200);
+      
+      console.log(`[PERSISTENCE] Loaded save, simulated ${deltaSeconds.toFixed(1)} seconds offline`);
+    } else {
+      console.log('[PERSISTENCE] No save found, starting fresh');
+    }
+  }, []); // Only run on mount
+
+  // Set up auto-save
+  useEffect(() => {
+    persistence.startAutoSave(() => serializeGameState());
+    return () => {
+      persistence.stopAutoSave();
+    };
+  }, [
+    warehouse, warehouseLevel, skillPoints,
+    population, recruitmentMode, tax, happiness,
+    lumberMill, quarry, farm, house, townHall, barracks, tavern,
+    banners, bannerSeq, squadSeq, bannerLossNotices,
+    missions, expeditions,
+    mainTab, armyTab,
+  ]);
+
+  // Save on critical actions (manual save triggers)
+  function saveGame() {
+    persistence.saveState(serializeGameState());
+  }
+
+  // Reset game
+  function resetGame() {
+    if (confirm('Are you sure you want to reset the game? All progress will be lost.')) {
+      const defaultState = persistence.resetState();
+      loadGameState(defaultState);
+      window.location.reload(); // Reload to ensure clean state
+    }
+  }
 
   // === Army helpers ===
   function addSquad(t: 'archer' | 'warrior') {
@@ -942,22 +1309,91 @@ export default function ResourceVillageUI() {
     // Initialize squads with health tracking - start empty (0/10) since banner hasn't been trained yet
     const { squads, nextSeq } = initializeSquadsFromUnits(draftSquads, squadSeq, true);
     
+    // Generate auto-name based on composition
+    const autoName = generateBannerName(bannerSeq, squads);
+    
     const next: Banner = {
       id: bannerSeq,
-      name: `Banner ${bannerSeq}`,
+      name: autoName,
       units: draftSquads, // Keep for backward compatibility
       squads: squads,
       status: 'idle',
       reqPop: 10 * draftSquads.length, // 10 pop per squad
       recruited: 0,
       type: 'regular', // Men-at-arms are regular banners
+      customNamed: false, // Auto-generated name
     };
     setBanners((bs) => [...bs, next]);
     setBannerSeq((n) => n + 1);
     setSquadSeq(nextSeq);
     setDraftSquads([]);
   }
+
+  // Banner name editing functions
+  function updateBannerName(bannerId: number, newName: string) {
+    setBanners((bs) => bs.map((b) => {
+      if (b.id === bannerId) {
+        const originalName = b.name;
+        const nameChanged = newName.trim() !== originalName.trim();
+        // Mark as custom if name actually changed from original
+        const shouldBeCustom = nameChanged && newName.trim().length > 0;
+        return {
+          ...b,
+          name: newName.trim() || originalName, // Don't allow empty names
+          customNamed: shouldBeCustom ? true : (b.customNamed || false),
+        };
+      }
+      return b;
+    }));
+  }
+
+  function finishEditingBannerName(bannerId: number) {
+    setEditingBannerName(null);
+    saveGame();
+  }
+
+  function resetBannerName(bannerId: number) {
+    const banner = banners.find(b => b.id === bannerId);
+    if (!banner) return;
+    
+    const autoName = generateBannerName(bannerId, banner.squads);
+    setBanners((bs) => bs.map((b) => 
+      b.id === bannerId 
+        ? { ...b, name: autoName, customNamed: false }
+        : b
+    ));
+    setEditingBannerName(null);
+    saveGame();
+  }
+
+  // Regenerate auto-names when composition changes (if not custom)
+  function regenerateBannerNameIfNeeded(bannerId: number, newSquads: Squad[]) {
+    const banner = banners.find(b => b.id === bannerId);
+    if (!banner || banner.customNamed) return; // Don't regenerate if custom
+    
+    const autoName = generateBannerName(bannerId, newSquads);
+    if (autoName !== banner.name) {
+      setBanners((bs) => bs.map((b) => 
+        b.id === bannerId ? { ...b, name: autoName } : b
+      ));
+    }
+  }
+
   function startTraining(id: number) {
+    // Check if barracks exists and get max training slots
+    if (!barracks || barracks.level < 1) {
+      console.warn('[TRAINING] Barracks required to train banners');
+      return;
+    }
+    
+    const maxSlots = getMaxTrainingSlots(barracks.level);
+    const currentlyTraining = banners.filter(b => b.type === 'regular' && b.status === 'training').length;
+    
+    if (currentlyTraining >= maxSlots) {
+      console.warn(`[TRAINING] Training slots full: ${currentlyTraining}/${maxSlots}`);
+      return;
+    }
+    
     setBanners((bs) => bs.map((b) => {
       if (b.id === id && b.status === 'idle') {
         // Reset all squads to 0/10 when training starts
@@ -1020,7 +1456,7 @@ export default function ResourceVillageUI() {
   function confirmSendMission(missionId: number) {
     const staged = missions.find(m => m.id === missionId)?.staged ?? [];
     if (staged.length === 0) return;
-    setMissions((ms) => ms.map((m) => m.id === missionId ? { ...m, status: 'running', deployed: staged, staged: [], elapsed: 0 } : m));
+    setMissions((ms) => ms.map((m) => m.id === missionId ? { ...m, status: 'running', deployed: staged, staged: [], elapsed: 0, startTime: Date.now() } : m));
     setBanners((bs) => bs.map((b) => staged.includes(b.id) ? { ...b, status: 'deployed' } : b));
     
     // Remove banners from fortress garrisons if they're being deployed on a mission
@@ -1037,11 +1473,14 @@ export default function ResourceVillageUI() {
         }
       };
     }));
+    
+    saveGame(); // Save when mission starts
   }
   function claimMissionReward(missionId: number) {
     setWarehouse((w) => ({ ...w, gold: w.gold + 1 }));
     setMissions((ms) => ms.map((m) => m.id === missionId ? { ...m, status: 'available', elapsed: 0, deployed: [], staged: [], battleResult: undefined } : m));
     setRewardModal(null);
+    saveGame(); // Save when mission reward is claimed
   }
 
   // === Fortress Building Definitions ===
@@ -1228,7 +1667,7 @@ export default function ResourceVillageUI() {
     if (!banner || banner.status !== 'ready') return;
     
     // Check if banner is already in garrison
-    if (expedition.fortress.garrison.includes(bannerId)) return;
+    if ((expedition.fortress.garrison || []).includes(bannerId)) return;
     
     // Add banner to garrison
     setExpeditions((exps) => exps.map((exp) => {
@@ -1268,6 +1707,202 @@ export default function ResourceVillageUI() {
     return { warriors, archers };
   }
 
+  function applyFortressBattleCasualties(expeditionId: string, result: SiegeBattleResult): number[] {
+    console.log('[BATTLE] applyFortressBattleCasualties called', { expeditionId, result });
+    const expedition = expeditions.find(exp => exp.expeditionId === expeditionId);
+    if (!expedition?.fortress || !expedition.fortress.garrison || expedition.fortress.garrison.length === 0) {
+      console.log('[BATTLE] No fortress or garrison found');
+      return [];
+    }
+
+    const garrisonIds = expedition.fortress.garrison;
+    console.log('[BATTLE] Garrison IDs:', garrisonIds);
+    const garrisonBanners = banners.filter(b => garrisonIds.includes(b.id));
+    console.log('[BATTLE] Garrison banners found:', garrisonBanners.length, garrisonBanners.map(b => ({ id: b.id, name: b.name, type: b.type })));
+    if (garrisonBanners.length === 0) {
+      console.log('[BATTLE] No garrison banners found');
+      return [];
+    }
+
+    const bannerInfos = garrisonBanners.map(banner => {
+      const warriorCount = banner.squads
+        ? banner.squads.filter(s => s.type === 'warrior').reduce((sum, squad) => sum + squad.currentSize, 0)
+        : 0;
+      const archerCount = banner.squads
+        ? banner.squads.filter(s => s.type === 'archer').reduce((sum, squad) => sum + squad.currentSize, 0)
+        : 0;
+      return {
+        id: banner.id,
+        name: banner.name,
+        type: banner.type,
+        warriorCount,
+        archerCount,
+      };
+    });
+
+    const totalWarriors = bannerInfos.reduce((sum, info) => sum + info.warriorCount, 0);
+    const totalArchers = bannerInfos.reduce((sum, info) => sum + info.archerCount, 0);
+    if (totalWarriors === 0 && totalArchers === 0) return [];
+
+    // Calculate final garrison counts
+    let finalWarriors: number;
+    let finalArchers: number;
+    
+    const totalInitial = totalWarriors + totalArchers;
+    const initialTotal = result.initialGarrison.warriors + result.initialGarrison.archers;
+    
+    if (result.finalGarrison) {
+      // Use explicit finalGarrison if available
+      finalWarriors = Math.max(0, Math.round(result.finalGarrison.warriors));
+      finalArchers = Math.max(0, Math.round(result.finalGarrison.archers));
+    } else if (result.finalDefenders === 0 || (result.outcome === 'fortress_falls' && result.innerTimeline.length === 0)) {
+      // All defenders were killed (either explicitly 0, or fortress fell without inner battle tracking)
+      finalWarriors = 0;
+      finalArchers = 0;
+    } else {
+      // finalGarrison not set but defenders remain - distribute proportionally
+      if (totalInitial > 0) {
+        const warriorRatio = totalWarriors / totalInitial;
+        const archerRatio = totalArchers / totalInitial;
+        finalWarriors = Math.max(0, Math.round(result.finalDefenders * warriorRatio));
+        finalArchers = Math.max(0, Math.round(result.finalDefenders * archerRatio));
+      } else {
+        finalWarriors = totalWarriors;
+        finalArchers = totalArchers;
+      }
+    }
+
+    const warriorLosses = Math.max(0, totalWarriors - finalWarriors);
+    const archerLosses = Math.max(0, totalArchers - finalArchers);
+    
+    console.log('[BATTLE] Loss calculation:', {
+      totalWarriors,
+      totalArchers,
+      finalWarriors,
+      finalArchers,
+      warriorLosses,
+      archerLosses,
+      finalDefenders: result.finalDefenders,
+      outcome: result.outcome
+    });
+
+    if (warriorLosses === 0 && archerLosses === 0) {
+      console.log('[BATTLE] No losses detected, returning early');
+      return [];
+    }
+
+    const warriorAllocation = distributeTypeLossesAcrossBanners(
+      bannerInfos.map(info => ({ bannerId: info.id, count: info.warriorCount })),
+      warriorLosses
+    );
+    const archerAllocation = distributeTypeLossesAcrossBanners(
+      bannerInfos.map(info => ({ bannerId: info.id, count: info.archerCount })),
+      archerLosses
+    );
+
+    const lossPerBanner = new Map<number, { warriors: number; archers: number }>();
+    warriorAllocation.forEach((loss, bannerId) => {
+      if (loss <= 0) return;
+      const existing = lossPerBanner.get(bannerId) || { warriors: 0, archers: 0 };
+      existing.warriors = loss;
+      lossPerBanner.set(bannerId, existing);
+    });
+    archerAllocation.forEach((loss, bannerId) => {
+      if (loss <= 0) return;
+      const existing = lossPerBanner.get(bannerId) || { warriors: 0, archers: 0 };
+      existing.archers = loss;
+      lossPerBanner.set(bannerId, existing);
+    });
+
+    const destroyedIds: number[] = [];
+    const noticesToAdd: BannerLossNotice[] = [];
+    const timestamp = Date.now();
+    
+    // Process banners and collect notices
+    const updatedBanners = banners.reduce<Banner[]>((next, banner) => {
+      if (!garrisonIds.includes(banner.id)) {
+        next.push(banner);
+        return next;
+      }
+
+      const losses = lossPerBanner.get(banner.id);
+      console.log('[BATTLE] Processing banner:', { id: banner.id, name: banner.name, type: banner.type, losses });
+      if (!losses || (!losses.warriors && !losses.archers)) {
+        console.log('[BATTLE] No losses for banner', banner.name);
+        next.push(banner);
+        return next;
+      }
+
+      if (!banner.squads || banner.squads.length === 0) {
+        console.log('[BATTLE] Banner has no squads', banner.name);
+        next.push(banner);
+        return next;
+      }
+
+      const updatedBanner: Banner = {
+        ...banner,
+        squads: banner.squads.map(squad => ({ ...squad })),
+      };
+
+      trimSquadsByType(updatedBanner.squads, 'warrior', losses.warriors || 0);
+      trimSquadsByType(updatedBanner.squads, 'archer', losses.archers || 0);
+
+      const totalRemaining = updatedBanner.squads.reduce((sum, squad) => sum + squad.currentSize, 0);
+      const totalLossesForBanner = (losses.warriors || 0) + (losses.archers || 0);
+
+      if (totalRemaining <= 0) {
+        destroyedIds.push(updatedBanner.id);
+        // Capture banner info from original banner before it's removed
+        const bannerType = banner.type || 'regular';
+        const bannerName = banner.name;
+        const notice = {
+          id: `${banner.id}-${timestamp}-${Math.random().toString(36).slice(2, 6)}`,
+          bannerName: bannerName,
+          bannerType: bannerType,
+          message: `${bannerName} was decimated in the battle.`,
+        };
+        console.log('[BATTLE] Banner destroyed, creating notice:', notice);
+        noticesToAdd.push(notice);
+        return next;
+      }
+
+      if (totalLossesForBanner > 0) {
+        // Capture banner info from original banner
+        const bannerType = banner.type || 'regular';
+        const bannerName = banner.name;
+        const notice = {
+          id: `${banner.id}-${timestamp}-${Math.random().toString(36).slice(2, 6)}`,
+          bannerName: bannerName,
+          bannerType: bannerType,
+          message: `${bannerName} suffered ${totalLossesForBanner} losses defending the fortress.`,
+        };
+        noticesToAdd.push(notice);
+      }
+
+      next.push(updatedBanner);
+      return next;
+    }, []);
+
+    // Update banners state
+    setBanners(updatedBanners);
+
+    // Update notifications state
+    console.log('[BATTLE] Finished processing banners. noticesToAdd.length:', noticesToAdd.length, 'noticesToAdd:', noticesToAdd);
+    
+    if (noticesToAdd.length > 0) {
+      console.log('[BATTLE] Creating notifications:', noticesToAdd);
+      setBannerLossNotices((prev) => {
+        const updated = [...prev, ...noticesToAdd];
+        console.log('[BATTLE] Updated notification state. Previous count:', prev.length, 'New count:', updated.length, 'All notices:', updated);
+        return updated;
+      });
+    } else {
+      console.log('[BATTLE] WARNING: No notifications to add (noticesToAdd is empty)');
+    }
+
+    return destroyedIds;
+  }
+
   function runSiegeBattle(
     expeditionId: string,
     attackers: number
@@ -1302,6 +1937,7 @@ export default function ResourceVillageUI() {
     let remainingAttackers = attackers;
     const siegeTimeline: SiegeRound[] = [];
     const activeArchers = Math.min(garrisonArchers, archerSlots);
+    let finalGarrison = { warriors: garrisonWarriors, archers: garrisonArchers };
 
     // Siege phase
     let rounds = 0;
@@ -1349,6 +1985,7 @@ export default function ResourceVillageUI() {
         const lastInner = innerTimeline[innerTimeline.length - 1];
         finalAttackers = lastInner.attackers;
         finalDefenders = lastInner.defenders;
+        finalGarrison = { warriors: lastInner.defWarriors, archers: lastInner.defArchers };
         if (finalDefenders > 0 && finalAttackers <= 0) {
           outcome = 'fortress_holds_inner';
         } else if (finalAttackers > 0 && finalDefenders <= 0) {
@@ -1373,7 +2010,8 @@ export default function ResourceVillageUI() {
       innerTimeline,
       initialFortHP: fortHPmax,
       initialAttackers: attackers,
-      initialGarrison: { warriors: garrisonWarriors, archers: garrisonArchers }
+      initialGarrison: { warriors: garrisonWarriors, archers: garrisonArchers },
+      finalGarrison,
     };
   }
 
@@ -1483,6 +2121,10 @@ export default function ResourceVillageUI() {
     setBanners((bs) => bs.map((b) => 
       b.id === bannerId ? { ...b, status: 'ready' } : b
     ));
+  }
+
+  function dismissBannerLossNotice(noticeId: string) {
+    setBannerLossNotices((notices) => notices.filter((notice) => notice.id !== noticeId));
   }
 
   // Create reinforcement training entry
@@ -2276,39 +2918,51 @@ export default function ResourceVillageUI() {
       }
       
       let bannersChanged = false;
-      const nextBanners = banners.map((b) => {
-        const bb: Banner = { ...b };
-        // Training can only consume population if there's more than 1 (emergency rule: keep at least 1)
-        // Only process regular banners (mercenaries use barracks queue)
-        if (bb.type === 'regular' && bb.status === 'training' && !bb.trainingPaused && bb.recruited < bb.reqPop && nextPop > 1) {
-          // Check recruitment mode
-          // Calculate current free workers
-          const currentActualWorkers = lumberMill.workers + quarry.workers + farm.workers;
-          const currentFreeWorkers = Math.max(0, population - currentActualWorkers);
-          
-          const canRecruit = recruitmentMode === 'regular' 
-            ? currentFreeWorkers > 0  // Regular: only use free workers (keep at least 1 free)
-            : true;  // Forced: can use working workers too (but still keep at least 1 total pop)
-          
-          if (canRecruit) {
-            bb.recruited += 1; // 1 pop / sec / training banner
+      const nextBanners = banners.map((b) => ({ ...b }));
+      
+      // Get max training slots for regular banners
+      const maxTrainingSlots = barracks ? getMaxTrainingSlots(barracks.level) : 0;
+      
+      // Get all regular banners that are training, sorted by ID (first come, first served)
+      const trainingBanners = nextBanners
+        .filter(b => b.type === 'regular' && b.status === 'training' && !b.trainingPaused && b.recruited < b.reqPop)
+        .sort((a, b) => a.id - b.id); // Process in order of creation
+      
+      // Only process the first N banners (up to max slots)
+      const bannersToProcess = trainingBanners.slice(0, maxTrainingSlots);
+      
+      // Process each banner sequentially (only the first ones get population)
+      for (const banner of bannersToProcess) {
+        if (nextPop <= 1) break; // Emergency rule: keep at least 1 population
+        
+        // Check recruitment mode
+        const currentActualWorkers = lumberMill.workers + quarry.workers + farm.workers;
+        const currentFreeWorkers = Math.max(0, population - currentActualWorkers);
+        
+        const canRecruit = recruitmentMode === 'regular' 
+          ? currentFreeWorkers > 0  // Regular: only use free workers (keep at least 1 free)
+          : true;  // Forced: can use working workers too (but still keep at least 1 total pop)
+        
+        if (canRecruit) {
+          const bannerIndex = nextBanners.findIndex(b => b.id === banner.id);
+          if (bannerIndex !== -1) {
+            nextBanners[bannerIndex].recruited += 1; // 1 pop / sec / training banner
             nextPop = Math.max(1, nextPop - 1);
             bannersChanged = true;
             
             // Update squad currentSize as training progresses
-            if (bb.squads && bb.squads.length > 0) {
-              if (bb.reinforcingSquadId !== undefined) {
+            if (nextBanners[bannerIndex].squads && nextBanners[bannerIndex].squads.length > 0) {
+              if (nextBanners[bannerIndex].reinforcingSquadId !== undefined) {
                 // Reinforcement: update specific squad
-                const squadToReinforce = bb.squads.find(s => s.id === bb.reinforcingSquadId);
+                const squadToReinforce = nextBanners[bannerIndex].squads.find(s => s.id === nextBanners[bannerIndex].reinforcingSquadId);
                 if (squadToReinforce && squadToReinforce.currentSize < squadToReinforce.maxSize) {
                   squadToReinforce.currentSize = Math.min(squadToReinforce.maxSize, squadToReinforce.currentSize + 1);
                 }
               } else {
                 // New training: distribute recruited population across squads (1 per second per squad)
-                // Each squad gets 1 soldier per second until full, then move to next squad
                 let remainingToAssign = 1; // We recruited 1 person this second
-                for (let i = 0; i < bb.squads.length && remainingToAssign > 0; i++) {
-                  const squad = bb.squads[i];
+                for (let i = 0; i < nextBanners[bannerIndex].squads.length && remainingToAssign > 0; i++) {
+                  const squad = nextBanners[bannerIndex].squads[i];
                   if (squad.currentSize < squad.maxSize) {
                     const canAdd = Math.min(remainingToAssign, squad.maxSize - squad.currentSize);
                     squad.currentSize += canAdd;
@@ -2319,13 +2973,17 @@ export default function ResourceVillageUI() {
             }
           }
         }
+      }
+      
+      // Check for completed training
+      nextBanners.forEach((bb) => {
         if (bb.status === 'training' && bb.recruited >= bb.reqPop) { 
           bb.status = 'ready'; 
           bb.reinforcingSquadId = undefined; // Clear reinforcement tracking
           bannersChanged = true; 
         }
-        return bb;
       });
+      
       if (bannersChanged) setBanners(nextBanners);
 
       // missions
@@ -2554,15 +3212,20 @@ export default function ResourceVillageUI() {
             setSquadSeq(newSquadSeq);
             squadSeqRef.current = newSquadSeq;
             
+            // Generate auto-name based on composition
+            const bannerId = nextSeq++;
+            const autoName = generateBannerName(bannerId, squadObjects);
+            
             newBanners.push({
-              id: nextSeq++,
-              name: template.name,
+              id: bannerId,
+              name: autoName,
               units: squads, // Keep for backward compatibility
               squads: squadObjects,
               status: 'ready',
               reqPop: template.requiredPopulation,
               recruited: template.requiredPopulation,
               type: 'mercenary', // Mark as mercenary banner
+              customNamed: false, // Auto-generated name
             });
           });
           
@@ -2674,6 +3337,7 @@ export default function ResourceVillageUI() {
       }));
       setWarehouseLevel(to);
       setPendingUpgrade(null);
+      saveGame(); // Save after upgrade
       return;
     }
 
@@ -2685,6 +3349,7 @@ export default function ResourceVillageUI() {
       }));
       setHouse(to);
       setPendingUpgrade(null);
+      saveGame(); // Save after upgrade
       return;
     }
 
@@ -2696,6 +3361,7 @@ export default function ResourceVillageUI() {
       }));
       setTownHall({ level: to as TownHallLevel });
       setPendingUpgrade(null);
+      saveGame(); // Save after upgrade
       return;
     }
 
@@ -2712,6 +3378,7 @@ export default function ResourceVillageUI() {
         maxTemplates: to * 2,
       });
       setPendingUpgrade(null);
+      saveGame(); // Save after upgrade
       return;
     }
 
@@ -2723,6 +3390,7 @@ export default function ResourceVillageUI() {
       }));
       setTavern({ ...tavern, level: to });
       setPendingUpgrade(null);
+      saveGame(); // Save after upgrade
       return;
     }
 
@@ -2736,6 +3404,7 @@ export default function ResourceVillageUI() {
     if (res === "stone") setQuarry((b) => ({ ...b, level: to, stored: Math.min(b.stored, getProgression("stone", to, "capacity")), workers: b.enabled ? Math.min(to, b.workers) : 0 }));
     if (res === "food") setFarm((b) => ({ ...b, level: to, stored: Math.min(b.stored, getProgression("food", to, "capacity")), workers: b.enabled ? Math.min(to, b.workers) : 0 }));
     setPendingUpgrade(null);
+    saveGame(); // Save after building upgrade
   }
 
   function cancelUpgrade() { setPendingUpgrade(null); }
@@ -3417,6 +4086,12 @@ export default function ResourceVillageUI() {
             >
               +5 Skill Points
             </button>
+            <button
+              onClick={resetGame}
+              className="px-2 py-1 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs font-semibold"
+            >
+              Reset Game
+            </button>
           </div>
         </div>
 
@@ -3671,10 +4346,43 @@ export default function ResourceVillageUI() {
               </div>
 
               {/* Mercenary Banners (Ready/Deployed) */}
-              {banners.filter(b => b.type === 'mercenary').length > 0 && (
+              {(() => {
+                const mercNotices = bannerLossNotices.filter((notice) => notice.bannerType === 'mercenary');
+                const mercBanners = banners.filter(b => b.type === 'mercenary');
+                console.log('[RENDER] Mercenary section - Total notices:', bannerLossNotices.length, 'Mercenary notices:', mercNotices.length, mercNotices, 'Mercenary banners:', mercBanners.length);
+                return mercNotices.length > 0 || mercBanners.length > 0;
+              })() && (
                 <div className="mt-4 space-y-2">
                   <h4 className="text-sm font-semibold text-red-400">YOUR MERCENARY BANNERS</h4>
-                  {banners.filter(b => b.type === 'mercenary').map((b) => (
+                  {/* Always show notifications if they exist */}
+                  {bannerLossNotices.filter((notice) => notice.bannerType === 'mercenary').length > 0 && (
+                    <div className="mb-2">
+                      {bannerLossNotices.filter((notice) => notice.bannerType === 'mercenary').map((notice) => (
+                        <div 
+                          key={notice.id} 
+                          className="rounded-lg border-2 border-red-700 bg-red-950/50 p-3 flex items-start justify-between text-xs text-red-200 mb-2"
+                        >
+                          <div className="flex-1">
+                            <div className="font-semibold text-red-300 text-sm mb-1">{notice.bannerName}</div>
+                            <div className="text-red-200">{notice.message}</div>
+                          </div>
+                          <button
+                            onClick={() => dismissBannerLossNotice(notice.id)}
+                            className="ml-4 px-2 py-1 text-red-300 hover:text-red-100 hover:bg-red-900/50 rounded text-sm font-bold transition-colors"
+                            aria-label="Close notification"
+                            title="Close"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {/* Then show banners or empty message */}
+                  {banners.filter(b => b.type === 'mercenary').length === 0 ? (
+                    <div className="text-xs text-slate-500">No mercenary banners stationed.</div>
+                  ) : (
+                    banners.filter(b => b.type === 'mercenary').map((b) => (
                     <div key={b.id} className="rounded-lg border border-slate-700 bg-slate-800 p-3 grid grid-cols-1 md:grid-cols-3 gap-2 items-center relative">
                       <button
                         onClick={() => setDeleteBannerModal(b.id)}
@@ -3683,7 +4391,59 @@ export default function ResourceVillageUI() {
                       >
                         ×
                       </button>
-                      <div className="font-semibold text-sm">{b.name}</div>
+                      <div className="flex items-center gap-2">
+                        {editingBannerName === b.id ? (
+                          <div className="flex items-center gap-1 flex-1">
+                            <input
+                              type="text"
+                              value={banners.find(b2 => b2.id === b.id)?.name || b.name}
+                              onChange={(e) => updateBannerName(b.id, e.target.value)}
+                              onBlur={() => finishEditingBannerName(b.id)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  finishEditingBannerName(b.id);
+                                } else if (e.key === 'Escape') {
+                                  setEditingBannerName(null);
+                                }
+                              }}
+                              className="flex-1 px-2 py-1 text-sm bg-slate-700 border border-slate-600 rounded text-white"
+                              autoFocus
+                            />
+                            {banners.find(b2 => b2.id === b.id)?.customNamed && (
+                              <button
+                                onClick={() => {
+                                  resetBannerName(b.id);
+                                  setEditingBannerName(null);
+                                }}
+                                className="px-2 py-1 text-xs bg-slate-600 hover:bg-slate-500 text-white rounded"
+                                title="Reset to auto-generated name"
+                              >
+                                Reset
+                              </button>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1 flex-1">
+                            <span className="font-semibold text-sm">{b.name}</span>
+                            <button
+                              onClick={() => setEditingBannerName(b.id)}
+                              className="text-slate-400 hover:text-slate-300 text-xs"
+                              title="Edit banner name"
+                            >
+                              ✏️
+                            </button>
+                            {b.customNamed && (
+                              <button
+                                onClick={() => resetBannerName(b.id)}
+                                className="px-1.5 py-0.5 text-xs bg-slate-600 hover:bg-slate-500 text-white rounded"
+                                title="Reset to auto-generated name"
+                              >
+                                Reset
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
                       <div className="flex gap-1 flex-wrap">
                         {(() => {
                           // Ensure squads are initialized
@@ -3816,7 +4576,8 @@ export default function ResourceVillageUI() {
                         )}
                       </div>
                     </div>
-                  ))}
+                  ))
+                )}
                 </div>
               )}
             </div>
@@ -3890,6 +4651,25 @@ export default function ResourceVillageUI() {
                     : '(Consuming working workers)'}
                 </span>
               </div>
+              {bannerLossNotices.filter((notice) => notice.bannerType === 'regular').map((notice) => (
+                <div 
+                  key={notice.id} 
+                  className="rounded-lg border-2 border-red-700 bg-red-950/50 p-3 flex items-start justify-between text-xs text-red-200 mb-2"
+                >
+                  <div className="flex-1">
+                    <div className="font-semibold text-red-300 text-sm mb-1">{notice.bannerName}</div>
+                    <div className="text-red-200">{notice.message}</div>
+                  </div>
+                  <button
+                    onClick={() => dismissBannerLossNotice(notice.id)}
+                    className="ml-4 px-2 py-1 text-red-300 hover:text-red-100 hover:bg-red-900/50 rounded text-sm font-bold transition-colors"
+                    aria-label="Close notification"
+                    title="Close"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
               {banners.filter(b => b.type === 'regular').length === 0 ? (
                 <div className="text-xs text-slate-500">No banners available yet.</div>
               ) : (
@@ -3903,7 +4683,59 @@ export default function ResourceVillageUI() {
                     >
                       ×
                     </button>
-                    <div className="font-semibold text-sm">{b.name}</div>
+                    <div className="flex items-center gap-2">
+                      {editingBannerName === b.id ? (
+                        <div className="flex items-center gap-1 flex-1">
+                          <input
+                            type="text"
+                            value={banners.find(b2 => b2.id === b.id)?.name || b.name}
+                            onChange={(e) => updateBannerName(b.id, e.target.value)}
+                            onBlur={() => finishEditingBannerName(b.id)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                finishEditingBannerName(b.id);
+                              } else if (e.key === 'Escape') {
+                                setEditingBannerName(null);
+                              }
+                            }}
+                            className="flex-1 px-2 py-1 text-sm bg-slate-700 border border-slate-600 rounded text-white"
+                            autoFocus
+                          />
+                          {banners.find(b2 => b2.id === b.id)?.customNamed && (
+                            <button
+                              onClick={() => {
+                                resetBannerName(b.id);
+                                setEditingBannerName(null);
+                              }}
+                              className="px-2 py-1 text-xs bg-slate-600 hover:bg-slate-500 text-white rounded"
+                              title="Reset to auto-generated name"
+                            >
+                              Reset
+                            </button>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1 flex-1">
+                          <span className="font-semibold text-sm">{b.name}</span>
+                          <button
+                            onClick={() => setEditingBannerName(b.id)}
+                            className="text-slate-400 hover:text-slate-300 text-xs"
+                            title="Edit banner name"
+                          >
+                            ✏️
+                          </button>
+                          {b.customNamed && (
+                            <button
+                              onClick={() => resetBannerName(b.id)}
+                              className="px-1.5 py-0.5 text-xs bg-slate-600 hover:bg-slate-500 text-white rounded"
+                              title="Reset to auto-generated name"
+                            >
+                              Reset
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
                     <div className="flex gap-1 flex-wrap">
                       {(() => {
                         // Ensure squads are initialized
@@ -3957,9 +4789,31 @@ export default function ResourceVillageUI() {
                     </div>
                     <div className="justify-self-end w-full md:w-64">
                       {b.status === 'idle' && (
-                        <div className="flex items-center gap-2">
-                          <button onClick={() => startTraining(b.id)} className="px-3 py-1.5 rounded bg-emerald-600 text-white">Train</button>
-                          <div className="text-xs text-slate-500">Needs {b.reqPop} Pop</div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {(() => {
+                            const maxSlots = barracks ? getMaxTrainingSlots(barracks.level) : 0;
+                            const currentlyTraining = banners.filter(b => b.type === 'regular' && b.status === 'training').length;
+                            const canTrain = barracks && barracks.level >= 1 && currentlyTraining < maxSlots;
+                            
+                            return (
+                              <>
+                                <button 
+                                  onClick={() => startTraining(b.id)} 
+                                  disabled={!canTrain}
+                                  className={`px-3 py-1.5 rounded ${canTrain ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-slate-600 opacity-50 cursor-not-allowed'} text-white`}
+                                  title={!barracks || barracks.level < 1 ? 'Requires Barracks' : currentlyTraining >= maxSlots ? `Training slots full (${currentlyTraining}/${maxSlots})` : 'Start training'}
+                                >
+                                  Train
+                                </button>
+                                <div className="text-xs text-slate-500">Needs {b.reqPop} Pop</div>
+                                {!canTrain && (
+                                  <div className="text-xs text-amber-400 w-full">
+                                    {!barracks || barracks.level < 1 ? 'Requires Barracks' : `Slots: ${currentlyTraining}/${maxSlots}`}
+                                  </div>
+                                )}
+                              </>
+                            );
+                          })()}
                         </div>
                       )}
                       {b.status === 'training' && (
@@ -4744,11 +5598,21 @@ export default function ResourceVillageUI() {
                   onClick={() => {
                     try {
                       const result = runSiegeBattle(siegeAttackModal.expeditionId, siegeAttackModal.attackers);
-                      setExpeditions((exps) => exps.map((exp) => 
-                        exp.expeditionId === siegeAttackModal.expeditionId && exp.fortress
-                          ? { ...exp, fortress: { ...exp.fortress, lastBattle: result } }
-                          : exp
-                      ));
+                      const destroyedBanners = applyFortressBattleCasualties(siegeAttackModal.expeditionId, result);
+                      setExpeditions((exps) => exps.map((exp) => {
+                        if (exp.expeditionId !== siegeAttackModal.expeditionId || !exp.fortress) return exp;
+                        const updatedGarrison = destroyedBanners.length > 0
+                          ? (exp.fortress.garrison || []).filter(id => !destroyedBanners.includes(id))
+                          : exp.fortress.garrison;
+                        return { 
+                          ...exp, 
+                          fortress: { 
+                            ...exp.fortress, 
+                            garrison: updatedGarrison,
+                            lastBattle: result 
+                          } 
+                        };
+                      }));
                       setSiegeAttackModal(null);
                     } catch (error) {
                       console.error('Siege battle error:', error);
