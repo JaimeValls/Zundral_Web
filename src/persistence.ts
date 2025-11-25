@@ -25,7 +25,7 @@ export interface GameState {
   population: number;
   populationCap: number; // Calculated from house level
   recruitmentMode: 'regular' | 'forced';
-  tax: 'low' | 'normal' | 'high';
+  tax: 'very_low' | 'low' | 'normal' | 'high' | 'very_high';
   happiness: number;
   
   // Buildings
@@ -445,11 +445,33 @@ export function simulateOfflineProgression(state: GameState, deltaSeconds: numbe
   // Calculate population growth
   const netPopChange = calculateNetPopulationChange(updated.tax, updated.happiness);
   
+  // Calculate gold income from taxes (scales with population)
+  const referencePopulation = 50; // Reference population for gold calculation
+  const baseGoldPerSecondAtNormalTax = 1.0; // Base gold/sec at Normal tax with 50 population
+  
+  // Effective population ensures we never use zero (minimum 1)
+  const effectivePopulation = Math.max(1, updated.population);
+  
+  // Population factor: how much the current population scales the base income
+  const populationFactor = effectivePopulation / referencePopulation;
+  
+  // Tax multiplier
+  let taxMultiplier = 1.0;
+  if (updated.tax === 'very_low') taxMultiplier = 0.6;
+  else if (updated.tax === 'low') taxMultiplier = 0.85;
+  else if (updated.tax === 'normal') taxMultiplier = 1.0;
+  else if (updated.tax === 'high') taxMultiplier = 1.25;
+  else if (updated.tax === 'very_high') taxMultiplier = 1.5;
+  
+  // Final formula: base * populationFactor * taxMultiplier
+  const goldIncomePerSecond = baseGoldPerSecondAtNormalTax * populationFactor * taxMultiplier;
+  
   // Apply production
   const warehouseCap = getWarehouseCapacity(updated.warehouseLevel);
   updated.warehouse.wood = Math.min(warehouseCap, updated.warehouse.wood + (woodRate * simulatedSeconds));
   updated.warehouse.stone = Math.min(warehouseCap, updated.warehouse.stone + (stoneRate * simulatedSeconds));
   updated.warehouse.food = Math.min(warehouseCap, updated.warehouse.food + (foodRate * simulatedSeconds));
+  updated.warehouse.gold = Math.min(warehouseCap, updated.warehouse.gold + (goldIncomePerSecond * simulatedSeconds));
   
   // Apply population growth
   const newPopulation = Math.min(updated.populationCap, updated.population + (netPopChange * simulatedSeconds));
@@ -600,18 +622,30 @@ function getWarehouseCapacity(level: number): number {
   return base * Math.pow(1.3, l0);
 }
 
-function calculateNetPopulationChange(tax: 'low' | 'normal' | 'high', happiness: number): number {
+function calculateNetPopulationChange(tax: 'very_low' | 'low' | 'normal' | 'high' | 'very_high', happiness: number): number {
+  // Base population change from tax
   let baseRate = 0;
-  if (tax === 'low') baseRate = 1;
-  else if (tax === 'high') baseRate = -1;
+  if (tax === 'very_low') baseRate = 1.2;
+  else if (tax === 'low') baseRate = 0.8;
+  else if (tax === 'normal') baseRate = 0.2;
+  else if (tax === 'high') baseRate = -0.4;
+  else if (tax === 'very_high') baseRate = -1.0;
   
-  if (happiness >= 70) {
-    baseRate += 0.5;
-  } else if (happiness <= 40) {
-    baseRate -= 0.5;
+  // Happiness-based modifier
+  let happinessModifier = 0;
+  if (happiness >= 80) {
+    happinessModifier = 0.8;
+  } else if (happiness >= 60) {
+    happinessModifier = 0.4;
+  } else if (happiness >= 40) {
+    happinessModifier = 0.0;
+  } else if (happiness >= 20) {
+    happinessModifier = -0.4;
+  } else {
+    happinessModifier = -0.8;
   }
   
-  return baseRate;
+  return baseRate + happinessModifier;
 }
 
 // Export singleton instance

@@ -909,7 +909,7 @@ export default function ResourceVillageUI() {
   // EMERGENCY RULE: Population minimum is 1 (never zero)
   const [population, setPopulation] = useState(5); // starts at 5
   const [recruitmentMode, setRecruitmentMode] = useState<'regular' | 'forced'>('regular'); // Recruitment mode: regular (free workers only) or forced (can use working workers)
-  const [tax, setTax] = useState<'low' | 'normal' | 'high'>('normal');
+  const [tax, setTax] = useState<'very_low' | 'low' | 'normal' | 'high' | 'very_high'>('normal');
   const popCap = useMemo(() => getHouseCapacity(house), [house]);
 
   // === Happiness Calculation ===
@@ -917,8 +917,11 @@ export default function ResourceVillageUI() {
     let base = 50;
     
     // Tax modifier
-    if (tax === 'low') base += 20;
-    else if (tax === 'high') base -= 20;
+    if (tax === 'very_low') base += 30;
+    else if (tax === 'low') base += 15;
+    else if (tax === 'high') base -= 15;
+    else if (tax === 'very_high') base -= 30;
+    // normal tax: +0 (no change)
     
     // Tavern modifier
     if (tavern) {
@@ -955,18 +958,29 @@ export default function ResourceVillageUI() {
 
   // === Net Population Change ===
   const netPopulationChange = useMemo(() => {
+    // Base population change from tax
     let baseRate = 0;
-    if (tax === 'low') baseRate = 1;
-    else if (tax === 'high') baseRate = -1;
+    if (tax === 'very_low') baseRate = 1.2;
+    else if (tax === 'low') baseRate = 0.8;
+    else if (tax === 'normal') baseRate = 0.2;
+    else if (tax === 'high') baseRate = -0.4;
+    else if (tax === 'very_high') baseRate = -1.0;
     
-    // Happiness modifier
-    if (happiness >= 70) {
-      baseRate += 0.5; // Faster growth
-    } else if (happiness <= 40) {
-      baseRate -= 0.5; // Slower growth or negative
+    // Happiness-based modifier
+    let happinessModifier = 0;
+    if (happiness >= 80) {
+      happinessModifier = 0.8;
+    } else if (happiness >= 60) {
+      happinessModifier = 0.4;
+    } else if (happiness >= 40) {
+      happinessModifier = 0.0;
+    } else if (happiness >= 20) {
+      happinessModifier = -0.4;
+    } else {
+      happinessModifier = -0.8;
     }
     
-    return baseRate;
+    return baseRate + happinessModifier;
   }, [tax, happiness]);
 
   // === Tabs ===
@@ -2747,6 +2761,47 @@ export default function ResourceVillageUI() {
 
   // Calculate free workers correctly: population - actual assigned workers
   const freeWorkers = useMemo(() => population - actualWorkers, [population, actualWorkers]);
+
+  // === Population Breakdown (for visualization) ===
+  // Locked workers: minimum 1 per active production building with workers
+  const lockedWorkers = useMemo(() => {
+    let locked = 0;
+    // For each production building, if it has workers, contribute 1 to locked
+    if (lumberMill.enabled && lumberMill.workers > 0) locked += 1;
+    if (quarry.enabled && quarry.workers > 0) locked += 1;
+    if (farm.enabled && farm.workers > 0) locked += 1;
+    return locked;
+  }, [lumberMill.enabled, lumberMill.workers, quarry.enabled, quarry.workers, farm.enabled, farm.workers]);
+
+  // Buffer workers: extra workers beyond the minimum 1 per building
+  const bufferWorkers = useMemo(() => {
+    let buffer = 0;
+    // For each building, add max(0, workers - 1) if it has workers
+    if (lumberMill.enabled && lumberMill.workers > 0) {
+      buffer += Math.max(0, lumberMill.workers - 1);
+    }
+    if (quarry.enabled && quarry.workers > 0) {
+      buffer += Math.max(0, quarry.workers - 1);
+    }
+    if (farm.enabled && farm.workers > 0) {
+      buffer += Math.max(0, farm.workers - 1);
+    }
+    return buffer;
+  }, [lumberMill.enabled, lumberMill.workers, quarry.enabled, quarry.workers, farm.enabled, farm.workers]);
+
+  // Free population: unassigned people
+  const freePop = useMemo(() => {
+    return Math.max(0, population - lockedWorkers - bufferWorkers);
+  }, [population, lockedWorkers, bufferWorkers]);
+
+  // Safe and risky recruits (for display)
+  const safeRecruits = freePop;
+  const riskyRecruits = bufferWorkers;
+
+  // Ensure breakdown doesn't exceed capacity (safety clamp) - memoized
+  const clampedLocked = useMemo(() => Math.min(lockedWorkers, popCap), [lockedWorkers, popCap]);
+  const clampedBuffer = useMemo(() => Math.min(bufferWorkers, Math.max(0, popCap - clampedLocked)), [bufferWorkers, popCap, clampedLocked]);
+  const clampedFree = useMemo(() => Math.min(freePop, Math.max(0, popCap - clampedLocked - clampedBuffer)), [freePop, popCap, clampedLocked, clampedBuffer]);
   
   const workerSurplus = useMemo(() => population - workerDemand, [population, workerDemand]);
   const workerDeficit = workerSurplus < 0 ? -workerSurplus : 0;
@@ -2856,34 +2911,62 @@ export default function ResourceVillageUI() {
   const netFoodRate = useMemo(() => foodRate - foodConsumption, [foodRate, foodConsumption]);
 
   // === Population growth rate (depends on netFoodRate and food storage) ===
+  // NOTE: This is kept for backward compatibility but netPopulationChange is the primary system
   const popRate = useMemo(() => {
-    if (tax === 'low') {
-      // Low taxes work if:
-      // 1. Net food rate is at least 1 per second, OR
-      // 2. There's food in storage (warehouse or farm)
-      // Workers should continue coming as long as there's food available
+    // Use the new netPopulationChange system, but respect food availability for positive growth
+    if (netPopulationChange > 0) {
       const totalFood = warehouse.food + farm.stored;
       const hasFoodStorage = totalFood > 0;
       const hasPositiveNetRate = netFoodRate >= 1;
       
       // Allow growth if we have food storage OR positive net rate
       if (hasFoodStorage || hasPositiveNetRate) {
-        return population < popCap ? 1 : 0;
+        return population < popCap ? netPopulationChange : 0;
       }
       // Only block growth if food storage is zero AND net rate is insufficient
       return 0;
     }
-    if (tax === 'high') return -1;
-    return 0;
-  }, [tax, population, popCap, netFoodRate, warehouse.food, farm.stored]);
+    // Negative growth (from high taxes) happens regardless of food
+    return netPopulationChange;
+  }, [netPopulationChange, population, popCap, netFoodRate, warehouse.food, farm.stored]);
 
   const lumberCap = useMemo(() => getProgression("wood", lumberMill.level, "capacity"), [lumberMill.level]);
   const stoneCap  = useMemo(() => getProgression("stone", quarry.level, "capacity"), [quarry.level]);
   const foodCap   = useMemo(() => getProgression("food", farm.level, "capacity"), [farm.level]);
 
+  // === Gold Income Calculation ===
+  // Gold income scales with population, with 50 population as the reference point
+  const goldIncomePerSecond = useMemo(() => {
+    const referencePopulation = 50; // Reference population for gold calculation
+    const baseGoldPerSecondAtNormalTax = 1.0; // Base gold/sec at Normal tax with 50 population
+    
+    // Effective population ensures we never use zero (minimum 1)
+    const effectivePopulation = Math.max(1, population);
+    
+    // Population factor: how much the current population scales the base income
+    const populationFactor = effectivePopulation / referencePopulation;
+    
+    // Tax multiplier (same as before)
+    let taxMultiplier = 1.0;
+    if (tax === 'very_low') taxMultiplier = 0.6;
+    else if (tax === 'low') taxMultiplier = 0.85;
+    else if (tax === 'normal') taxMultiplier = 1.0;
+    else if (tax === 'high') taxMultiplier = 1.25;
+    else if (tax === 'very_high') taxMultiplier = 1.5;
+    
+    // Final formula: base * populationFactor * taxMultiplier
+    return baseGoldPerSecondAtNormalTax * populationFactor * taxMultiplier;
+  }, [tax, population]);
+
   // === Tick loop (1s) ===
   useEffect(() => {
     const id = setInterval(() => {
+      // Gold income from taxes
+      setWarehouse((w) => ({
+        ...w,
+        gold: Math.min(warehouseCap.gold, w.gold + goldIncomePerSecond)
+      }));
+      
       // production fill
       setLumberMill((b) => ({ ...b, stored: Math.min(lumberCap, b.stored + lumberRate) }));
       setQuarry((b) => ({ ...b, stored: Math.min(stoneCap,  b.stored + stoneRate) }));
@@ -3457,15 +3540,159 @@ export default function ResourceVillageUI() {
   }
 
   // === Top resource strip ===
+  // === Population Pill with Breakdown Visualization ===
+  function PopulationPill({ 
+    value, 
+    cap, 
+    rate, 
+    trend, 
+    statusColor, 
+    lockedWorkers, 
+    bufferWorkers, 
+    freePop 
+  }: { 
+    value: number; 
+    cap: number; 
+    rate: number; 
+    trend?: string; 
+    statusColor?: 'red' | 'yellow' | 'green';
+    lockedWorkers: number;
+    bufferWorkers: number;
+    freePop: number;
+  }) {
+    const valueColor = statusColor === 'red' ? 'text-red-500' : statusColor === 'yellow' ? 'text-yellow-500' : statusColor === 'green' ? 'text-emerald-500' : '';
+    const rateColor = rate > 0 ? 'text-emerald-500' : rate < 0 ? 'text-red-500' : 'text-slate-500';
+    const rateSign = rate > 0 ? '+' : '';
+    
+    // Memoize bar calculations - only recalculate when INTEGER population changes
+    // Round population to integer - bar only updates when someone actually enters/leaves
+    const integerPopulation = Math.floor(value);
+    
+    const barCalculations = useMemo(() => {
+      // Use integer population for bar calculations
+      const intPop = integerPopulation;
+      
+      // Calculate percentages for the stacked bar
+      // The bar width represents capacity, filled segments represent current population
+      // Total filled portion = (integer population / capacity) * 100%
+      const totalFilledPct = cap > 0 ? (intPop / cap) * 100 : 0;
+      
+      // Use integer population to calculate ratios
+      // This ensures segments always add up to exactly the integer population
+      const lockedRatio = intPop > 0 ? lockedWorkers / intPop : 0;
+      const bufferRatio = intPop > 0 ? bufferWorkers / intPop : 0;
+      const freeRatio = intPop > 0 ? freePop / intPop : 0;
+      
+      // Apply these ratios to the total filled portion
+      // This ensures segments add up to exactly totalFilledPct
+      const scaledLockedPct = totalFilledPct * lockedRatio;
+      const scaledBufferPct = totalFilledPct * bufferRatio;
+      const scaledFreePct = totalFilledPct * freeRatio;
+      
+      // Empty capacity is the remainder
+      const emptyPct = Math.max(0, 100 - totalFilledPct);
+      
+      // Safe recruits marker position (at the boundary between green and orange)
+      const markerPct = cap > 0 ? ((lockedWorkers + bufferWorkers) / cap) * 100 : 0;
+      const showMarker = bufferWorkers > 0; // Only show marker if there are buffer workers
+      
+      return {
+        totalFilledPct,
+        scaledLockedPct,
+        scaledBufferPct,
+        scaledFreePct,
+        emptyPct,
+        markerPct,
+        showMarker
+      };
+    }, [integerPopulation, cap]); // Only recalculate when integer population or capacity changes
+    
+    const { totalFilledPct, scaledLockedPct, scaledBufferPct, scaledFreePct, emptyPct, markerPct, showMarker } = barCalculations;
+    
+    // Safe and risky recruits
+    const safeRecruits = freePop;
+    const riskyRecruits = bufferWorkers;
+    
+    // Tooltip text
+    const tooltipText = `Total: ${value} / ${cap}
+${lockedWorkers === 1 ? '1 locked worker' : `${lockedWorkers} locked workers`} (keep buildings running)
+Safe recruits (unassigned people): ${safeRecruits}`;
+    
+    return (
+      <div className="rounded-xl border border-slate-700 bg-slate-900 px-2 py-1.5 shadow-sm" title={tooltipText}>
+        {/* First line: Main value */}
+        <div className="text-sm font-bold select-none">
+          <span className={valueColor || ''}>Pop {formatShort(value)} / {formatShort(cap)}</span>
+        </div>
+        {/* Second line: Rate and trend */}
+        {(rate !== 0 || trend) && (
+          <div className="text-[10px] text-slate-500 font-normal flex items-center gap-1.5 flex-wrap mt-0.5">
+            {rate !== 0 && <span className={rateColor}>{rateSign}{formatRate(rate)}/s</span>}
+            {trend && (
+              <span className={trend.includes('-') ? 'text-red-500' : trend.includes('+') ? 'text-emerald-500' : 'text-slate-500'}>
+                {trend}
+              </span>
+            )}
+          </div>
+        )}
+        {/* Stacked bar visualization */}
+        <div className="mt-1 h-2 rounded-lg bg-slate-800 border border-slate-700 overflow-hidden relative">
+          {/* Red segment: Locked workers */}
+          {scaledLockedPct > 0 && (
+            <div 
+              className="h-full bg-red-600 absolute left-0 top-0" 
+              style={{ width: `${scaledLockedPct}%` }}
+            />
+          )}
+          {/* Orange segment: Buffer workers */}
+          {scaledBufferPct > 0 && (
+            <div 
+              className="h-full bg-orange-500 absolute top-0" 
+              style={{ left: `${scaledLockedPct}%`, width: `${scaledBufferPct}%` }}
+            />
+          )}
+          {/* Green segment: Free population */}
+          {scaledFreePct > 0 && (
+            <div 
+              className="h-full bg-emerald-500 absolute top-0" 
+              style={{ left: `${scaledLockedPct + scaledBufferPct}%`, width: `${scaledFreePct}%` }}
+            />
+          )}
+          {/* Empty capacity (grey) */}
+          {emptyPct > 0 && (
+            <div 
+              className="h-full bg-slate-700 absolute top-0" 
+              style={{ left: `${totalFilledPct}%`, width: `${emptyPct}%` }}
+            />
+          )}
+          {/* Marker at safe recruitment boundary (between green and orange) */}
+          {showMarker && scaledBufferPct > 0 && (
+            <div 
+              className="absolute top-0 bottom-0 w-[2px] bg-yellow-400 z-10 shadow-sm" 
+              style={{ left: `${scaledLockedPct + scaledBufferPct}%`, marginLeft: '-1px' }}
+              title="Safe recruitment limit"
+            />
+          )}
+        </div>
+        {/* Breakdown text */}
+        <div className="text-[10px] text-slate-500 mt-0.5">
+          {lockedWorkers === 1 ? '1 locked' : `${lockedWorkers} workers`} | Safe recruits: {Math.round(safeRecruits * 10) / 10}
+        </div>
+      </div>
+    );
+  }
+
   function ResourcePill({ label, value, cap, rate = 0, showBar = true, trend, statusColor, workerInfo }: { label: string; value: number; cap: number; rate?: number; showBar?: boolean; trend?: string; statusColor?: 'red' | 'yellow' | 'green'; workerInfo?: string }) {
     const valueColor = statusColor === 'red' ? 'text-red-500' : statusColor === 'yellow' ? 'text-yellow-500' : statusColor === 'green' ? 'text-emerald-500' : '';
     const rateColor = rate > 0 ? 'text-emerald-500' : rate < 0 ? 'text-red-500' : 'text-slate-500';
     const rateSign = rate > 0 ? '+' : '';
+    // Show cap for all warehouse resources (Wood, Stone, Food, Iron, Gold), but not for Skill Points
+    const shouldShowCap = ['Wood', 'Stone', 'Food', 'Iron', 'Gold'].includes(label) && cap < 999999;
     return (
       <div className="rounded-xl border border-slate-700 bg-slate-900 px-2 py-1.5 shadow-sm">
         {/* First line: Main value */}
         <div className="text-sm font-bold select-none">
-          <span className={valueColor || ''}>{label} {formatShort(value)}{label === 'Pop' ? ` / ${formatShort(cap)}` : ''}</span>
+          <span className={valueColor || ''}>{label} {formatShort(value)}{shouldShowCap ? ` / ${formatShort(cap)}` : ''}</span>
         </div>
         {/* Second line: Extra data */}
         {(workerInfo || rate !== 0 || trend) && (
@@ -3889,9 +4116,41 @@ export default function ResourceVillageUI() {
           </div>
           <div className="flex items-center gap-1.5">
             <div className="inline-flex rounded-lg overflow-hidden border border-slate-700">
-              <button onClick={() => setTax('low')} className={`px-2 py-1 text-xs ${tax==='low' ? 'bg-slate-900 text-white' : 'bg-slate-700'}`}>Low</button>
-              <button onClick={() => setTax('normal')} className={`px-2 py-1 text-xs ${tax==='normal' ? 'bg-slate-900 text-white' : 'bg-slate-700'}`}>Normal</button>
-              <button onClick={() => setTax('high')} className={`px-2 py-1 text-xs ${tax==='high' ? 'bg-slate-900 text-white' : 'bg-slate-700'}`}>High</button>
+              <button 
+                onClick={() => setTax('very_low')} 
+                className={`px-2 py-1 text-xs relative group ${tax==='very_low' ? 'bg-slate-900 text-white' : 'bg-slate-700'}`}
+                title="Very low taxes. Villagers are much happier and population grows fast, but gold income is greatly reduced."
+              >
+                Very Low
+              </button>
+              <button 
+                onClick={() => setTax('low')} 
+                className={`px-2 py-1 text-xs relative group ${tax==='low' ? 'bg-slate-900 text-white' : 'bg-slate-700'}`}
+                title="Low taxes. Villagers are happier and population grows well, with slightly reduced gold income."
+              >
+                Low
+              </button>
+              <button 
+                onClick={() => setTax('normal')} 
+                className={`px-2 py-1 text-xs relative group ${tax==='normal' ? 'bg-slate-900 text-white' : 'bg-slate-700'}`}
+                title="Balanced taxes. Stable happiness, modest population growth and standard gold income."
+              >
+                Normal
+              </button>
+              <button 
+                onClick={() => setTax('high')} 
+                className={`px-2 py-1 text-xs relative group ${tax==='high' ? 'bg-slate-900 text-white' : 'bg-slate-700'}`}
+                title="High taxes. More gold now, but villagers are less happy and population can start to decline."
+              >
+                High
+              </button>
+              <button 
+                onClick={() => setTax('very_high')} 
+                className={`px-2 py-1 text-xs relative group ${tax==='very_high' ? 'bg-slate-900 text-white' : 'bg-slate-700'}`}
+                title="Very high taxes. Maximum gold income, but villagers are very unhappy and population declines quickly."
+              >
+                Very High
+              </button>
             </div>
           </div>
         </div>
@@ -3985,8 +4244,9 @@ export default function ResourceVillageUI() {
       }
 
       // Taxes mapping quick check
-      const r = (t: 'low'|'normal'|'high') => (t==='low'?1:t==='high'?-1:0);
-      console.assert(r('low')===1 && r('normal')===0 && r('high')===-1, 'Tax->popRate mapping');
+      // Test removed - tax system now uses 5 levels with different base rates
+      // Old test: const r = (t: 'low'|'normal'|'high') => (t==='low'?1:t==='high'?-1:0);
+      // New system: very_low=1.2, low=0.8, normal=0.2, high=-0.4, very_high=-1.0
 
       // Extra tests: banner reqPop and one-tick training consumption
       {
@@ -4018,15 +4278,15 @@ export default function ResourceVillageUI() {
       <div className="fixed top-0 left-0 right-0 z-50 px-4 md:px-8 py-2 bg-slate-950/95 backdrop-blur border-b border-slate-800">
         {/* Resource Bar */}
         <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-8 gap-2 mb-1.5">
-          <ResourcePill 
-            label="Pop" 
+          <PopulationPill 
             value={population} 
             cap={popCap} 
             rate={netPopulationChange} 
-            showBar={true}
             trend={netPopulationChange > 0 ? `(+${netPopulationChange.toFixed(1)} in 1s)` : netPopulationChange < 0 ? `(${netPopulationChange.toFixed(1)} in 1s)` : "(stable)"}
             statusColor={workerDeficit > 0 ? 'red' : workerSurplus > 0 ? 'green' : 'yellow'}
-            workerInfo={`${actualWorkers} working, ${Math.max(0, freeWorkers)} free`}
+            lockedWorkers={clampedLocked}
+            bufferWorkers={clampedBuffer}
+            freePop={clampedFree}
           />
           <div className="rounded-xl border border-slate-700 bg-slate-900 px-2 py-1.5 shadow-sm">
             <div className="text-sm font-bold select-none flex items-baseline gap-1">
@@ -4042,7 +4302,7 @@ export default function ResourceVillageUI() {
           <ResourcePill label="Stone" value={warehouse.stone} cap={warehouseCap.stone} rate={stoneRate} />
           <ResourcePill label="Food" value={warehouse.food} cap={warehouseCap.food} rate={netFoodRate} />
           <ResourcePill label="Iron" value={warehouse.iron} cap={warehouseCap.iron} rate={0} />
-          <ResourcePill label="Gold" value={warehouse.gold} cap={warehouseCap.gold} rate={0} />
+          <ResourcePill label="Gold" value={warehouse.gold} cap={warehouseCap.gold} rate={goldIncomePerSecond} />
           <ResourcePill label="Skill Points" value={skillPoints} cap={999999} rate={0} showBar={false} />
         </div>
         
