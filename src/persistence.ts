@@ -115,6 +115,8 @@ export interface GameState {
     enemyComposition?: { warrior: number; archer: number };
     battleResult?: any;
     startTime?: number; // UTC timestamp when mission started
+    rewards?: { gold?: number; wood?: number; stone?: number; food?: number; iron?: number };
+    cooldownEndTime?: number; // UTC timestamp when cooldown ends
   }>;
   
   // Expeditions

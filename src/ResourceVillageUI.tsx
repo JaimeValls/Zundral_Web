@@ -128,6 +128,8 @@ type Mission = {
   elapsed: number; // seconds progressed
   enemyComposition?: { warrior: number; archer: number }; // For combat missions
   battleResult?: BattleResult; // Store battle result
+  rewards?: { gold?: number; wood?: number; stone?: number; food?: number; iron?: number }; // Stored rewards
+  cooldownEndTime?: number; // UTC timestamp when cooldown ends
 };
 
 type ExpeditionState = 'available' | 'funding' | 'readyToLaunch' | 'travelling' | 'completed';
@@ -639,7 +641,7 @@ function BattleChart({ timeline }: { timeline: BattleResult['timeline'] }) {
     const B_troops = timeline.map(r => r.B_troops);
     
     draw(A_morale, syM, '#6fb3ff');
-    draw(B_morale, syM, '#8b0000');
+    draw(B_morale, syM, '#ff8c00'); // Enemy morale: Orange
     draw(A_troops, syT, '#2d9cff');
     draw(B_troops, syT, '#ff5d5d');
     
@@ -1030,43 +1032,172 @@ export default function ResourceVillageUI() {
     },
   ]);
 
-  // === Missions ===
-  const [missions, setMissions] = useState<Mission[]>([
+  // === Master Mission Pool (20 missions) ===
+  const MASTER_MISSION_POOL: Omit<Mission, 'status' | 'staged' | 'deployed' | 'elapsed' | 'battleResult' | 'rewards' | 'cooldownEndTime'>[] = [
     { 
       id: 1, 
       name: 'Scout the Forest', 
       description: 'Your task is to explore the outskirts of the village and chart any nearby landmarks or threats. Expect light resistance. Current estimates suggest you may encounter one hostile squad. Proceed carefully, avoid unnecessary engagement, and return with a clear report of the terrain and enemy presence.',
       duration: 3, 
-      status: 'available', 
-      staged: [], 
-      deployed: [], 
-      elapsed: 0,
-      enemyComposition: { warrior: 10, archer: 0 } // 1 Squad of Warriors = 10 Warriors
+      enemyComposition: { warrior: 15, archer: 5 }
     },
     { 
       id: 2, 
       name: 'Secure the Quarry Road', 
       description: 'Your forces must secure the old road leading to the quarry. Enemy scouts have been sighted nearby, and resistance is expected to be significant. Intelligence indicates three warrior squads supported by one archer squad. Advance with caution, break their formation, and ensure the road is safe for future transport.',
       duration: 3, 
-      status: 'available', 
-      staged: [], 
-      deployed: [], 
-      elapsed: 0,
-      enemyComposition: { warrior: 30, archer: 10 } // 3 Warrior Squads + 1 Archer Squad = 30 Warriors + 10 Archers
+      enemyComposition: { warrior: 90, archer: 30 }
     },
     { 
       id: 3, 
       name: 'Sweep the Northern Ridge', 
       description: 'A fortified enemy group has settled along the northern ridge. This will be a demanding operation. Expect to face five warrior squads and one archer squad. Push through their defensive line, neutralise all threats, and reclaim control of the ridge for the village.',
       duration: 3, 
-      status: 'available', 
-      staged: [], 
-      deployed: [], 
-      elapsed: 0,
-      enemyComposition: { warrior: 50, archer: 10 } // 5 Warrior Squads + 1 Archer Squad = 50 Warriors + 10 Archers
+      enemyComposition: { warrior: 300, archer: 50 }
     },
-  ]);
-  const [selectedMissionId, setSelectedMissionId] = useState<number | null>(null);
+    { 
+      id: 4, 
+      name: 'Ambush the River Raiders', 
+      description: 'Your task is to clear the raiders operating along the riverbank. Scouts report small, fast-moving bands conducting ambushes on travellers. Expect light resistance composed of one warrior squad and a small archer detachment. Engage swiftly and secure the water route for the village.',
+      duration: 3, 
+      enemyComposition: { warrior: 20, archer: 10 }
+    },
+    { 
+      id: 5, 
+      name: 'Purge the Old Mine', 
+      description: 'You must investigate the abandoned mine and eliminate any hostile presence within. Recent reports mention strange movements underground, likely from lurking creatures or desperate bandits. Expect two loosely organised squads with limited coordination. Push through the tunnels and restore safety to the area.',
+      duration: 3, 
+      enemyComposition: { warrior: 35, archer: 15 }
+    },
+    { 
+      id: 6, 
+      name: 'Break the Southern Blockade', 
+      description: 'Enemy forces have erected a blockade on the southern path, disrupting trade and movement. Scouts confirm two warrior squads supported by one shielded unit holding the chokepoint. Expect a firm defensive stance. Break their line, dismantle the barricades, and reopen the route.',
+      duration: 3, 
+      enemyComposition: { warrior: 130, archer: 30 }
+    },
+    { 
+      id: 7, 
+      name: 'Destroy the War Camp at Red Valley', 
+      description: 'A medium-sized war camp has been established in Red Valley, preparing forces for future assaults. Intelligence indicates three warrior squads, one archer squad, and an elite champion overseeing training. Expect organised resistance. Disrupt their preparations and cripple their ability to expand.',
+      duration: 3, 
+      enemyComposition: { warrior: 360, archer: 90 }
+    },
+    { 
+      id: 8, 
+      name: 'Hunt the Plains Marauders', 
+      description: 'Marauders have been raiding farms across the plains, striking quickly before retreating. Scouts estimate one fast-moving warrior squad with two small archer groups in support. Expect unpredictable movement. Track them down, break their momentum, and restore security to the farmlands.',
+      duration: 3, 
+      enemyComposition: { warrior: 50, archer: 30 }
+    },
+    { 
+      id: 9, 
+      name: 'Crush the Hilltop Outpost', 
+      description: 'A fortified outpost atop the northern hill is coordinating enemy patrols. Reports suggest two warrior squads and one archer squad defending the structure. Expect elevated positions and defensive tactics. Overwhelm their lines and reclaim the high ground.',
+      duration: 3, 
+      enemyComposition: { warrior: 150, archer: 50 }
+    },
+    { 
+      id: 10, 
+      name: 'Cleanse the Bandit Warrens', 
+      description: 'A network of caves has become the base of a growing bandit force. Intelligence confirms three disorganised squads with mixed weaponry. Expect cramped fighting conditions and opportunistic strikes. Push through the warrens and eliminate their leadership.',
+      duration: 3, 
+      enemyComposition: { warrior: 240, archer: 60 }
+    },
+    { 
+      id: 11, 
+      name: 'Eliminate the Elite Vanguard', 
+      description: 'Enemy commanders have deployed an elite vanguard to probe your defences. Scouts report one elite squad accompanied by two disciplined warrior units. Expect coordinated attacks and higher combat proficiency. Disrupt their advance and send a clear message.',
+      duration: 3, 
+      enemyComposition: { warrior: 380, archer: 120 }
+    },
+    { 
+      id: 12, 
+      name: 'Retake the Fallen Watchtower', 
+      description: 'The old watchtower to the east has fallen to enemy hands. Reports indicate one warrior squad and one archer squad occupying the structure. Expect defenders to use elevation. Retake the tower and restore control of the eastern perimeter.',
+      duration: 3, 
+      enemyComposition: { warrior: 60, archer: 40 }
+    },
+    { 
+      id: 13, 
+      name: 'Assault the Siege Workshop', 
+      description: 'A hidden workshop is producing siege equipment for future assaults. Intelligence estimates two warrior squads, one engineer squad, and a small archer detachment guarding the site. Expect traps and defensive constructs. Destroy the facility before production escalates.',
+      duration: 3, 
+      enemyComposition: { warrior: 480, archer: 120 }
+    },
+    { 
+      id: 14, 
+      name: 'Clean the Marsh Ruins', 
+      description: 'Ancient ruins in the marshlands have become infested with hostile creatures. Scouts confirm two creature packs behaving like irregular squads with unpredictable patterns. Expect sudden engagements in difficult terrain. Purge the ruins and secure the wetlands.',
+      duration: 3, 
+      enemyComposition: { warrior: 50, archer: 20 }
+    },
+    { 
+      id: 15, 
+      name: 'Intercept the Supply Caravan', 
+      description: 'A heavily guarded caravan is transporting weapons and armour to frontline forces. Intelligence indicates two warrior squads escorting multiple supply wagons. Expect disciplined defence and a mobile formation. Halt the caravan and seize the supplies.',
+      duration: 3, 
+      enemyComposition: { warrior: 160, archer: 60 }
+    },
+    { 
+      id: 16, 
+      name: 'Break the Ironclad Phalanx', 
+      description: 'A highly trained phalanx is blocking a strategic mountain pass. Scouts report one phalanx unit supported by two elite warriors. Expect a strong frontal defence. Flank their formation, break their discipline, and reopen the pass.',
+      duration: 3, 
+      enemyComposition: { warrior: 700, archer: 200 }
+    },
+    { 
+      id: 17, 
+      name: 'Storm the Fortress of Grey Ridge', 
+      description: 'A reinforced enemy fortress dominates Grey Ridge and controls several valleys. Intelligence confirms four warrior squads, two archer squads, and a veteran commander. Expect prolonged resistance. Breach their defences and reclaim the stronghold.',
+      duration: 3, 
+      enemyComposition: { warrior: 2000, archer: 500 }
+    },
+    { 
+      id: 18, 
+      name: 'Defeat the Beastlord\'s Horde', 
+      description: 'A monstrous warlord has assembled a large horde of beasts and fanatics. Scouts estimate three beast packs supported by two frenzied warrior squads. Expect erratic and aggressive assaults. Hold formation and cut through the enemy swarm.',
+      duration: 3, 
+      enemyComposition: { warrior: 2400, archer: 800 }
+    },
+    { 
+      id: 19, 
+      name: 'Burn the Great Encampment', 
+      description: 'A sprawling encampment is hosting large numbers of enemy troops and resources. Intelligence identifies five warrior squads, two archer units, and multiple auxiliary detachments. Expect widespread resistance across several positions. Torch the encampment and disrupt their supply network.',
+      duration: 3, 
+      enemyComposition: { warrior: 4000, archer: 1000 }
+    },
+    { 
+      id: 20, 
+      name: 'Final Push: The Army of Ten Thousand', 
+      description: 'A massive enemy host is advancing toward the region. Scouts report an overwhelming formation comprising dozens of warrior squads, numerous archer regiments, and elite detachments. Expect extreme resistance. Strike decisively and prevent the enemy from overrunning the land.',
+      duration: 3, 
+      enemyComposition: { warrior: 7500, archer: 2500 }
+    },
+  ];
+
+  // Helper function to randomly select N missions from the pool, excluding current active mission IDs
+  function selectRandomMissions(count: number, excludeIds: number[] = []): Mission[] {
+    const available = MASTER_MISSION_POOL.filter(m => !excludeIds.includes(m.id));
+    const shuffled = [...available].sort(() => Math.random() - 0.5);
+    const selected = shuffled.slice(0, Math.min(count, available.length));
+    
+    return selected.map(template => ({
+      ...template,
+      status: 'available' as const,
+      staged: [],
+      deployed: [],
+      elapsed: 0,
+      battleResult: undefined,
+      rewards: undefined,
+      cooldownEndTime: undefined
+    }));
+  }
+
+  // Initialize with 3 random missions
+  const [missions, setMissions] = useState<Mission[]>(() => selectRandomMissions(3));
+  const [missionBannerSelector, setMissionBannerSelector] = useState<number | null>(null); // Mission ID showing banner selector
+  const [missionLoading, setMissionLoading] = useState<number | null>(null); // Mission ID currently loading
   const [rewardModal, setRewardModal] = useState<null | { missionId: number }>(null);
   const [battleReport, setBattleReport] = useState<{ missionId: number; result: BattleResult } | null>(null);
   const [blacksmithOpen, setBlacksmithOpen] = useState(false);
@@ -1076,6 +1207,8 @@ export default function ResourceVillageUI() {
   const [hireAndRefillModal, setHireAndRefillModal] = useState<{ bannerId: number; hireCost: number; refillCost: number; totalCost: number; bannerName: string } | null>(null);
   const [siegeAttackModal, setSiegeAttackModal] = useState<{ expeditionId: string; attackers: number } | null>(null);
   const [editingBannerName, setEditingBannerName] = useState<number | null>(null); // Banner ID being edited
+  const [battleLoading, setBattleLoading] = useState<{ expeditionId: string; progress: number } | null>(null); // Battle loading state
+  const [battleError, setBattleError] = useState<{ expeditionId: string; message: string } | null>(null); // Battle error state
 
   // === Persistence ===
   // Serialize current component state to GameState
@@ -1136,6 +1269,8 @@ export default function ResourceVillageUI() {
         enemyComposition: m.enemyComposition,
         battleResult: m.battleResult,
         startTime: m.startTime,
+        rewards: m.rewards,
+        cooldownEndTime: m.cooldownEndTime,
       })),
       
       expeditions: expeditions.map(exp => ({
@@ -1197,11 +1332,29 @@ export default function ResourceVillageUI() {
     setSquadSeq(state.squadSeq);
     setBannerLossNotices(state.bannerLossNotices);
     
-    setMissions(state.missions.map(m => ({
-      ...m,
-      description: m.description || '',
-      enemyComposition: m.enemyComposition || { warrior: 0, archer: 0 },
-    })));
+    // Load missions from save, ensuring we always have exactly 3
+    if (state.missions && state.missions.length > 0) {
+      const loadedMissions = state.missions.map(m => ({
+        ...m,
+        description: m.description || '',
+        enemyComposition: m.enemyComposition || { warrior: 0, archer: 0 },
+      }));
+      
+      // If we have fewer than 3 missions, fill up to 3 with random ones
+      if (loadedMissions.length < 3) {
+        const currentIds = loadedMissions.map(m => m.id);
+        const additionalMissions = selectRandomMissions(3 - loadedMissions.length, currentIds);
+        setMissions([...loadedMissions, ...additionalMissions]);
+      } else if (loadedMissions.length > 3) {
+        // If we have more than 3, keep only the first 3
+        setMissions(loadedMissions.slice(0, 3));
+      } else {
+        setMissions(loadedMissions);
+      }
+    } else {
+      // No saved missions, initialize with 3 random
+      setMissions(selectRandomMissions(3));
+    }
     
     setExpeditions(state.expeditions.map(exp => {
       if (!exp.fortress) return exp;
@@ -1226,7 +1379,7 @@ export default function ResourceVillageUI() {
           getEffect: (level: number) => {
             // Reconstruct effect based on building type
             if (savedBuilding.id === 'palisade_wall') return { fortHP: 400 * level };
-            if (savedBuilding.id === 'watch_post') return { archerSlots: 5 * level };
+            if (savedBuilding.id === 'watch_post') return { archerSlots: WATCH_POST_ARCHERS_PER_LEVEL * level };
             if (savedBuilding.id === 'garrison_hut') return { garrisonWarriors: 5 * level, garrisonArchers: 5 * level };
             return {};
           },
@@ -1460,42 +1613,94 @@ export default function ResourceVillageUI() {
   }
 
   // === Missions helpers ===
-  function addBannerToMission(bannerId: number) {
+  function assignBannerToMission(missionId: number, bannerId: number) {
     setMissions((ms) => ms.map((m) => {
-      if (m.id !== selectedMissionId || m.status !== 'available') return m;
-      if (m.staged.includes(bannerId)) return m;
-      return { ...m, staged: [...m.staged, bannerId] };
+      if (m.id !== missionId || m.status !== 'available') return m;
+      // Replace staged with single banner (one banner per mission)
+      return { ...m, staged: [bannerId] };
     }));
+    // Close the selector after assignment
+    setMissionBannerSelector(null);
   }
+  
   function confirmSendMission(missionId: number) {
-    const staged = missions.find(m => m.id === missionId)?.staged ?? [];
+    const mission = missions.find(m => m.id === missionId);
+    if (!mission || mission.status !== 'available') return;
+    const staged = mission.staged;
     if (staged.length === 0) return;
-    setMissions((ms) => ms.map((m) => m.id === missionId ? { ...m, status: 'running', deployed: staged, staged: [], elapsed: 0, startTime: Date.now() } : m));
-    setBanners((bs) => bs.map((b) => staged.includes(b.id) ? { ...b, status: 'deployed' } : b));
     
-    // Remove banners from fortress garrisons if they're being deployed on a mission
-    setExpeditions((exps) => exps.map((exp) => {
-      if (!exp.fortress) return exp;
-      const garrison = exp.fortress.garrison || [];
-      const updatedGarrison = garrison.filter(id => !staged.includes(id));
-      if (updatedGarrison.length === garrison.length) return exp;
-      return {
-        ...exp,
-        fortress: {
-          ...exp.fortress,
-          garrison: updatedGarrison
-        }
-      };
-    }));
+    // Set loading state
+    setMissionLoading(missionId);
     
-    saveGame(); // Save when mission starts
+    // Simulate mission processing (immediate for now, but can add delay if needed)
+    setTimeout(() => {
+      setMissions((ms) => ms.map((m) => m.id === missionId ? { ...m, status: 'running', deployed: staged, staged: [], elapsed: 0, startTime: Date.now() } : m));
+      setBanners((bs) => bs.map((b) => staged.includes(b.id) ? { ...b, status: 'deployed' } : b));
+      
+      // Remove banners from fortress garrisons if they're being deployed on a mission
+      setExpeditions((exps) => exps.map((exp) => {
+        if (!exp.fortress) return exp;
+        const garrison = exp.fortress.garrison || [];
+        const updatedGarrison = garrison.filter(id => !staged.includes(id));
+        if (updatedGarrison.length === garrison.length) return exp;
+        return {
+          ...exp,
+          fortress: {
+            ...exp.fortress,
+            garrison: updatedGarrison
+          }
+        };
+      }));
+      
+      setMissionLoading(null);
+      saveGame(); // Save when mission starts
+    }, 500); // Short delay for UX
   }
   function claimMissionReward(missionId: number) {
-    setWarehouse((w) => ({ ...w, gold: w.gold + 1 }));
-    setMissions((ms) => ms.map((m) => m.id === missionId ? { ...m, status: 'available', elapsed: 0, deployed: [], staged: [], battleResult: undefined } : m));
+    const mission = missions.find(m => m.id === missionId);
+    if (!mission || mission.status !== 'complete') return;
+    
+    // Calculate rewards if missing (retroactive for missions completed before rewards system)
+    let rewards = mission.rewards;
+    if (!rewards) {
+      const enemyTotal = mission.enemyComposition ? mission.enemyComposition.warrior + mission.enemyComposition.archer : 0;
+      const baseGold = enemyTotal > 0 ? Math.max(1, Math.floor(enemyTotal * 2)) : 1;
+      rewards = {
+        gold: baseGold,
+        wood: enemyTotal > 0 ? Math.floor(enemyTotal * 0.5) : 0,
+        stone: enemyTotal > 0 ? Math.floor(enemyTotal * 0.3) : 0
+      };
+    }
+    
+    // Grant rewards
+    setWarehouse((w) => ({
+      ...w,
+      gold: w.gold + (rewards.gold || 0),
+      wood: w.wood + (rewards.wood || 0),
+      stone: w.stone + (rewards.stone || 0),
+      food: w.food + (rewards.food || 0),
+      iron: w.iron + (rewards.iron || 0)
+    }));
+    
+    // Start cooldown and clear report/rewards
+    const cooldownEndTime = Date.now() + (MISSION_COOLDOWN_SECONDS * 1000);
+    setMissions((ms) => ms.map((m) => 
+      m.id === missionId 
+        ? { ...m, status: 'available', elapsed: 0, deployed: [], staged: [], battleResult: undefined, rewards: undefined, cooldownEndTime }
+        : m
+    ));
     setRewardModal(null);
     saveGame(); // Save when mission reward is claimed
   }
+
+  // === Fortress Building Config ===
+  const WATCH_POST_ARCHERS_PER_LEVEL = 5; // Config: archers per Watch Post level
+  
+  // === Battle Config ===
+  const BATTLE_PROGRESS_DURATION_MS = 3000; // Config: battle progress animation duration
+  
+  // === Mission Config ===
+  const MISSION_COOLDOWN_SECONDS = 10; // Config: cooldown duration after claiming reward
 
   // === Fortress Building Definitions ===
   function createInitialFortressBuildings(): FortressBuilding[] {
@@ -1514,8 +1719,8 @@ export default function ResourceVillageUI() {
         name: 'Watch Post',
         level: 1,
         maxLevel: 5,
-        description: '+5 Archer slots',
-        getEffect: (level) => ({ archerSlots: 5 * level }),
+        description: `+${WATCH_POST_ARCHERS_PER_LEVEL} Archer slots (max ${WATCH_POST_ARCHERS_PER_LEVEL} archers shooting from walls)`,
+        getEffect: (level) => ({ archerSlots: WATCH_POST_ARCHERS_PER_LEVEL * level }),
         getUpgradeCost: (level) => ({ wood: 100 * level, stone: 50 * level }),
       },
       {
@@ -1719,6 +1924,35 @@ export default function ResourceVillageUI() {
     });
     
     return { warriors, archers };
+  }
+
+  // Calculate active wall archers (limited by Watch Post capacity)
+  // Watch Post only affects Phase 1 (walls up) - it's a capacity limit, not extra units
+  function calculateActiveWallArchers(expeditionId: string): { available: number; capacity: number; active: number } {
+    const expedition = expeditions.find(exp => exp.expeditionId === expeditionId);
+    if (!expedition?.fortress) {
+      return { available: 0, capacity: 0, active: 0 };
+    }
+
+    // Get Watch Post level to calculate wall archer capacity
+    const watchPost = expedition.fortress.buildings.find(b => b.id === 'watch_post');
+    const watchPostLevel = watchPost?.level || 0;
+    const wallArcherCapacity = watchPostLevel * WATCH_POST_ARCHERS_PER_LEVEL;
+
+    // Calculate available archers from garrison banners (real units only)
+    const garrisonBannerIds = expedition.fortress.garrison || [];
+    const garrison = calculateGarrisonFromBanners(garrisonBannerIds);
+    const availableArchers = garrison.archers || 0;
+
+    // Active wall archers = min(available archers, wall capacity)
+    // Watch Post never creates units, only limits how many can shoot
+    const activeWallArchers = Math.min(availableArchers, wallArcherCapacity);
+
+    return {
+      available: availableArchers,
+      capacity: wallArcherCapacity,
+      active: activeWallArchers
+    };
   }
 
   function applyFortressBattleCasualties(expeditionId: string, result: SiegeBattleResult): number[] {
@@ -1932,15 +2166,23 @@ export default function ResourceVillageUI() {
     const maxRounds = 30;
 
     const fortHPmax = expedition.fortress.stats.fortHP;
-    const archerSlots = expedition.fortress.stats.archerSlots;
     
-    // Calculate actual garrison from stationed banners
+    // Calculate actual garrison from stationed banners (real units only)
+    // IMPORTANT: Never use stats.garrisonArchers/Warriors as actual units - those are capacity limits only
     const garrisonBannerIds = expedition.fortress.garrison || [];
     const actualGarrison = calculateGarrisonFromBanners(garrisonBannerIds);
     
-    // Use actual garrison or fallback to stats
-    const garrisonArchers = actualGarrison.archers || expedition.fortress.stats.garrisonArchers;
-    const garrisonWarriors = actualGarrison.warriors || expedition.fortress.stats.garrisonWarriors;
+    // Use ONLY actual units from banners - if no banners assigned, defenders = 0
+    const garrisonArchers = actualGarrison.archers || 0;
+    const garrisonWarriors = actualGarrison.warriors || 0;
+
+    // Calculate active wall archers (limited by Watch Post capacity) for Phase 1 only
+    const wallArchers = calculateActiveWallArchers(expeditionId);
+    const activeArchers = wallArchers.active; // Only archers that can shoot from walls in phase 1
+    
+    // Debug logging
+    console.log('[SIEGE] Defenders from banners:', { garrisonArchers, garrisonWarriors });
+    console.log('[SIEGE] Watch Post capacity:', wallArchers.capacity, 'Active wall archers:', activeArchers);
 
     // Unit stats for siege
     const wSkirmish = stats.warrior?.skirmish_attack || 0;
@@ -1950,7 +2192,6 @@ export default function ResourceVillageUI() {
     let fortHP = fortHPmax;
     let remainingAttackers = attackers;
     const siegeTimeline: SiegeRound[] = [];
-    const activeArchers = Math.min(garrisonArchers, archerSlots);
     let finalGarrison = { warriors: garrisonWarriors, archers: garrisonArchers };
 
     // Siege phase
@@ -1977,13 +2218,18 @@ export default function ResourceVillageUI() {
     }
 
     // Inner battle phase (if walls fall)
+    // IMPORTANT: Inner battle uses ONLY actual units from banners, NOT Watch Post capacity
+    // Watch Post slots do NOT apply in inner battle - they only limit Phase 1 wall archers
     let innerTimeline: InnerBattleStep[] = [];
     if (fortHP <= 0 && remainingAttackers > 0 && (garrisonWarriors + garrisonArchers) > 0) {
       const battleStats = {
         warrior: { skirmish: wSkirmish, melee: wMelee },
         archer: { skirmish: aSkirmish, melee: aSkirmish * 0.3 }
       };
+      console.log('[SIEGE] Starting inner battle with defenders:', { garrisonWarriors, garrisonArchers });
       innerTimeline = runInnerBattle(garrisonWarriors, garrisonArchers, remainingAttackers, battleStats, baseCas);
+    } else if (fortHP <= 0 && remainingAttackers > 0) {
+      console.log('[SIEGE] No inner battle - no defenders from banners');
     }
 
     // Determine outcome
@@ -2454,7 +2700,7 @@ export default function ResourceVillageUI() {
     const B_troops = timeline.map(r => r.B_troops);
     
     draw(A_morale, syM, '#6fb3ff');
-    draw(B_morale, syM, '#8b0000');
+    draw(B_morale, syM, '#ff8c00'); // Enemy morale: Orange
     draw(A_troops, syT, '#2d9cff');
     draw(B_troops, syT, '#ff5d5d');
     
@@ -2763,31 +3009,18 @@ export default function ResourceVillageUI() {
   const freeWorkers = useMemo(() => population - actualWorkers, [population, actualWorkers]);
 
   // === Population Breakdown (for visualization) ===
-  // Locked workers: minimum 1 per active production building with workers
+  // Locked workers: only 1 total (from the farm - minimum to keep it running)
   const lockedWorkers = useMemo(() => {
-    let locked = 0;
-    // For each production building, if it has workers, contribute 1 to locked
-    if (lumberMill.enabled && lumberMill.workers > 0) locked += 1;
-    if (quarry.enabled && quarry.workers > 0) locked += 1;
-    if (farm.enabled && farm.workers > 0) locked += 1;
-    return locked;
-  }, [lumberMill.enabled, lumberMill.workers, quarry.enabled, quarry.workers, farm.enabled, farm.workers]);
+    // Only count 1 locked worker total (from farm)
+    return farm.enabled && farm.workers > 0 ? 1 : 0;
+  }, [farm.enabled, farm.workers]);
 
-  // Buffer workers: extra workers beyond the minimum 1 per building
+  // Buffer workers: all other workers assigned to buildings (beyond the 1 locked)
   const bufferWorkers = useMemo(() => {
-    let buffer = 0;
-    // For each building, add max(0, workers - 1) if it has workers
-    if (lumberMill.enabled && lumberMill.workers > 0) {
-      buffer += Math.max(0, lumberMill.workers - 1);
-    }
-    if (quarry.enabled && quarry.workers > 0) {
-      buffer += Math.max(0, quarry.workers - 1);
-    }
-    if (farm.enabled && farm.workers > 0) {
-      buffer += Math.max(0, farm.workers - 1);
-    }
-    return buffer;
-  }, [lumberMill.enabled, lumberMill.workers, quarry.enabled, quarry.workers, farm.enabled, farm.workers]);
+    // Total workers on all buildings minus the 1 locked worker
+    const totalWorkersOnBuildings = lumberMill.workers + quarry.workers + farm.workers;
+    return Math.max(0, totalWorkersOnBuildings - 1); // Subtract the 1 locked worker
+  }, [lumberMill.workers, quarry.workers, farm.workers]);
 
   // Free population: unassigned people
   const freePop = useMemo(() => {
@@ -3030,7 +3263,7 @@ export default function ResourceVillageUI() {
           const bannerIndex = nextBanners.findIndex(b => b.id === banner.id);
           if (bannerIndex !== -1) {
             nextBanners[bannerIndex].recruited += 1; // 1 pop / sec / training banner
-            nextPop = Math.max(1, nextPop - 1);
+          nextPop = Math.max(1, nextPop - 1);
             bannersChanged = true;
             
             // Update squad currentSize as training progresses
@@ -3118,8 +3351,18 @@ export default function ResourceVillageUI() {
             setBanners((bs) => bs.map((b) => m.deployed.includes(b.id) ? { ...b, status: 'ready' } : b));
           }
           
+          // Calculate rewards based on mission difficulty
+          const enemyTotal = m.enemyComposition ? m.enemyComposition.warrior + m.enemyComposition.archer : 0;
+          // For non-combat missions, give a small base reward
+          const baseGold = enemyTotal > 0 ? Math.max(1, Math.floor(enemyTotal * 2)) : 1;
+          const rewards = {
+            gold: baseGold,
+            wood: enemyTotal > 0 ? Math.floor(enemyTotal * 0.5) : 0,
+            stone: enemyTotal > 0 ? Math.floor(enemyTotal * 0.3) : 0
+          };
+          
           missionsChanged = true;
-          return { ...m, status: 'complete', elapsed: m.duration, deployed: [], battleResult };
+          return { ...m, status: 'complete', elapsed: m.duration, deployed: [], battleResult, rewards };
         }
         missionsChanged = true;
         return { ...m, elapsed };
@@ -3336,6 +3579,30 @@ export default function ResourceVillageUI() {
     }, 1000);
     return () => clearInterval(id);
   }, [lumberRate, stoneRate, foodRate, foodConsumption, netFoodRate, lumberCap, stoneCap, foodCap, netPopulationChange, population, banners, missions, warehouse.food, farm.stored, popCap, barracks, bannerTemplates, bannerSeq, recruitmentMode, lumberMill.workers, quarry.workers, farm.workers]);
+
+  // === Mission Cooldown Timer ===
+  useEffect(() => {
+    const missionsWithCooldown = missions.filter(m => m.cooldownEndTime && m.cooldownEndTime > Date.now());
+    if (missionsWithCooldown.length === 0) return;
+
+    const interval = setInterval(() => {
+      const now = Date.now();
+      setMissions((ms) => {
+        return ms.map((m) => {
+          if (m.cooldownEndTime && m.cooldownEndTime <= now) {
+            // Cooldown expired - replace with new random mission from pool
+            // Exclude all currently active mission IDs to avoid duplicates
+            const currentMissionIds = ms.map(m => m.id);
+            const newMissions = selectRandomMissions(1, currentMissionIds);
+            return newMissions[0] || m; // Fallback to current if no replacement found
+          }
+          return m;
+        });
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [missions]);
 
   // Clamp resources if capacity changes
   useEffect(() => {
@@ -3569,43 +3836,33 @@ export default function ResourceVillageUI() {
     const integerPopulation = Math.floor(value);
     
     const barCalculations = useMemo(() => {
-      // Use integer population for bar calculations
-      const intPop = integerPopulation;
+      // Calculate percentages for the stacked bar relative to CAPACITY
+      // Each segment represents its count as a percentage of total capacity
+      // This ensures correct proportions regardless of population value
+      const lockedPct = cap > 0 ? (lockedWorkers / cap) * 100 : 0;
+      const bufferPct = cap > 0 ? (bufferWorkers / cap) * 100 : 0;
+      const freePct = cap > 0 ? (freePop / cap) * 100 : 0;
       
-      // Calculate percentages for the stacked bar
-      // The bar width represents capacity, filled segments represent current population
-      // Total filled portion = (integer population / capacity) * 100%
-      const totalFilledPct = cap > 0 ? (intPop / cap) * 100 : 0;
-      
-      // Use integer population to calculate ratios
-      // This ensures segments always add up to exactly the integer population
-      const lockedRatio = intPop > 0 ? lockedWorkers / intPop : 0;
-      const bufferRatio = intPop > 0 ? bufferWorkers / intPop : 0;
-      const freeRatio = intPop > 0 ? freePop / intPop : 0;
-      
-      // Apply these ratios to the total filled portion
-      // This ensures segments add up to exactly totalFilledPct
-      const scaledLockedPct = totalFilledPct * lockedRatio;
-      const scaledBufferPct = totalFilledPct * bufferRatio;
-      const scaledFreePct = totalFilledPct * freeRatio;
+      // Total filled portion = sum of all segments
+      const totalFilledPct = lockedPct + bufferPct + freePct;
       
       // Empty capacity is the remainder
       const emptyPct = Math.max(0, 100 - totalFilledPct);
       
       // Safe recruits marker position (at the boundary between green and orange)
-      const markerPct = cap > 0 ? ((lockedWorkers + bufferWorkers) / cap) * 100 : 0;
+      const markerPct = lockedPct + bufferPct;
       const showMarker = bufferWorkers > 0; // Only show marker if there are buffer workers
       
       return {
         totalFilledPct,
-        scaledLockedPct,
-        scaledBufferPct,
-        scaledFreePct,
+        scaledLockedPct: lockedPct,
+        scaledBufferPct: bufferPct,
+        scaledFreePct: freePct,
         emptyPct,
         markerPct,
         showMarker
       };
-    }, [integerPopulation, cap]); // Only recalculate when integer population or capacity changes
+    }, [Math.floor(value), cap, lockedWorkers, bufferWorkers, freePop]); // Recalculate when integer population, capacity, or breakdown values change
     
     const { totalFilledPct, scaledLockedPct, scaledBufferPct, scaledFreePct, emptyPct, markerPct, showMarker } = barCalculations;
     
@@ -3676,7 +3933,7 @@ Safe recruits (unassigned people): ${safeRecruits}`;
         </div>
         {/* Breakdown text */}
         <div className="text-[10px] text-slate-500 mt-0.5">
-          {lockedWorkers === 1 ? '1 locked' : `${lockedWorkers} workers`} | Safe recruits: {Math.round(safeRecruits * 10) / 10}
+          Lock: {lockedWorkers} | Workers: {bufferWorkers} | Free: {Math.round(freePop * 10) / 10}
         </div>
       </div>
     );
@@ -3699,12 +3956,12 @@ Safe recruits (unassigned people): ${safeRecruits}`;
           <div className="text-[10px] text-slate-500 font-normal flex items-center gap-1.5 flex-wrap mt-0.5">
             {workerInfo && <span>({workerInfo})</span>}
             {rate !== 0 && <span className={rateColor}>{rateSign}{formatRate(rate)}/s</span>}
-            {trend && (
+          {trend && (
               <span className={trend.includes('-') ? 'text-red-500' : trend.includes('+') ? 'text-emerald-500' : 'text-slate-500'}>
-                {trend}
-              </span>
-            )}
-          </div>
+              {trend}
+            </span>
+          )}
+        </div>
         )}
         {showBar && (
           <div className="mt-1 h-2 rounded-lg bg-slate-900 border border-slate-700 overflow-hidden">
@@ -4111,8 +4368,8 @@ Safe recruits (unassigned people): ${safeRecruits}`;
               </div>
               <div className="text-[10px] text-slate-500">
                 Happiness: {happiness} ({happiness >= 70 ? 'Happy' : happiness <= 40 ? 'Unhappy' : 'Neutral'})
-              </div>
             </div>
+          </div>
           </div>
           <div className="flex items-center gap-1.5">
             <div className="inline-flex rounded-lg overflow-hidden border border-slate-700">
@@ -4347,28 +4604,39 @@ Safe recruits (unassigned people): ${safeRecruits}`;
               +5 Skill Points
             </button>
             <button
+              onClick={() => {
+                // Shuffle missions: replace current 3 with 3 new random ones
+                const newMissions = selectRandomMissions(3);
+                setMissions(newMissions);
+                setMissionBannerSelector(null); // Close any open selectors
+              }}
+              className="px-2 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold"
+            >
+              Shuffle Missions
+            </button>
+            <button
               onClick={resetGame}
               className="px-2 py-1 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs font-semibold"
             >
               Reset Game
             </button>
-          </div>
         </div>
+      </div>
 
         {/* Village Resources Header and Navigation */}
         <div>
           <h1 className="text-lg md:text-xl font-bold mb-1.5">Village Resources</h1>
 
-          {/* Navigation Menu */}
+      {/* Navigation Menu */}
           <div className="mb-1 flex items-center gap-2">
             <div className="inline-flex rounded-lg overflow-hidden border border-slate-700">
-              <button
-                onClick={() => setMainTab('production')}
+          <button
+            onClick={() => setMainTab('production')}
                 className={`px-2 py-1 text-xs ${mainTab === 'production' ? 'bg-slate-900 text-white' : 'bg-slate-700'}`}
-              >
-                Production
-              </button>
-              <button
+          >
+            Production
+          </button>
+          <button
                 onClick={() => {
                   if (barracks && barracks.level >= 1) {
                     setMainTab('army');
@@ -4385,13 +4653,13 @@ Safe recruits (unassigned people): ${safeRecruits}`;
                 title={!barracks || barracks.level < 1 ? 'Requires Barracks Level 1' : 'Army'}
               >
                 Army
-              </button>
-              <button
-                onClick={() => setMainTab('missions')}
+          </button>
+          <button
+            onClick={() => setMainTab('missions')}
                 className={`px-2 py-1 text-xs ${mainTab === 'missions' ? 'bg-slate-900 text-white' : 'bg-slate-700'}`}
-              >
-                Missions
-              </button>
+          >
+            Missions
+          </button>
               <button
                 onClick={() => setMainTab('expeditions')}
                 className={`px-2 py-1 text-xs ${mainTab === 'expeditions' ? 'bg-slate-900 text-white' : 'bg-slate-700'}`}
@@ -4409,7 +4677,7 @@ Safe recruits (unassigned people): ${safeRecruits}`;
                 className="px-2 py-1 text-xs bg-slate-700 hover:bg-slate-600"
               >
                 Technologies
-              </button>
+          </button>
             </div>
 
             {/* Simulator shortcuts */}
@@ -4423,11 +4691,16 @@ Safe recruits (unassigned people): ${safeRecruits}`;
                   const godonisExp = expeditions.find(exp => exp.expeditionId === 'godonis_mountain_expedition');
                   if (godonisExp?.fortress?.stats) {
                     const stats = godonisExp.fortress.stats;
+                    // Calculate actual garrison from banners
+                    const garrisonBannerIds = godonisExp.fortress.garrison || [];
+                    const actualGarrison = calculateGarrisonFromBanners(garrisonBannerIds);
+                    // Calculate wall archer capacity from Watch Post level
+                    const wallArchers = calculateActiveWallArchers('godonis_mountain_expedition');
                     localStorage.setItem('fortressSimulatorStats', JSON.stringify({
                       fortHP: stats.fortHP,
-                      fortArcherSlots: stats.archerSlots,
-                      garrisonArchers: stats.garrisonArchers,
-                      garrisonWarriors: stats.garrisonWarriors,
+                      fortArcherSlots: wallArchers.capacity, // Wall archer capacity from Watch Post
+                      garrisonArchers: actualGarrison.archers || stats.garrisonArchers,
+                      garrisonWarriors: actualGarrison.warriors || stats.garrisonWarriors,
                     }));
                   }
                 }}
@@ -4853,30 +5126,30 @@ Safe recruits (unassigned people): ${safeRecruits}`;
           <div className="rounded-xl border border-slate-800 bg-slate-900 p-4 space-y-4">
             <h3 className="text-md font-semibold text-red-400">MEN AT ARMS <span className="text-slate-400 text-sm font-normal">(Regular army)</span></h3>
             
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               {/* Left: add squads */}
-              <div className="md:col-span-1 space-y-2">
+            <div className="md:col-span-1 space-y-2">
                 <button onClick={() => addSquad('archer')} disabled={draftSquads.length>=8} className="w-full px-3 py-2 rounded-lg bg-slate-700 disabled:opacity-50">+ Archer Squad</button>
                 <button onClick={() => addSquad('warrior')} disabled={draftSquads.length>=8} className="w-full px-3 py-2 rounded-lg bg-slate-700 disabled:opacity-50">+ Warrior Squad</button>
                 <div className="text-xs text-slate-500">Squads: {draftSquads.length} / 8</div>
-                <div className="flex gap-2">
+              <div className="flex gap-2">
                   <button onClick={removeLastSquad} disabled={draftSquads.length===0} className="px-3 py-1.5 rounded bg-slate-700 disabled:opacity-50">Undo</button>
                   <button onClick={clearDraft} disabled={draftSquads.length===0} className="px-3 py-1.5 rounded bg-slate-700 disabled:opacity-50">Clear</button>
                   <button onClick={confirmBanner} disabled={draftSquads.length===0} className="ml-auto px-3 py-1.5 rounded bg-emerald-600 text-white disabled:opacity-50">Confirm</button>
-                </div>
-              </div>
-              {/* Right: composition grid */}
-              <div className="md:col-span-2 rounded-xl border border-slate-800 bg-slate-900 p-3">
-                <div className="text-sm text-slate-500 mb-2">Banner layout</div>
-                <div className="grid grid-cols-4 gap-2">
-                  {Array.from({length:8}).map((_,i)=> (
-                    <div key={i} className="h-12 rounded-lg border border-slate-700 flex items-center justify-center text-xs">
-                      {draftSquads[i] ? (draftSquads[i]==='archer' ? 'Archer Squad' : 'Warrior Squad') : 'Empty'}
-                    </div>
-                  ))}
-                </div>
               </div>
             </div>
+            {/* Right: composition grid */}
+            <div className="md:col-span-2 rounded-xl border border-slate-800 bg-slate-900 p-3">
+                <div className="text-sm text-slate-500 mb-2">Banner layout</div>
+              <div className="grid grid-cols-4 gap-2">
+                {Array.from({length:8}).map((_,i)=> (
+                  <div key={i} className="h-12 rounded-lg border border-slate-700 flex items-center justify-center text-xs">
+                      {draftSquads[i] ? (draftSquads[i]==='archer' ? 'Archer Squad' : 'Warrior Squad') : 'Empty'}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
 
             {/* Your Banners Section - Inside Men at Arms */}
             <div className="mt-4 space-y-2">
@@ -4932,8 +5205,8 @@ Safe recruits (unassigned people): ${safeRecruits}`;
               ))}
               {banners.filter(b => b.type === 'regular').length === 0 ? (
                 <div className="text-xs text-slate-500">No banners available yet.</div>
-              ) : (
-                <div className="space-y-2">
+            ) : (
+              <div className="space-y-2">
                   {banners.filter(b => b.type === 'regular').map((b) => (
                   <div key={b.id} className="rounded-lg border border-slate-700 bg-slate-800 p-3 grid grid-cols-1 md:grid-cols-3 gap-2 items-center relative">
                     <button
@@ -5069,8 +5342,8 @@ Safe recruits (unassigned people): ${safeRecruits}`;
                                 {!canTrain && (
                                   <div className="text-xs text-amber-400 w-full">
                                     {!barracks || barracks.level < 1 ? 'Requires Barracks' : `Slots: ${currentlyTraining}/${maxSlots}`}
-                                  </div>
-                                )}
+                        </div>
+                      )}
                               </>
                             );
                           })()}
@@ -5096,9 +5369,9 @@ Safe recruits (unassigned people): ${safeRecruits}`;
                       )}
                     </div>
                   </div>
-                  ))}
-                </div>
-              )}
+                ))}
+              </div>
+            )}
             </div>
           </div>
         </section>
@@ -5108,19 +5381,60 @@ Safe recruits (unassigned people): ${safeRecruits}`;
         <section className="space-y-4">
           <h2 className="text-lg font-semibold">Missions</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            {/* Left: ready banners to add */}
+            {/* Left: ready banners info panel */}
             <div className="md:col-span-1 rounded-xl border border-slate-800 bg-slate-900 p-3">
               <div className="text-sm font-semibold mb-2">Ready Banners</div>
               {banners.filter(b=>b.status==='ready').length===0 ? (
                 <div className="text-xs text-slate-500">No ready banners.</div>
               ) : (
                 <div className="space-y-2">
-                  {banners.filter(b=>b.status==='ready').map((b)=>(
-                    <div key={b.id} className="flex items-center justify-between">
-                      <div className="text-sm">{b.name}</div>
-                      <button disabled={selectedMissionId===null} onClick={()=>addBannerToMission(b.id)} className="px-2 py-1 rounded bg-slate-700 disabled:opacity-50">Add</button>
-                    </div>
-                  ))}
+                  {banners.filter(b=>b.status==='ready').map((b)=>{
+                    // Check if this banner is assigned to any mission
+                    const assignedMission = missions.find(m => m.status === 'available' && m.staged.includes(b.id));
+                    const isAssigned = assignedMission !== undefined;
+                    const totalTroops = b.squads?.reduce((sum, squad) => sum + squad.currentSize, 0) || 0;
+                    
+                    return (
+                      <div 
+                        key={b.id} 
+                        className={`rounded-lg border p-2 transition-colors ${
+                          isAssigned 
+                            ? 'border-red-500 bg-red-900/20 opacity-75' 
+                            : 'border-slate-700 bg-slate-800'
+                        }`}
+                      >
+                        <div className={`text-sm font-semibold ${isAssigned ? 'text-red-300' : ''}`}>
+                          {b.name}
+                          {isAssigned && <span className="ml-2 text-xs text-red-400">(Unavailable)</span>}
+                        </div>
+                        <div className="text-xs text-slate-400 mt-1">
+                          {totalTroops} troops
+                          {b.squads && b.squads.length > 0 && (
+                            <span className="ml-1">
+                              ({b.squads.map(s => `${s.currentSize} ${s.type}`).join(', ')})
+                            </span>
+                          )}
+                        </div>
+                        {isAssigned && assignedMission && (
+                          <div className="mt-2 flex items-center justify-between">
+                            <div className="text-xs text-red-400">
+                              Assigned to: {assignedMission.name}
+                            </div>
+                            <button
+                              onClick={() => {
+                                // Open selector for this mission to allow changing banner
+                                setMissionBannerSelector(assignedMission.id);
+                              }}
+                              className="px-2 py-0.5 rounded text-[10px] bg-slate-700 hover:bg-slate-600 text-white"
+                              title="Assign different banner"
+                            >
+                              Change
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -5128,31 +5442,170 @@ Safe recruits (unassigned people): ${safeRecruits}`;
             {/* Right: missions list */}
             <div className="md:col-span-2 space-y-3">
               {missions.map((m)=>{
-                const selected = selectedMissionId===m.id;
-                const canSend = m.status==='available' && m.staged.length>0;
+                const readyBanners = banners.filter(b => b.status === 'ready');
+                const hasReadyBanners = readyBanners.length > 0;
+                const assignedBannerId = m.staged.length > 0 ? m.staged[0] : null;
+                const assignedBanner = assignedBannerId ? banners.find(b => b.id === assignedBannerId) : null;
+                const isSelectorOpen = missionBannerSelector === m.id;
+                const isLoading = missionLoading === m.id;
                 const secsLeft = Math.max(0, m.duration - m.elapsed);
+                const hasReport = m.battleResult !== undefined;
+                const hasRewards = m.rewards !== undefined;
+                const isOnCooldown = m.cooldownEndTime !== undefined && m.cooldownEndTime > Date.now();
+                const cooldownSeconds = isOnCooldown ? Math.ceil((m.cooldownEndTime! - Date.now()) / 1000) : 0;
+                
+                // Determine mission state
+                const isReady = m.status === 'available' && !isOnCooldown;
+                const isCompletedRewardPending = m.status === 'complete';
+                
                 return (
-                  <div key={m.id} className={`rounded-xl border ${selected? 'border-emerald-500' : 'border-slate-800'} bg-slate-900 p-3`}>
+                  <div key={m.id} className="rounded-xl border border-slate-800 bg-slate-900 p-3">
                     <div className="flex items-center justify-between">
                       <div className="font-semibold">{m.name}</div>
                       <div className="flex items-center gap-2">
-                        <button onClick={()=>setSelectedMissionId(m.id)} className={`px-3 py-1.5 rounded ${selected? 'bg-emerald-600 text-white':'bg-slate-700'}`}>{selected? 'Selected' : 'Select'}</button>
-                        {m.status==='available' && <button onClick={()=>confirmSendMission(m.id)} disabled={!canSend} className="px-3 py-1.5 rounded bg-slate-900 text-white disabled:opacity-50">Send</button>}
-                        {m.status==='running' && <div className="text-xs text-slate-500">{secsLeft}s left</div>}
-                        {m.status==='complete' && <button onClick={()=>setRewardModal({missionId:m.id})} className="px-3 py-1.5 rounded bg-amber-500 text-white">Claim Reward</button>}
+                        {isReady && (
+                          <>
+                            {!assignedBanner ? (
+                              <button 
+                                onClick={() => {
+                                  // Auto-select if only one banner
+                                  if (readyBanners.length === 1) {
+                                    assignBannerToMission(m.id, readyBanners[0].id);
+                                  } else {
+                                    setMissionBannerSelector(isSelectorOpen ? null : m.id);
+                                  }
+                                }}
+                                disabled={!hasReadyBanners}
+                                className={`px-3 py-1.5 rounded text-sm ${
+                                  !hasReadyBanners 
+                                    ? 'bg-slate-700 text-slate-500 cursor-not-allowed' 
+                                    : 'bg-slate-700 hover:bg-slate-600 text-white'
+                                }`}
+                                title={!hasReadyBanners ? 'Train a banner in the Army tab first' : ''}
+                              >
+                                Assign banner
+                              </button>
+                            ) : (
+                              <>
+                                <button 
+                                  onClick={() => {
+                                    // Open selector to allow changing banner
+                                    setMissionBannerSelector(isSelectorOpen ? null : m.id);
+                                  }}
+                                  disabled={isLoading}
+                                  className={`px-3 py-1.5 rounded text-sm ${
+                                    isLoading 
+                                      ? 'bg-slate-700 text-slate-500 cursor-not-allowed' 
+                                      : 'bg-slate-700 hover:bg-slate-600 text-white'
+                                  }`}
+                                  title="Change assigned banner"
+                                >
+                                  Change banner
+                                </button>
+                                <button 
+                                  onClick={() => confirmSendMission(m.id)}
+                                  disabled={isLoading}
+                                  className={`px-3 py-1.5 rounded text-sm ${
+                                    isLoading 
+                                      ? 'bg-slate-600 cursor-not-allowed' 
+                                      : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                                  }`}
+                                >
+                                  {isLoading ? 'In progress...' : 'Send mission'}
+                                </button>
+                              </>
+                            )}
+                          </>
+                        )}
+                        {m.status==='running' && (
+                          <div className="text-xs text-slate-500">{secsLeft}s left</div>
+                        )}
+                        {isCompletedRewardPending && (
+                          <>
+                            <button 
+                              onClick={() => claimMissionReward(m.id)}
+                              className="px-3 py-1.5 rounded bg-amber-500 hover:bg-amber-600 text-white text-sm"
+                            >
+                              Claim Reward
+                            </button>
+                            {hasReport && m.battleResult && (
+                              <button 
+                                onClick={() => {
+                                  setBattleReport({ missionId: m.id, result: m.battleResult! });
+                                }}
+                                className="px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-white text-sm"
+                              >
+                                View report
+                              </button>
+                            )}
+                          </>
+                        )}
+                        {isOnCooldown && (
+                          <div className="text-xs text-slate-400">
+                            Available in {cooldownSeconds}s
+                          </div>
+                        )}
                       </div>
                     </div>
-                    
+
                     {m.description && (
                       <div className="mt-2 text-xs text-slate-400 leading-relaxed">
                         {m.description}
                       </div>
                     )}
 
-                    {/* Assigned list */}
-                    {m.status==='available' && (
-                      <div className="mt-2 text-xs text-slate-500">
-                        Assigned: {m.staged.length===0 ? 'None' : m.staged.map(id=>banners.find(b=>b.id===id)?.name).join(', ')}
+                    {/* Enemy troop count */}
+                    {m.enemyComposition && (
+                      <div className="mt-2 text-xs font-semibold text-slate-300">
+                        Enemies: {m.enemyComposition.warrior + m.enemyComposition.archer} troops ({m.enemyComposition.warrior} Warriors, {m.enemyComposition.archer} Archers)
+                      </div>
+                    )}
+
+                    {/* Banner selector dropdown */}
+                    {m.status==='available' && isSelectorOpen && (
+                      <div className="mt-3 pt-3 border-t border-slate-700">
+                        <div className="text-xs font-semibold text-slate-300 mb-2">Choose banner</div>
+                        <div className="space-y-1.5">
+                          {readyBanners.map((b) => {
+                            const totalTroops = b.squads?.reduce((sum, squad) => sum + squad.currentSize, 0) || 0;
+                            const isCurrentlyAssigned = assignedBannerId === b.id;
+                            return (
+                              <button
+                                key={b.id}
+                                onClick={() => assignBannerToMission(m.id, b.id)}
+                                className={`w-full text-left px-2 py-1.5 rounded border transition-colors ${
+                                  isCurrentlyAssigned
+                                    ? 'bg-emerald-900/30 border-emerald-500 hover:bg-emerald-900/40'
+                                    : 'bg-slate-800 hover:bg-slate-700 border-slate-700 hover:border-slate-600'
+                                }`}
+                              >
+                                <div className="flex items-center justify-between">
+                                  <div className={`text-sm font-semibold ${isCurrentlyAssigned ? 'text-emerald-300' : ''}`}>
+                                    {b.name}
+                                  </div>
+                                  {isCurrentlyAssigned && (
+                                    <span className="text-xs text-emerald-400 font-semibold">(Selected)</span>
+                                  )}
+                                </div>
+                                <div className="text-xs text-slate-400">
+                                  {totalTroops} troops
+                                  {b.squads && b.squads.length > 0 && (
+                                    <span className="ml-1">
+                                      ({b.squads.map(s => `${s.currentSize} ${s.type}`).join(', ')})
+                                    </span>
+                                  )}
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Assigned banner display */}
+                    {m.status==='available' && assignedBanner && (
+                      <div className="mt-2 text-xs text-slate-300">
+                        Assigned: <span className="text-emerald-400 font-semibold">{assignedBanner.name}</span>
                       </div>
                     )}
 
@@ -5299,7 +5752,7 @@ Safe recruits (unassigned people): ${safeRecruits}`;
                   {exp.state === 'completed' && exp.fortress && (
                     <div className="mt-3 space-y-4">
                       <div className="text-xs text-emerald-400">
-                        The expedition has returned. The expedition is complete. A frontier fortress has been established in the mountains of Godonis.
+                        The expedition was successful. A frontier fortress has been established in the mountains of Godonis.
                       </div>
 
                       {/* Frontier Fortress Section */}
@@ -5307,12 +5760,20 @@ Safe recruits (unassigned people): ${safeRecruits}`;
                         <div className="text-sm font-semibold mb-3">Frontier Fortress of Godonis</div>
                         
                         {/* Fortress Stats Summary */}
-                        <div className="text-xs text-slate-300 mb-3">
-                          Fort HP: <span className="text-slate-100">{formatInt(exp.fortress.stats.fortHP)}</span> | 
-                          Archer Slots: <span className="text-slate-100">{formatInt(exp.fortress.stats.archerSlots)}</span> | 
-                          Garrison: <span className="text-slate-100">{formatInt(exp.fortress.stats.garrisonWarriors)} Warriors, {formatInt(exp.fortress.stats.garrisonArchers)} Archers</span> | 
-                          Stored Squads: <span className="text-slate-100">{formatInt(exp.fortress.stats.storedSquads)}</span>
-                        </div>
+                        {(() => {
+                          const wallArchers = calculateActiveWallArchers(exp.expeditionId);
+                          const watchPost = exp.fortress.buildings.find(b => b.id === 'watch_post');
+                          const watchPostLevel = watchPost?.level || 0;
+                          return (
+                            <div className="text-xs text-slate-300 mb-3">
+                              Fort HP: <span className="text-slate-100">{formatInt(exp.fortress.stats.fortHP)}</span> | 
+                              Watch Post: <span className="text-slate-100">Lv {watchPostLevel}</span> | 
+                              Wall Archers: <span className="text-slate-100">{formatInt(wallArchers.active)} / {formatInt(wallArchers.capacity)}</span> | 
+                              Garrison: <span className="text-slate-100">{formatInt(exp.fortress.stats.garrisonWarriors)} Warriors, {formatInt(exp.fortress.stats.garrisonArchers)} Archers</span> | 
+                              Stored Squads: <span className="text-slate-100">{formatInt(exp.fortress.stats.storedSquads)}</span>
+                            </div>
+                          );
+                        })()}
                         <div className="text-[10px] text-slate-500 mb-3">
                           These stats feed the Fortress Simulator.
                         </div>
@@ -5336,13 +5797,23 @@ Safe recruits (unassigned people): ${safeRecruits}`;
                                     <div className="flex items-baseline gap-1.5 flex-wrap">
                                       <div className="text-sm font-semibold truncate">{building.name}</div>
                                       <div className="text-[10px] px-1 py-0.5 rounded bg-slate-700">Lv {building.level}</div>
-                                      <div className="text-[10px] text-slate-400">{building.description}</div>
+                                      <div className="text-[10px] text-slate-400">
+                                        {building.id === 'watch_post' 
+                                          ? `+${currentEffect.archerSlots || 0} Archer slots (max ${currentEffect.archerSlots || 0} archers shooting from walls)`
+                                          : building.description
+                                        }
+                                      </div>
                                     </div>
+                                    {building.id === 'watch_post' && (
+                                      <div className="text-[10px] text-slate-500 mt-1" title="Watch Post: Allows up to X archers from the defending banners to fire from the walls during the first phase of the siege.">
+                                        Allows up to {currentEffect.archerSlots || 0} archers from defending banners to fire from walls during phase 1.
+                                      </div>
+                                    )}
                                     {canUpgrade && nextEffect && (
                                       <div className="text-[10px] text-slate-500 mt-1">
                                         Next level: {
                                           nextEffect.fortHP ? `+${nextEffect.fortHP - (currentEffect.fortHP || 0)} Fort HP` :
-                                          nextEffect.archerSlots ? `+${nextEffect.archerSlots - (currentEffect.archerSlots || 0)} Archer slots` :
+                                          nextEffect.archerSlots ? `+${nextEffect.archerSlots - (currentEffect.archerSlots || 0)} Archer slots (max ${nextEffect.archerSlots} archers shooting from walls)` :
                                           nextEffect.garrisonWarriors ? `+${nextEffect.garrisonWarriors - (currentEffect.garrisonWarriors || 0)} Garrison capacity` :
                                           ''
                                         }
@@ -5462,17 +5933,132 @@ Safe recruits (unassigned people): ${safeRecruits}`;
 
                         {/* Attack Button */}
                         <div className="mt-3 pt-3 border-t border-slate-700">
-                          <button
-                            onClick={() => setSiegeAttackModal({ expeditionId: exp.expeditionId, attackers: 100 })}
-                            className="w-full px-3 py-2 rounded-lg bg-red-700 hover:bg-red-600 text-white text-sm font-semibold"
-                          >
-                            ⚔ Attack Fortress
-                          </button>
+                          {(() => {
+                            const isLoading = battleLoading?.expeditionId === exp.expeditionId;
+                            const hasReport = !!(exp.fortress?.lastBattle);
+                            const error = battleError?.expeditionId === exp.expeditionId ? battleError.message : null;
+                            
+                            // Debug: ensure button always renders
+                            console.log('[Attack Button Debug]', {
+                              expeditionId: exp.expeditionId,
+                              isLoading,
+                              hasReport,
+                              lastBattle: exp.fortress?.lastBattle,
+                              buttonShouldRender: true
+                            });
+                            
+                            const handleAttack = () => {
+                              if (hasReport) {
+                                // Scroll to battle report
+                                const reportElement = document.getElementById(`battle-report-${exp.expeditionId}`);
+                                if (reportElement) {
+                                  reportElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                }
+                                return;
+                              }
+                              
+                              // Clear any previous error
+                              setBattleError(null);
+                              
+                              // Start loading state
+                              setBattleLoading({ expeditionId: exp.expeditionId, progress: 0 });
+                              
+                              // Run battle simulation immediately
+                              try {
+                                const result = runSiegeBattle(exp.expeditionId, 100);
+                                const destroyedBanners = applyFortressBattleCasualties(exp.expeditionId, result);
+                                
+                                // Update expedition with battle result
+                                setExpeditions((exps) => exps.map((e) => {
+                                  if (e.expeditionId !== exp.expeditionId || !e.fortress) return e;
+                                  const updatedGarrison = destroyedBanners.length > 0
+                                    ? (e.fortress.garrison || []).filter(id => !destroyedBanners.includes(id))
+                                    : e.fortress.garrison;
+                                  return { 
+                                    ...e, 
+                                    fortress: { 
+                                      ...e.fortress, 
+                                      garrison: updatedGarrison,
+                                      lastBattle: result 
+                                    } 
+                                  };
+                                }));
+                                
+                                // Animate progress bar over BATTLE_PROGRESS_DURATION_MS
+                                const startTime = Date.now();
+                                const updateInterval = 16; // ~60fps
+                                const progressInterval = setInterval(() => {
+                                  const elapsed = Date.now() - startTime;
+                                  const progress = Math.min(100, (elapsed / BATTLE_PROGRESS_DURATION_MS) * 100);
+                                  
+                                  setBattleLoading({ expeditionId: exp.expeditionId, progress });
+                                  
+                                  if (progress >= 100) {
+                                    clearInterval(progressInterval);
+                                    // Loading complete - clear loading state and scroll to report
+                                    setTimeout(() => {
+                                      setBattleLoading(null);
+                                      // Scroll to report after a brief delay
+                                      setTimeout(() => {
+                                        const reportElement = document.getElementById(`battle-report-${exp.expeditionId}`);
+                                        if (reportElement) {
+                                          reportElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                        }
+                                      }, 100);
+                                    }, 50);
+                                  }
+                                }, updateInterval);
+                              } catch (err) {
+                                // Error handling
+                                console.error('Siege battle error:', err);
+                                setBattleLoading(null);
+                                setBattleError({ 
+                                  expeditionId: exp.expeditionId, 
+                                  message: err instanceof Error ? err.message : 'Error running siege battle. Please try again.' 
+                                });
+                              }
+                            };
+                            
+                            return (
+                              <div className="space-y-2">
+                                <button
+                                  onClick={handleAttack}
+                                  disabled={isLoading}
+                                  className={`w-full px-3 py-2 rounded-lg text-white text-sm font-semibold transition-colors ${
+                                    isLoading 
+                                      ? 'bg-slate-600 cursor-not-allowed' 
+                                      : hasReport
+                                      ? 'bg-slate-700 hover:bg-slate-600'
+                                      : 'bg-red-700 hover:bg-red-600'
+                                  }`}
+                                >
+                                  {isLoading ? 'Battle in progress...' : hasReport ? 'View report' : '⚔ Attack Fortress'}
+                                </button>
+                                
+                                {/* Progress Bar */}
+                                {isLoading && battleLoading && (
+                                  <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                                    <div 
+                                      className="h-full bg-red-500 transition-all duration-75 ease-out"
+                                      style={{ width: `${battleLoading.progress || 0}%` }}
+                                    />
+                                  </div>
+                                )}
+                                
+                                {/* Error Message */}
+                                {error && (
+                                  <div className="text-xs text-red-400 mt-1">
+                                    {error}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </div>
 
                         {/* Battle Report */}
                         {exp.fortress.lastBattle && (
-                          <div className="mt-4 pt-4 border-t border-slate-700">
+                          <div id={`battle-report-${exp.expeditionId}`} className="mt-4 pt-4 border-t border-slate-700">
                             <div className="text-sm font-semibold mb-3">Battle Report</div>
                             {(() => {
                               const battle = exp.fortress.lastBattle!;
@@ -6164,7 +6750,7 @@ Safe recruits (unassigned people): ${safeRecruits}`;
                   <span className="text-slate-400">Player morale</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="w-3 h-3 rounded bg-[#8b0000]"></span>
+                  <span className="w-3 h-3 rounded bg-[#ff8c00]"></span>
                   <span className="text-slate-400">Enemy morale</span>
                 </div>
                 <div className="flex items-center gap-2">
