@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useState, useRef } from "react";
 import BlacksmithUI from './BlacksmithUI';
 import TechnologiesUI from './TechnologiesUI';
+import LeaderboardUI from './LeaderboardUI';
 import { persistence, simulateOfflineProgression, createDefaultGameState, GameState } from './persistence';
+import { updateLeaderboardFromBattleResult, recalculateRanksAndTitles, createPlaceholderLeaderboard, type LeaderboardEntry, type BattleResult as LeaderboardBattleResult, type Faction } from './leaderboard';
 
 // === Progression (matches the document) ===
 // Buildings:
@@ -13,6 +15,7 @@ const PROGRESSION_FORMULA = {
     wood: { production: 1, capacity: 100 },
     stone: { production: 1, capacity: 100 },
     food: { production: 5, capacity: 100 },
+    iron: { production: 1, capacity: 100 }, // Same as stone
   },
 } as const;
 
@@ -26,25 +29,31 @@ const WAREHOUSE_FORMULA = {
 } as const;
 
 // Building upgrade cost seeds (from sheet). These are the L1→2 costs.
-const BUILDING_COST_SEED: Record<"wood" | "stone" | "food", { wood: number; stone: number }> = {
+const BUILDING_COST_SEED: Record<"wood" | "stone" | "food" | "iron", { wood: number; stone: number }> = {
   wood: { wood: 67, stone: 27 },   // Lumber Mill L1→2 (seed, table overrides where present)
   stone: { wood: 75, stone: 60 },  // Quarry L1→2
   food:  { wood: 105, stone: 53 }, // Farm L1→2
+  iron:  { wood: 27, stone: 67 },  // Iron Mine L1→2 (swapped from Lumber Mill: wood↔stone)
 };
 const BUILDING_COST_FACTOR = 1.5;
 
 // Exact per-level cost table for Lumber (from spreadsheet screenshots)
 // Index 0 is cost to go from L1→L2, index 1 is L2→L3, etc.
-const BUILDING_COST_TABLE: Partial<Record<"wood"|"stone"|"food", { wood: number[]; stone: number[] }>> = {
+const BUILDING_COST_TABLE: Partial<Record<"wood"|"stone"|"food"|"iron", { wood: number[]; stone: number[] }>> = {
   wood: {
     wood: [67, 101, 151, 226, 339, 509, 763, 1145, 1717, 2576],
     stone:[27,  41,  61,  91, 137, 205, 308,  463,  692, 1038],
+  },
+  iron: {
+    // Iron Mine costs: swapped from Lumber Mill (wood↔stone)
+    wood: [27,  41,  61,  91, 137, 205, 308,  463,  692, 1038],
+    stone:[67, 101, 151, 226, 339, 509, 763, 1145, 1717, 2576],
   },
 };
 
 // === Helpers ===
 function getProgression(
-  res: "wood" | "stone" | "food",
+  res: "wood" | "stone" | "food" | "iron",
   level: number,
   kind: "production" | "capacity",
 ) {
@@ -55,7 +64,7 @@ function getProgression(
   return 0;
 }
 
-function getBuildingCost(res: "wood" | "stone" | "food", levelTo: number) {
+function getBuildingCost(res: "wood" | "stone" | "food" | "iron", levelTo: number) {
   // Cost to reach `levelTo` from (levelTo-1) for the specific building.
   // stepIndex 0 = L1→L2, stepIndex 1 = L2→L3, etc.
   // For levelTo=2, we want stepIndex=0 (L1→L2 cost)
@@ -101,7 +110,7 @@ type Banner = {
   name: string; 
   units: string[]; // Legacy: kept for backward compatibility, but squads should be used
   squads: Squad[]; // New: tracks individual squad health
-  status: 'idle' | 'training' | 'ready' | 'deployed'; 
+  status: 'idle' | 'training' | 'ready' | 'deployed' | 'destroyed'; 
   reqPop: number; 
   recruited: number;
   type: 'regular' | 'mercenary'; // Banner type: regular (men-at-arms) or mercenary
@@ -122,17 +131,50 @@ type Mission = {
   name: string;
   description?: string;
   duration: number; // seconds
-  status: 'available' | 'running' | 'complete';
+  status: 'available' | 'running' | 'completedRewardsPending' | 'completedRewardsClaimed' | 'archived';
   staged: number[]; // banner ids to send
   deployed: number[]; // banner ids currently out
   elapsed: number; // seconds progressed
   enemyComposition?: { warrior: number; archer: number }; // For combat missions
   battleResult?: BattleResult; // Store battle result
   rewards?: { gold?: number; wood?: number; stone?: number; food?: number; iron?: number }; // Stored rewards
+  rewardTier?: string; // Reward tier name (e.g., "Scout's Cache")
   cooldownEndTime?: number; // UTC timestamp when cooldown ends
+  isNew?: boolean; // Flag for NEW! label
 };
 
 type ExpeditionState = 'available' | 'funding' | 'readyToLaunch' | 'travelling' | 'completed';
+
+// === Faction System Types ===
+type FactionId = "Alsus" | "Atrox";
+
+type FactionBranchId =
+  | "Alsus_Tactics"     // Magnus War Council
+  | "Alsus_Lux"         // Lux Guardians
+  | "Alsus_Crowns"      // Pact of Crowns
+  | "Atrox_Blood"       // Blood Legions
+  | "Atrox_Fortress"    // Iron Bastions of Roctium
+  | "Atrox_Spoils";     // Spoils of War
+
+interface FactionPerkNode {
+  id: string;
+  faction: FactionId;
+  branchId: FactionBranchId;
+  tier: number;          // 1–5
+  costFP: number;        // FP cost to unlock this node
+  unlocked: boolean;
+  name: string;          // Perk name (placeholder for now)
+  description?: string; // Perk description (placeholder for now)
+}
+
+interface PlayerFactionState {
+  availableFP: number;           // unassigned FP
+  alsusFP: number;               // FP assigned to Alsus (total spent + unspent)
+  atroxFP: number;               // FP assigned to Atrox (total spent + unspent)
+  alsusUnspentFP: number;        // FP assigned to Alsus but not yet used on perks
+  atroxUnspentFP: number;        // FP assigned to Atrox but not yet used on perks
+  perks: Record<string, FactionPerkNode>; // key by node id
+}
 
 type FortressBuilding = {
   id: string;
@@ -890,6 +932,7 @@ export default function ResourceVillageUI() {
   const [lumberMill, setLumberMill] = useState({ level: 1, stored: 0, enabled: true, workers: 1 });
   const [quarry, setQuarry] = useState({ level: 1, stored: 0, enabled: true, workers: 1 });
   const [farm, setFarm] = useState({ level: 1, stored: 0, enabled: true, workers: 1 });
+  const [ironMine, setIronMine] = useState({ level: 1, stored: 0, enabled: true, workers: 1 });
   const [house, setHouse] = useState(1); // House level (0 workers required, +5 cap per level)
   
   // === New Buildings ===
@@ -986,7 +1029,7 @@ export default function ResourceVillageUI() {
   }, [tax, happiness]);
 
   // === Tabs ===
-  const [mainTab, setMainTab] = useState<'production' | 'army' | 'missions' | 'expeditions'>('production');
+  const [mainTab, setMainTab] = useState<'production' | 'army' | 'missions' | 'expeditions' | 'leaderboard' | 'factions'>('production');
   const [armyTab, setArmyTab] = useState<'banners'>('banners');
 
   // Ensure army tab is only accessible when barracks is built
@@ -1014,7 +1057,104 @@ export default function ResourceVillageUI() {
     squadSeqRef.current = squadSeq;
   }, [squadSeq]);
 
+  // === Faction System ===
+  const [factionState, setFactionState] = useState<PlayerFactionState>(() => ({
+    availableFP: 0,
+    alsusFP: 0,
+    atroxFP: 0,
+    alsusUnspentFP: 0,
+    atroxUnspentFP: 0,
+    perks: createPerkTree(),
+  }));
+  
+  const [selectedFaction, setSelectedFaction] = useState<FactionId>('Alsus');
+
+  // Faction functions
+  function addFactionPoints(amount: number): void {
+    setFactionState(prev => ({
+      ...prev,
+      availableFP: prev.availableFP + amount,
+    }));
+  }
+
+  function assignFPToFaction(faction: FactionId, amount: number): void {
+    setFactionState(prev => {
+      if (prev.availableFP < amount) return prev;
+      
+      if (faction === 'Alsus') {
+        return {
+          ...prev,
+          availableFP: prev.availableFP - amount,
+          alsusFP: prev.alsusFP + amount,
+          alsusUnspentFP: prev.alsusUnspentFP + amount,
+        };
+      } else {
+        return {
+          ...prev,
+          availableFP: prev.availableFP - amount,
+          atroxFP: prev.atroxFP + amount,
+          atroxUnspentFP: prev.atroxUnspentFP + amount,
+        };
+      }
+    });
+  }
+
+  function canUnlockPerk(nodeId: string): boolean {
+    const node = factionState.perks[nodeId];
+    if (!node || node.unlocked) return false;
+    
+    // Check faction FP
+    const hasEnoughFP = node.faction === 'Alsus' 
+      ? factionState.alsusUnspentFP >= node.costFP
+      : factionState.atroxUnspentFP >= node.costFP;
+    
+    if (!hasEnoughFP) return false;
+    
+    // Check if all lower tiers in the same branch are unlocked
+    for (let tier = 1; tier < node.tier; tier++) {
+      const lowerNodeId = `${node.branchId}_T${tier}`;
+      const lowerNode = factionState.perks[lowerNodeId];
+      if (!lowerNode || !lowerNode.unlocked) {
+        return false;
+      }
+    }
+    
+    return true;
+  }
+
+  function unlockPerk(nodeId: string): boolean {
+    if (!canUnlockPerk(nodeId)) return false;
+    
+    const node = factionState.perks[nodeId];
+    setFactionState(prev => {
+      const updatedPerks = { ...prev.perks };
+      updatedPerks[nodeId] = { ...node, unlocked: true };
+      
+      if (node.faction === 'Alsus') {
+        return {
+          ...prev,
+          perks: updatedPerks,
+          alsusUnspentFP: prev.alsusUnspentFP - node.costFP,
+        };
+      } else {
+        return {
+          ...prev,
+          perks: updatedPerks,
+          atroxUnspentFP: prev.atroxUnspentFP - node.costFP,
+        };
+      }
+    });
+    
+    return true;
+  }
+
   // === Expeditions ===
+  // === Leaderboard ===
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+  const REAL_PLAYER_ID = 'real_player';
+  const REAL_PLAYER_NAME = 'REAL PLAYER';
+  const REAL_PLAYER_FACTION: Faction = 'Alsus'; // TODO: Make this configurable
+
   const [expeditions, setExpeditions] = useState<Expedition[]>([
     {
       expeditionId: "godonis_mountain_expedition",
@@ -1032,8 +1172,133 @@ export default function ResourceVillageUI() {
     },
   ]);
 
+  // === Reward Tier System ===
+  type RewardTier = 'very_easy' | 'easy' | 'medium' | 'hard' | 'very_hard' | 'extreme';
+  
+  const REWARD_TIERS: Record<RewardTier, { name: string; flavor: string; icon: string; rewards: { gold: number; wood: number; stone: number; food: number; iron: number } }> = {
+    very_easy: {
+      name: "Scout's Cache",
+      flavor: "Your troops return with spoils from the battlefield.",
+      icon: "📦",
+      rewards: { gold: 10, wood: 15, stone: 10, food: 20, iron: 5 }
+    },
+    easy: {
+      name: "Raider's Loot",
+      flavor: "Your troops return with spoils from the battlefield.",
+      icon: "🎒",
+      rewards: { gold: 25, wood: 40, stone: 30, food: 50, iron: 15 }
+    },
+    medium: {
+      name: "War Chest",
+      flavor: "Your troops return with spoils from the battlefield.",
+      icon: "💼",
+      rewards: { gold: 60, wood: 100, stone: 80, food: 120, iron: 40 }
+    },
+    hard: {
+      name: "Commander's Supply Crate",
+      flavor: "Your troops return with spoils from the battlefield.",
+      icon: "📦",
+      rewards: { gold: 150, wood: 250, stone: 200, food: 300, iron: 100 }
+    },
+    very_hard: {
+      name: "Warlord's Hoard",
+      flavor: "Your troops return with spoils from the battlefield.",
+      icon: "🏆",
+      rewards: { gold: 400, wood: 600, stone: 500, food: 800, iron: 250 }
+    },
+    extreme: {
+      name: "Legendary Tribute",
+      flavor: "Your troops return with spoils from the battlefield.",
+      icon: "👑",
+      rewards: { gold: 1000, wood: 1500, stone: 1200, food: 2000, iron: 600 }
+    }
+  };
+
+  function getDifficultyTier(enemyTotal: number): RewardTier {
+    if (enemyTotal <= 30) return 'very_easy';
+    if (enemyTotal <= 100) return 'easy';
+    if (enemyTotal <= 300) return 'medium';
+    if (enemyTotal <= 600) return 'hard';
+    if (enemyTotal <= 2500) return 'very_hard';
+    return 'extreme';
+  }
+
+  function generateMissionRewards(enemyTotal: number): { tier: RewardTier; rewards: { gold: number; wood: number; stone: number; food: number; iron: number } } {
+    const tier = getDifficultyTier(enemyTotal);
+    const baseRewards = REWARD_TIERS[tier].rewards;
+    
+    // Scale rewards slightly based on enemy total for variety within same tier
+    const scaleFactor = 1 + (enemyTotal % 100) / 1000; // Small variation (0-10%)
+    
+    return {
+      tier,
+      rewards: {
+        gold: Math.floor(baseRewards.gold * scaleFactor),
+        wood: Math.floor(baseRewards.wood * scaleFactor),
+        stone: Math.floor(baseRewards.stone * scaleFactor),
+        food: Math.floor(baseRewards.food * scaleFactor),
+        iron: Math.floor(baseRewards.iron * scaleFactor),
+      }
+    };
+  }
+
+  // === Faction Perk Tree Definitions ===
+  function createPerkTree(): Record<string, FactionPerkNode> {
+    const perks: Record<string, FactionPerkNode> = {};
+    
+    // Alsus branches
+    const alsusBranches: Array<{ id: FactionBranchId; name: string }> = [
+      { id: 'Alsus_Tactics', name: 'Magnus War Council' },
+      { id: 'Alsus_Lux', name: 'Lux Guardians' },
+      { id: 'Alsus_Crowns', name: 'Pact of Crowns' },
+    ];
+    
+    // Atrox branches
+    const atroxBranches: Array<{ id: FactionBranchId; name: string }> = [
+      { id: 'Atrox_Blood', name: 'Blood Legions' },
+      { id: 'Atrox_Fortress', name: 'Iron Bastions of Roctium' },
+      { id: 'Atrox_Spoils', name: 'Spoils of War' },
+    ];
+    
+    // Create perks for Alsus (5 tiers per branch)
+    alsusBranches.forEach(branch => {
+      for (let tier = 1; tier <= 5; tier++) {
+        const nodeId = `${branch.id}_T${tier}`;
+        perks[nodeId] = {
+          id: nodeId,
+          faction: 'Alsus',
+          branchId: branch.id,
+          tier,
+          costFP: tier,
+          unlocked: false,
+          name: `${branch.name} Tier ${tier}`,
+          description: `Placeholder perk description for ${branch.name} tier ${tier}`,
+        };
+      }
+    });
+    
+    // Create perks for Atrox (5 tiers per branch)
+    atroxBranches.forEach(branch => {
+      for (let tier = 1; tier <= 5; tier++) {
+        const nodeId = `${branch.id}_T${tier}`;
+        perks[nodeId] = {
+          id: nodeId,
+          faction: 'Atrox',
+          branchId: branch.id,
+          tier,
+          costFP: tier,
+          unlocked: false,
+          name: `${branch.name} Tier ${tier}`,
+          description: `Placeholder perk description for ${branch.name} tier ${tier}`,
+        };
+      }
+    });
+    
+    return perks;
+  }
+
   // === Master Mission Pool (20 missions) ===
-  const MASTER_MISSION_POOL: Omit<Mission, 'status' | 'staged' | 'deployed' | 'elapsed' | 'battleResult' | 'rewards' | 'cooldownEndTime'>[] = [
+  const MASTER_MISSION_POOL: Omit<Mission, 'status' | 'staged' | 'deployed' | 'elapsed' | 'battleResult' | 'rewards' | 'rewardTier' | 'cooldownEndTime' | 'isNew'>[] = [
     { 
       id: 1, 
       name: 'Scout the Forest', 
@@ -1190,7 +1455,9 @@ export default function ResourceVillageUI() {
       elapsed: 0,
       battleResult: undefined,
       rewards: undefined,
-      cooldownEndTime: undefined
+      rewardTier: undefined,
+      cooldownEndTime: undefined,
+      isNew: true // Mark as new when first generated
     }));
   }
 
@@ -1200,6 +1467,7 @@ export default function ResourceVillageUI() {
   const [missionLoading, setMissionLoading] = useState<number | null>(null); // Mission ID currently loading
   const [rewardModal, setRewardModal] = useState<null | { missionId: number }>(null);
   const [battleReport, setBattleReport] = useState<{ missionId: number; result: BattleResult } | null>(null);
+  const [rewardPopup, setRewardPopup] = useState<{ missionId: number; tier: string; rewards: { gold?: number; wood?: number; stone?: number; food?: number; iron?: number } } | null>(null);
   const [blacksmithOpen, setBlacksmithOpen] = useState(false);
   const [technologiesOpen, setTechnologiesOpen] = useState(false);
   const [deleteBannerModal, setDeleteBannerModal] = useState<number | null>(null); // Banner ID to delete
@@ -1231,6 +1499,7 @@ export default function ResourceVillageUI() {
       lumberMill,
       quarry,
       farm,
+      ironMine,
       house,
       townHall,
       barracks,
@@ -1270,7 +1539,9 @@ export default function ResourceVillageUI() {
         battleResult: m.battleResult,
         startTime: m.startTime,
         rewards: m.rewards,
+        rewardTier: m.rewardTier,
         cooldownEndTime: m.cooldownEndTime,
+        isNew: m.isNew,
       })),
       
       expeditions: expeditions.map(exp => ({
@@ -1298,6 +1569,30 @@ export default function ResourceVillageUI() {
       
       mainTab,
       armyTab,
+      leaderboard,
+      
+      factionState: {
+        availableFP: factionState.availableFP,
+        alsusFP: factionState.alsusFP,
+        atroxFP: factionState.atroxFP,
+        alsusUnspentFP: factionState.alsusUnspentFP,
+        atroxUnspentFP: factionState.atroxUnspentFP,
+        perks: Object.fromEntries(
+          Object.entries(factionState.perks).map(([id, perk]) => [
+            id,
+            {
+              id: perk.id,
+              faction: perk.faction,
+              branchId: perk.branchId,
+              tier: perk.tier,
+              costFP: perk.costFP,
+              unlocked: perk.unlocked,
+              name: perk.name,
+              description: perk.description,
+            }
+          ])
+        ),
+      },
       
       tutorialCompleted: false,
       debugFlags: {},
@@ -1318,6 +1613,7 @@ export default function ResourceVillageUI() {
     setLumberMill(state.lumberMill);
     setQuarry(state.quarry);
     setFarm(state.farm);
+    setIronMine(state.ironMine || { level: 1, stored: 0, enabled: true, workers: 1 }); // Fallback for old saves
     setHouse(state.house);
     setTownHall(state.townHall);
     setBarracks(state.barracks);
@@ -1334,11 +1630,22 @@ export default function ResourceVillageUI() {
     
     // Load missions from save, ensuring we always have exactly 3
     if (state.missions && state.missions.length > 0) {
-      const loadedMissions = state.missions.map(m => ({
-        ...m,
-        description: m.description || '',
-        enemyComposition: m.enemyComposition || { warrior: 0, archer: 0 },
-      }));
+      const loadedMissions = state.missions.map(m => {
+        // Migrate old "complete" status to new statuses
+        let status = m.status;
+        if (status === 'complete') {
+          // If rewards exist and rewardTier exists, it was claimed; otherwise pending
+          status = (m.rewards && m.rewardTier) ? 'completedRewardsClaimed' : 'completedRewardsPending';
+        }
+        return {
+          ...m,
+          status: status as Mission['status'],
+          description: m.description || '',
+          enemyComposition: m.enemyComposition || { warrior: 0, archer: 0 },
+          rewardTier: m.rewardTier,
+          isNew: m.isNew || false,
+        };
+      });
       
       // If we have fewer than 3 missions, fill up to 3 with random ones
       if (loadedMissions.length < 3) {
@@ -1404,6 +1711,64 @@ export default function ResourceVillageUI() {
     
     setMainTab(state.mainTab);
     setArmyTab(state.armyTab);
+    
+    // Load leaderboard, ensuring real player entry exists
+    if (state.leaderboard && state.leaderboard.length > 0) {
+      const hasRealPlayer = state.leaderboard.some(e => e.playerId === REAL_PLAYER_ID);
+      if (!hasRealPlayer) {
+        // Add real player if missing
+        const updated = [...state.leaderboard, {
+          playerId: REAL_PLAYER_ID,
+          playerName: REAL_PLAYER_NAME,
+          faction: REAL_PLAYER_FACTION,
+          totalScore: 0,
+          totalKills: 0,
+          totalVictories: 0,
+          rank: 0,
+          title: 'Recruit',
+        }];
+        setLeaderboard(recalculateRanksAndTitles(updated));
+      } else {
+        setLeaderboard(state.leaderboard);
+      }
+    } else {
+      // Initialize with placeholder data
+      setLeaderboard(createPlaceholderLeaderboard(REAL_PLAYER_NAME, REAL_PLAYER_FACTION));
+    }
+    
+    // Load faction state
+    if (state.factionState) {
+      const basePerks = createPerkTree();
+      // Merge saved perks with base tree (in case new perks were added)
+      const mergedPerks = { ...basePerks };
+      Object.entries(state.factionState.perks).forEach(([id, savedPerk]) => {
+        if (mergedPerks[id]) {
+          mergedPerks[id] = {
+            ...mergedPerks[id],
+            unlocked: savedPerk.unlocked,
+          };
+        }
+      });
+      
+      setFactionState({
+        availableFP: state.factionState.availableFP || 0,
+        alsusFP: state.factionState.alsusFP || 0,
+        atroxFP: state.factionState.atroxFP || 0,
+        alsusUnspentFP: state.factionState.alsusUnspentFP || 0,
+        atroxUnspentFP: state.factionState.atroxUnspentFP || 0,
+        perks: mergedPerks,
+      });
+    } else {
+      // Initialize with default state
+      setFactionState({
+        availableFP: 0,
+        alsusFP: 0,
+        atroxFP: 0,
+        alsusUnspentFP: 0,
+        atroxUnspentFP: 0,
+        perks: createPerkTree(),
+      });
+    }
   }
 
   // Load state on mount
@@ -1432,6 +1797,8 @@ export default function ResourceVillageUI() {
       console.log(`[PERSISTENCE] Loaded save, simulated ${deltaSeconds.toFixed(1)} seconds offline`);
     } else {
       console.log('[PERSISTENCE] No save found, starting fresh');
+      // Initialize leaderboard with placeholder data on first load
+      setLeaderboard(createPlaceholderLeaderboard(REAL_PLAYER_NAME, REAL_PLAYER_FACTION));
     }
   }, []); // Only run on mount
 
@@ -1444,10 +1811,10 @@ export default function ResourceVillageUI() {
   }, [
     warehouse, warehouseLevel, skillPoints,
     population, recruitmentMode, tax, happiness,
-    lumberMill, quarry, farm, house, townHall, barracks, tavern,
+    lumberMill, quarry, farm, ironMine, house, townHall, barracks, tavern,
     banners, bannerSeq, squadSeq, bannerLossNotices,
     missions, expeditions,
-    mainTab, armyTab,
+    mainTab, armyTab, leaderboard,
   ]);
 
   // Save on critical actions (manual save triggers)
@@ -2392,6 +2759,9 @@ export default function ResourceVillageUI() {
     const banner = banners.find(b => b.id === bannerId);
     if (!banner) return;
     
+    // Guard: Don't allow reinforcing destroyed banners
+    if (banner.status === 'destroyed') return;
+    
     // Ensure banner has squads initialized
     let bannerWithSquads = banner;
     if (!bannerWithSquads.squads || bannerWithSquads.squads.length === 0) {
@@ -2997,13 +3367,14 @@ export default function ResourceVillageUI() {
     if (lumberMill.enabled) total += lumberMill.level;
     if (quarry.enabled) total += quarry.level;
     if (farm.enabled) total += farm.level;
+    if (ironMine.enabled) total += ironMine.level;
     return total;
-  }, [lumberMill.enabled, lumberMill.level, quarry.enabled, quarry.level, farm.enabled, farm.level]);
+  }, [lumberMill.enabled, lumberMill.level, quarry.enabled, quarry.level, farm.enabled, farm.level, ironMine.enabled, ironMine.level]);
 
   // Calculate actual assigned workers (not just demand)
   const actualWorkers = useMemo(() => {
-    return lumberMill.workers + quarry.workers + farm.workers;
-  }, [lumberMill.workers, quarry.workers, farm.workers]);
+    return lumberMill.workers + quarry.workers + farm.workers + ironMine.workers;
+  }, [lumberMill.workers, quarry.workers, farm.workers, ironMine.workers]);
 
   // Calculate free workers correctly: population - actual assigned workers
   const freeWorkers = useMemo(() => population - actualWorkers, [population, actualWorkers]);
@@ -3018,9 +3389,9 @@ export default function ResourceVillageUI() {
   // Buffer workers: all other workers assigned to buildings (beyond the 1 locked)
   const bufferWorkers = useMemo(() => {
     // Total workers on all buildings minus the 1 locked worker
-    const totalWorkersOnBuildings = lumberMill.workers + quarry.workers + farm.workers;
+    const totalWorkersOnBuildings = lumberMill.workers + quarry.workers + farm.workers + ironMine.workers;
     return Math.max(0, totalWorkersOnBuildings - 1); // Subtract the 1 locked worker
-  }, [lumberMill.workers, quarry.workers, farm.workers]);
+  }, [lumberMill.workers, quarry.workers, farm.workers, ironMine.workers]);
 
   // Free population: unassigned people
   const freePop = useMemo(() => {
@@ -3059,6 +3430,7 @@ export default function ResourceVillageUI() {
       { type: 'wood' as const, level: lumberMill.level, enabled: lumberMill.enabled },
       { type: 'stone' as const, level: quarry.level, enabled: quarry.enabled },
       { type: 'food' as const, level: farm.level, enabled: farm.enabled },
+      { type: 'iron' as const, level: ironMine.level, enabled: ironMine.enabled },
     ].filter(b => b.enabled);
 
     // Emergency: If no buildings enabled, at least enable farm (population is always >= 1)
@@ -3066,6 +3438,7 @@ export default function ResourceVillageUI() {
       setFarm(b => ({ ...b, enabled: true, workers: 1 }));
       setLumberMill(b => ({ ...b, workers: 0 }));
       setQuarry(b => ({ ...b, workers: 0 }));
+      setIronMine(b => ({ ...b, workers: 0 }));
       return;
     }
 
@@ -3081,7 +3454,7 @@ export default function ResourceVillageUI() {
 
     // Create assignments for ALL enabled buildings
     // Farm starts at 1 (emergency), others start at 0
-    const assignments: { type: 'wood' | 'stone' | 'food'; workers: number; level: number }[] = enabledBuildings.map(b => ({
+    const assignments: { type: 'wood' | 'stone' | 'food' | 'iron'; workers: number; level: number }[] = enabledBuildings.map(b => ({
       type: b.type,
       workers: b.type === 'food' ? farmWorkers : 0, // Farm starts with its emergency worker
       level: b.level,
@@ -3107,8 +3480,9 @@ export default function ResourceVillageUI() {
       if (a.type === 'wood') setLumberMill(b => ({ ...b, workers: a.workers }));
       if (a.type === 'stone') setQuarry(b => ({ ...b, workers: a.workers }));
       if (a.type === 'food') setFarm(b => ({ ...b, workers: a.workers }));
+      if (a.type === 'iron') setIronMine(b => ({ ...b, workers: a.workers }));
     });
-  }, [population, lumberMill.level, lumberMill.enabled, quarry.level, quarry.enabled, farm.level, farm.enabled]);
+  }, [population, lumberMill.level, lumberMill.enabled, quarry.level, quarry.enabled, farm.level, farm.enabled, ironMine.level, ironMine.enabled]);
 
   // === Production Bonuses ===
   const happinessProductionBonus = useMemo(() => {
@@ -3139,6 +3513,13 @@ export default function ResourceVillageUI() {
     return baseRate * happinessProductionBonus;
   }, [farm.level, farm.workers, farm.enabled, happinessProductionBonus]);
 
+  const ironRate = useMemo(() => {
+    if (!ironMine.enabled || ironMine.workers === 0) return 0;
+    const effectiveLevel = Math.min(ironMine.level, ironMine.workers);
+    const baseRate = getProgression("iron", effectiveLevel, "production");
+    return baseRate * happinessProductionBonus;
+  }, [ironMine.level, ironMine.workers, ironMine.enabled, happinessProductionBonus]);
+
   // === Food consumption ===
   const foodConsumption = useMemo(() => population, [population]); // 1 food per worker per second
   const netFoodRate = useMemo(() => foodRate - foodConsumption, [foodRate, foodConsumption]);
@@ -3166,6 +3547,7 @@ export default function ResourceVillageUI() {
   const lumberCap = useMemo(() => getProgression("wood", lumberMill.level, "capacity"), [lumberMill.level]);
   const stoneCap  = useMemo(() => getProgression("stone", quarry.level, "capacity"), [quarry.level]);
   const foodCap   = useMemo(() => getProgression("food", farm.level, "capacity"), [farm.level]);
+  const ironCap   = useMemo(() => getProgression("iron", ironMine.level, "capacity"), [ironMine.level]);
 
   // === Gold Income Calculation ===
   // Gold income scales with population, with 50 population as the reference point
@@ -3203,6 +3585,7 @@ export default function ResourceVillageUI() {
       // production fill
       setLumberMill((b) => ({ ...b, stored: Math.min(lumberCap, b.stored + lumberRate) }));
       setQuarry((b) => ({ ...b, stored: Math.min(stoneCap,  b.stored + stoneRate) }));
+      setIronMine((b) => ({ ...b, stored: Math.min(ironCap, b.stored + ironRate) }));
       
       // Food production and consumption
       setFarm((b) => {
@@ -3337,32 +3720,63 @@ export default function ResourceVillageUI() {
               const losses = calculateBannerLosses(bannerWithSquads, battleResult);
               const updatedBanner = distributeLossesToBanner(bannerWithSquads, losses);
               
+              // Check if banner is destroyed (0 troops remaining)
+              const totalTroops = updatedBanner.squads.reduce((sum, squad) => sum + squad.currentSize, 0);
+              const bannerStatus = totalTroops === 0 ? 'destroyed' : 'ready';
+              
               // Update banner in state with losses applied
               setBanners((bs) => bs.map((b) => 
-                b.id === bannerWithSquads.id ? { ...updatedBanner, status: 'ready' } : 
+                b.id === bannerWithSquads.id ? { ...updatedBanner, status: bannerStatus } : 
                 m.deployed.includes(b.id) ? { ...b, status: 'ready' } : b
               ));
               
               // Show battle report
               setBattleReport({ missionId: m.id, result: battleResult });
+              
+              // Update leaderboard
+              if (battleResult) {
+                const enemyUnitsKilled = battleResult.enemyInitial.total - battleResult.enemyFinal.total;
+                const isVictory = battleResult.winner === 'player';
+                const leaderboardBattleResult: LeaderboardBattleResult = {
+                  enemyUnitsKilled,
+                  isVictory,
+                  playerId: REAL_PLAYER_ID,
+                  playerName: REAL_PLAYER_NAME,
+                  faction: REAL_PLAYER_FACTION,
+                };
+                setLeaderboard(prev => updateLeaderboardFromBattleResult(prev, leaderboardBattleResult));
+              }
             }
           } else {
-            // No combat, just bring banners back
-            setBanners((bs) => bs.map((b) => m.deployed.includes(b.id) ? { ...b, status: 'ready' } : b));
+            // No combat, just bring banners back (preserve destroyed status)
+            setBanners((bs) => bs.map((b) => 
+              m.deployed.includes(b.id) && b.status !== 'destroyed' 
+                ? { ...b, status: 'ready' } 
+                : b
+            ));
           }
           
-          // Calculate rewards based on mission difficulty
-          const enemyTotal = m.enemyComposition ? m.enemyComposition.warrior + m.enemyComposition.archer : 0;
-          // For non-combat missions, give a small base reward
-          const baseGold = enemyTotal > 0 ? Math.max(1, Math.floor(enemyTotal * 2)) : 1;
-          const rewards = {
-            gold: baseGold,
-            wood: enemyTotal > 0 ? Math.floor(enemyTotal * 0.5) : 0,
-            stone: enemyTotal > 0 ? Math.floor(enemyTotal * 0.3) : 0
-          };
+          // Check if player won the battle
+          const isVictory = battleResult && battleResult.winner === 'player';
           
-          missionsChanged = true;
-          return { ...m, status: 'complete', elapsed: m.duration, deployed: [], battleResult, rewards };
+          if (isVictory) {
+            // Player won - calculate rewards and set to pending
+            const enemyTotal = m.enemyComposition ? m.enemyComposition.warrior + m.enemyComposition.archer : 0;
+            // For non-combat missions, give a small base reward
+            const baseGold = enemyTotal > 0 ? Math.max(1, Math.floor(enemyTotal * 2)) : 1;
+            const rewards = {
+              gold: baseGold,
+              wood: enemyTotal > 0 ? Math.floor(enemyTotal * 0.5) : 0,
+              stone: enemyTotal > 0 ? Math.floor(enemyTotal * 0.3) : 0
+            };
+            
+            missionsChanged = true;
+            return { ...m, status: 'completedRewardsPending', elapsed: m.duration, deployed: [], battleResult, rewards };
+          } else {
+            // Player lost - no rewards, mission becomes available for retry
+            missionsChanged = true;
+            return { ...m, status: 'available', elapsed: m.duration, deployed: [], battleResult, rewards: undefined, rewardTier: undefined };
+          }
         }
         missionsChanged = true;
         return { ...m, elapsed };
@@ -3626,17 +4040,19 @@ export default function ResourceVillageUI() {
   };
 
   // === Collection ===
-  function collect(from: "wood" | "stone" | "food") {
+  function collect(from: "wood" | "stone" | "food" | "iron") {
     setWarehouse((w) => {
       const clone = { ...w } as WarehouseState;
       if (from === "wood") clone.wood += Math.min(lumberMill.stored, warehouseFree.wood);
       if (from === "stone") clone.stone += Math.min(quarry.stored, warehouseFree.stone);
       if (from === "food") clone.food += Math.min(farm.stored, warehouseFree.food);
+      if (from === "iron") clone.iron += Math.min(ironMine.stored, warehouseFree.iron);
       return clone;
     });
     if (from === "wood") setLumberMill((b) => ({ ...b, stored: 0 }));
     if (from === "stone") setQuarry((b) => ({ ...b, stored: 0 }));
     if (from === "food") setFarm((b) => ({ ...b, stored: 0 }));
+    if (from === "iron") setIronMine((b) => ({ ...b, stored: 0 }));
   }
 
   function collectAll() {
@@ -3645,19 +4061,21 @@ export default function ResourceVillageUI() {
       wood: w.wood + Math.min(lumberMill.stored, warehouseFree.wood),
       stone: w.stone + Math.min(quarry.stored, warehouseFree.stone),
       food: w.food + Math.min(farm.stored, warehouseFree.food),
+      iron: w.iron + Math.min(ironMine.stored, warehouseFree.iron),
     }));
     setLumberMill((b) => ({ ...b, stored: 0 }));
     setQuarry((b) => ({ ...b, stored: 0 }));
     setFarm((b) => ({ ...b, stored: 0 }));
+    setIronMine((b) => ({ ...b, stored: 0 }));
   }
 
   // === Upgrade flows with confirmation ===
   const [pendingUpgrade, setPendingUpgrade] = useState<
     | null
-    | { res: "wood" | "stone" | "food" | "warehouse" | "house" | "townhall" | "barracks" | "tavern"; from: number; to: number; cost: { wood: number; stone: number } }
+    | { res: "wood" | "stone" | "food" | "iron" | "warehouse" | "house" | "townhall" | "barracks" | "tavern"; from: number; to: number; cost: { wood: number; stone: number } }
   >(null);
 
-  function requestUpgrade(res: "wood" | "stone" | "food" | "warehouse" | "house", currentLevel: number) {
+  function requestUpgrade(res: "wood" | "stone" | "food" | "iron" | "warehouse" | "house", currentLevel: number) {
     if (res === "warehouse") {
       const to = currentLevel + 1;
       const c = getWarehouseCost(to);
@@ -3753,6 +4171,7 @@ export default function ResourceVillageUI() {
     if (res === "wood") setLumberMill((b) => ({ ...b, level: to, stored: Math.min(b.stored, getProgression("wood", to, "capacity")), workers: b.enabled ? Math.min(to, b.workers) : 0 }));
     if (res === "stone") setQuarry((b) => ({ ...b, level: to, stored: Math.min(b.stored, getProgression("stone", to, "capacity")), workers: b.enabled ? Math.min(to, b.workers) : 0 }));
     if (res === "food") setFarm((b) => ({ ...b, level: to, stored: Math.min(b.stored, getProgression("food", to, "capacity")), workers: b.enabled ? Math.min(to, b.workers) : 0 }));
+    if (res === "iron") setIronMine((b) => ({ ...b, level: to, stored: Math.min(b.stored, getProgression("iron", to, "capacity")), workers: b.enabled ? Math.min(to, b.workers) : 0 }));
     setPendingUpgrade(null);
     saveGame(); // Save after building upgrade
   }
@@ -3760,12 +4179,15 @@ export default function ResourceVillageUI() {
   function cancelUpgrade() { setPendingUpgrade(null); }
 
   // === Building enable/disable ===
-  function toggleBuilding(building: 'wood' | 'stone' | 'food') {
+  function toggleBuilding(building: 'wood' | 'stone' | 'food' | 'iron') {
     if (building === 'wood') {
       setLumberMill(b => ({ ...b, enabled: !b.enabled, workers: 0 })); // Workers will be reassigned by useEffect
     }
     if (building === 'stone') {
       setQuarry(b => ({ ...b, enabled: !b.enabled, workers: 0 })); // Workers will be reassigned by useEffect
+    }
+    if (building === 'iron') {
+      setIronMine(b => ({ ...b, enabled: !b.enabled, workers: 0 })); // Workers will be reassigned by useEffect
     }
     if (building === 'food') {
       // Emergency mechanic: Prevent disabling farm (population is always >= 1)
@@ -3776,10 +4198,11 @@ export default function ResourceVillageUI() {
   }
 
   // === UI bits ===
-  const RES_META: Record<"wood"|"stone"|"food", { name: string; short: "W"|"S"|"F" }> = {
+  const RES_META: Record<"wood"|"stone"|"food"|"iron", { name: string; short: "W"|"S"|"F"|"I" }> = {
     wood: { name: "Wood", short: "W" },
     stone: { name: "Stone", short: "S" },
     food: { name: "Food", short: "F" },
+    iron: { name: "Iron", short: "I" },
   };
 
   function formatInt(n: number) { return Math.floor(n).toLocaleString(); }
@@ -3988,7 +4411,7 @@ Safe recruits (unassigned people): ${safeRecruits}`;
     toggleDisabled,
   }: {
     name: string;
-    res: "wood" | "stone" | "food";
+    res: "wood" | "stone" | "food" | "iron";
     level: number;
     rate: number;
     stored: number;
@@ -4605,6 +5028,24 @@ Safe recruits (unassigned people): ${safeRecruits}`;
             </button>
             <button
               onClick={() => {
+                addFactionPoints(1);
+                saveGame();
+              }}
+              className="px-2 py-1 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold"
+            >
+              +1 Faction Point
+            </button>
+            <button
+              onClick={() => {
+                addFactionPoints(10);
+                saveGame();
+              }}
+              className="px-2 py-1 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold"
+            >
+              +10 Faction Points
+            </button>
+            <button
+              onClick={() => {
                 // Shuffle missions: replace current 3 with 3 new random ones
                 const newMissions = selectRandomMissions(3);
                 setMissions(newMissions);
@@ -4665,6 +5106,18 @@ Safe recruits (unassigned people): ${safeRecruits}`;
                 className={`px-2 py-1 text-xs ${mainTab === 'expeditions' ? 'bg-slate-900 text-white' : 'bg-slate-700'}`}
               >
                 Expeditions
+              </button>
+              <button
+                onClick={() => setMainTab('leaderboard')}
+                className={`px-2 py-1 text-xs ${mainTab === 'leaderboard' ? 'bg-slate-900 text-white' : 'bg-slate-700'}`}
+              >
+                Leaderboard
+              </button>
+              <button
+                onClick={() => setMainTab('factions')}
+                className={`px-2 py-1 text-xs ${mainTab === 'factions' ? 'bg-slate-900 text-white' : 'bg-slate-700'}`}
+              >
+                Factions
               </button>
               <button
                 onClick={() => setBlacksmithOpen(true)}
@@ -4753,6 +5206,19 @@ Safe recruits (unassigned people): ${safeRecruits}`;
             workers={quarry.workers}
             requiredWorkers={quarry.level}
             onToggle={() => toggleBuilding('stone')}
+          />
+          <BuildingRow 
+            name="Iron Mine" 
+            res="iron" 
+            level={ironMine.level} 
+            rate={ironRate} 
+            stored={ironMine.stored} 
+            cap={ironCap} 
+            onCollect={() => collect("iron")}
+            enabled={ironMine.enabled}
+            workers={ironMine.workers}
+            requiredWorkers={ironMine.level}
+            onToggle={() => toggleBuilding('iron')}
           />
           <BuildingRow 
             name="Farm" 
@@ -4915,15 +5381,33 @@ Safe recruits (unassigned people): ${safeRecruits}`;
                   {banners.filter(b => b.type === 'mercenary').length === 0 ? (
                     <div className="text-xs text-slate-500">No mercenary banners stationed.</div>
                   ) : (
-                    banners.filter(b => b.type === 'mercenary').map((b) => (
-                    <div key={b.id} className="rounded-lg border border-slate-700 bg-slate-800 p-3 grid grid-cols-1 md:grid-cols-3 gap-2 items-center relative">
-                      <button
-                        onClick={() => setDeleteBannerModal(b.id)}
-                        className="absolute top-2 right-2 w-5 h-5 rounded-full bg-red-600 hover:bg-red-700 text-white text-xs flex items-center justify-center font-bold"
-                        title="Dismiss banner (no population returned)"
-                      >
-                        ×
-                      </button>
+                    <div className="space-y-2">
+                      {banners.filter(b => b.type === 'mercenary').map((b) => {
+                        const isDestroyed = b.status === 'destroyed';
+                        return (
+                      <div key={b.id} className={`rounded-lg border p-3 grid grid-cols-1 md:grid-cols-3 gap-2 items-center relative ${
+                        isDestroyed ? 'border-red-600 bg-red-900/20 opacity-75' : 'border-slate-700 bg-slate-800'
+                      }`}>
+                      {isDestroyed ? (
+                        <button
+                          onClick={() => {
+                            setBanners((bs) => bs.filter(banner => banner.id !== b.id));
+                            saveGame();
+                          }}
+                          className="absolute top-2 right-2 px-2 py-1 rounded bg-red-600 hover:bg-red-700 text-white text-xs font-semibold"
+                          title="Dismiss destroyed banner"
+                        >
+                          Dismiss
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => setDeleteBannerModal(b.id)}
+                          className="absolute top-2 right-2 w-5 h-5 rounded-full bg-red-600 hover:bg-red-700 text-white text-xs flex items-center justify-center font-bold"
+                          title="Dismiss banner (no population returned)"
+                        >
+                          ×
+                        </button>
+                      )}
                       <div className="flex items-center gap-2">
                         {editingBannerName === b.id ? (
                           <div className="flex items-center gap-1 flex-1">
@@ -4957,22 +5441,31 @@ Safe recruits (unassigned people): ${safeRecruits}`;
                           </div>
                         ) : (
                           <div className="flex items-center gap-1 flex-1">
-                            <span className="font-semibold text-sm">{b.name}</span>
-                            <button
-                              onClick={() => setEditingBannerName(b.id)}
-                              className="text-slate-400 hover:text-slate-300 text-xs"
-                              title="Edit banner name"
-                            >
-                              ✏️
-                            </button>
-                            {b.customNamed && (
-                              <button
-                                onClick={() => resetBannerName(b.id)}
-                                className="px-1.5 py-0.5 text-xs bg-slate-600 hover:bg-slate-500 text-white rounded"
-                                title="Reset to auto-generated name"
-                              >
-                                Reset
-                              </button>
+                            <span className={`font-semibold text-sm ${isDestroyed ? 'text-red-300' : ''}`}>{b.name}</span>
+                            {isDestroyed && (
+                              <span className="px-2 py-0.5 bg-red-900 text-red-200 text-xs font-semibold rounded">
+                                Banner destroyed in last battle
+                              </span>
+                            )}
+                            {!isDestroyed && (
+                              <>
+                                <button
+                                  onClick={() => setEditingBannerName(b.id)}
+                                  className="text-slate-400 hover:text-slate-300 text-xs"
+                                  title="Edit banner name"
+                                >
+                                  ✏️
+                                </button>
+                                {b.customNamed && (
+                                  <button
+                                    onClick={() => resetBannerName(b.id)}
+                                    className="px-1.5 py-0.5 text-xs bg-slate-600 hover:bg-slate-500 text-white rounded"
+                                    title="Reset to auto-generated name"
+                                  >
+                                    Reset
+                                  </button>
+                                )}
+                              </>
                             )}
                           </div>
                         )}
@@ -5011,7 +5504,7 @@ Safe recruits (unassigned people): ${safeRecruits}`;
                                     ⏳
                                   </span>
                                 )}
-                                {needsReinforcement && !hasActiveReinforcement && (
+                                {needsReinforcement && !hasActiveReinforcement && !isDestroyed && (
                                   <button
                                     onClick={(e) => {
                                       e.stopPropagation();
@@ -5029,88 +5522,109 @@ Safe recruits (unassigned people): ${safeRecruits}`;
                         })()}
                       </div>
                       <div className="justify-self-end w-full md:w-64 flex flex-col items-end gap-2">
-                        {(() => {
-                          // Calculate button state
-                          let displaySquads = b.squads;
-                          if (!displaySquads || displaySquads.length === 0) {
-                            const { squads } = initializeSquadsFromUnits(b.units, squadSeqRef.current);
-                            displaySquads = squads;
-                          }
-                          
-                          // Calculate refill cost (1 gold per missing soldier)
-                          const refillCost = displaySquads.reduce((sum, squad) => {
-                            return sum + (squad.maxSize - squad.currentSize);
-                          }, 0);
-                          
-                          // Determine button state (only refill, no hiring)
-                          const hasLosses = refillCost > 0;
-                          const hasEnoughGold = warehouse.gold >= refillCost;
-                          
-                          // State A: No losses (all squads full)
-                          if (!hasLosses) {
-                            return (
-                              <button
-                                disabled
-                                className="px-3 py-1.5 rounded text-xs bg-slate-600 text-slate-400 cursor-not-allowed"
-                                title="Banner at full strength"
-                              >
-                                Reinforce
-                              </button>
-                            );
-                          }
-                          
-                          // State B: Losses present and enough gold
-                          if (hasLosses && hasEnoughGold) {
-                            return (
-                              <button
-                                onClick={() => {
-                                  if (!barracks) return;
-                                  setHireAndRefillModal({
-                                    bannerId: b.id,
-                                    hireCost: 0,
-                                    refillCost,
-                                    totalCost: refillCost,
-                                    bannerName: b.name
-                                  });
-                                }}
-                                className="px-3 py-1.5 rounded text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
-                                title="Reinforce this banner"
-                              >
-                                Reinforce
-                              </button>
-                            );
-                          }
-                          
-                          // State C: Losses present but NOT enough gold
-                          return (
-                            <button
-                              onClick={() => {
-                                if (!barracks) return;
-                                setHireAndRefillModal({
-                                  bannerId: b.id,
-                                  hireCost: 0,
-                                  refillCost,
-                                  totalCost: refillCost,
-                                  bannerName: b.name
-                                });
-                              }}
-                              className="px-3 py-1.5 rounded text-xs bg-slate-700 hover:bg-slate-600 text-white"
-                              title="Not enough gold to fully reinforce"
-                            >
-                              Reinforce
-                            </button>
-                          );
-                        })()}
-                        {b.status === 'ready' && (
-                          <div className="text-emerald-600 text-xs font-semibold">Ready</div>
+                        {isDestroyed ? (
+                          <div className="text-red-400 text-xs font-semibold opacity-50">Destroyed</div>
+                        ) : (
+                          <>
+                            {(() => {
+                              // Guard: Don't allow reinforcing destroyed banners
+                              if (isDestroyed) {
+                                return (
+                                  <button
+                                    disabled
+                                    className="px-3 py-1.5 rounded text-xs bg-slate-600 text-slate-400 cursor-not-allowed opacity-50"
+                                    title="Banner destroyed - cannot reinforce"
+                                  >
+                                    Reinforce
+                                  </button>
+                                );
+                              }
+                              
+                              // Calculate button state
+                              let displaySquads = b.squads;
+                              if (!displaySquads || displaySquads.length === 0) {
+                                const { squads } = initializeSquadsFromUnits(b.units, squadSeqRef.current);
+                                displaySquads = squads;
+                              }
+                              
+                              // Calculate refill cost (1 gold per missing soldier)
+                              const refillCost = displaySquads.reduce((sum, squad) => {
+                                return sum + (squad.maxSize - squad.currentSize);
+                              }, 0);
+                              
+                              // Determine button state (only refill, no hiring)
+                              const hasLosses = refillCost > 0;
+                              const hasEnoughGold = warehouse.gold >= refillCost;
+                              
+                              // State A: No losses (all squads full)
+                              if (!hasLosses) {
+                                return (
+                                  <button
+                                    disabled
+                                    className="px-3 py-1.5 rounded text-xs bg-slate-600 text-slate-400 cursor-not-allowed"
+                                    title="Banner at full strength"
+                                  >
+                                    Reinforce
+                                  </button>
+                                );
+                              }
+                              
+                              // State B: Losses present and enough gold
+                              if (hasLosses && hasEnoughGold) {
+                                return (
+                                  <button
+                                    onClick={() => {
+                                      if (!barracks || isDestroyed) return;
+                                      setHireAndRefillModal({
+                                        bannerId: b.id,
+                                        hireCost: 0,
+                                        refillCost,
+                                        totalCost: refillCost,
+                                        bannerName: b.name
+                                      });
+                                    }}
+                                    className="px-3 py-1.5 rounded text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
+                                    title="Reinforce this banner"
+                                  >
+                                    Reinforce
+                                  </button>
+                                );
+                              }
+                              
+                              // State C: Losses present but NOT enough gold
+                              return (
+                                <button
+                                  onClick={() => {
+                                    if (!barracks || isDestroyed) return;
+                                    setHireAndRefillModal({
+                                      bannerId: b.id,
+                                      hireCost: 0,
+                                      refillCost,
+                                      totalCost: refillCost,
+                                      bannerName: b.name
+                                    });
+                                  }}
+                                  className="px-3 py-1.5 rounded text-xs bg-slate-700 hover:bg-slate-600 text-white"
+                                  title="Not enough gold to fully reinforce"
+                                >
+                                  Reinforce
+                                </button>
+                              );
+                            })()}
+                            {b.status === 'ready' && !isDestroyed && (
+                              <div className="text-emerald-600 text-xs font-semibold">Ready</div>
+                            )}
+                            {b.status === 'deployed' && !isDestroyed && (
+                              <div className="text-amber-500 text-xs font-semibold">Deployed</div>
+                            )}
+                          </>
                         )}
-                        {b.status === 'deployed' && (
-                          <div className="text-amber-500 text-xs font-semibold">Deployed</div>
-                        )}
+                        </div>
                       </div>
+                      );
+                      })}
                     </div>
-                  ))
-                )}
+                  )}
                 </div>
               )}
             </div>
@@ -5207,15 +5721,32 @@ Safe recruits (unassigned people): ${safeRecruits}`;
                 <div className="text-xs text-slate-500">No banners available yet.</div>
             ) : (
               <div className="space-y-2">
-                  {banners.filter(b => b.type === 'regular').map((b) => (
-                  <div key={b.id} className="rounded-lg border border-slate-700 bg-slate-800 p-3 grid grid-cols-1 md:grid-cols-3 gap-2 items-center relative">
-                    <button
-                      onClick={() => deleteBanner(b.id)}
-                      className="absolute top-2 right-2 w-5 h-5 rounded-full bg-red-600 hover:bg-red-700 text-white text-xs flex items-center justify-center font-bold"
-                      title="Delete banner (returns recruited population)"
-                    >
-                      ×
-                    </button>
+                  {banners.filter(b => b.type === 'regular').map((b) => {
+                    const isDestroyed = b.status === 'destroyed';
+                    return (
+                  <div key={b.id} className={`rounded-lg border p-3 grid grid-cols-1 md:grid-cols-3 gap-2 items-center relative ${
+                    isDestroyed ? 'border-red-600 bg-red-900/20 opacity-75' : 'border-slate-700 bg-slate-800'
+                  }`}>
+                    {isDestroyed ? (
+                      <button
+                        onClick={() => {
+                          setBanners((bs) => bs.filter(banner => banner.id !== b.id));
+                          saveGame();
+                        }}
+                        className="absolute top-2 right-2 px-2 py-1 rounded bg-red-600 hover:bg-red-700 text-white text-xs font-semibold"
+                        title="Dismiss destroyed banner"
+                      >
+                        Dismiss
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => deleteBanner(b.id)}
+                        className="absolute top-2 right-2 w-5 h-5 rounded-full bg-red-600 hover:bg-red-700 text-white text-xs flex items-center justify-center font-bold"
+                        title="Delete banner (returns recruited population)"
+                      >
+                        ×
+                      </button>
+                    )}
                     <div className="flex items-center gap-2">
                       {editingBannerName === b.id ? (
                         <div className="flex items-center gap-1 flex-1">
@@ -5249,22 +5780,31 @@ Safe recruits (unassigned people): ${safeRecruits}`;
                         </div>
                       ) : (
                         <div className="flex items-center gap-1 flex-1">
-                          <span className="font-semibold text-sm">{b.name}</span>
-                          <button
-                            onClick={() => setEditingBannerName(b.id)}
-                            className="text-slate-400 hover:text-slate-300 text-xs"
-                            title="Edit banner name"
-                          >
-                            ✏️
-                          </button>
-                          {b.customNamed && (
-                            <button
-                              onClick={() => resetBannerName(b.id)}
-                              className="px-1.5 py-0.5 text-xs bg-slate-600 hover:bg-slate-500 text-white rounded"
-                              title="Reset to auto-generated name"
-                            >
-                              Reset
-                            </button>
+                          <span className={`font-semibold text-sm ${isDestroyed ? 'text-red-300' : ''}`}>{b.name}</span>
+                          {isDestroyed && (
+                            <span className="px-2 py-0.5 bg-red-900 text-red-200 text-xs font-semibold rounded">
+                              Banner destroyed in last battle
+                            </span>
+                          )}
+                          {!isDestroyed && (
+                            <>
+                              <button
+                                onClick={() => setEditingBannerName(b.id)}
+                                className="text-slate-400 hover:text-slate-300 text-xs"
+                                title="Edit banner name"
+                              >
+                                ✏️
+                              </button>
+                              {b.customNamed && (
+                                <button
+                                  onClick={() => resetBannerName(b.id)}
+                                  className="px-1.5 py-0.5 text-xs bg-slate-600 hover:bg-slate-500 text-white rounded"
+                                  title="Reset to auto-generated name"
+                                >
+                                  Reset
+                                </button>
+                              )}
+                            </>
                           )}
                         </div>
                       )}
@@ -5303,7 +5843,7 @@ Safe recruits (unassigned people): ${safeRecruits}`;
                                   ⏳
                                 </span>
                               )}
-                              {needsReinforcement && !hasActiveReinforcement && (
+                              {needsReinforcement && !hasActiveReinforcement && !isDestroyed && (
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
@@ -5321,7 +5861,9 @@ Safe recruits (unassigned people): ${safeRecruits}`;
                       })()}
                     </div>
                     <div className="justify-self-end w-full md:w-64">
-                      {b.status === 'idle' && (
+                      {isDestroyed ? (
+                        <div className="text-red-400 text-xs font-semibold opacity-50">Destroyed</div>
+                      ) : b.status === 'idle' && (
                         <div className="flex items-center gap-2 flex-wrap">
                           {(() => {
                             const maxSlots = barracks ? getMaxTrainingSlots(barracks.level) : 0;
@@ -5369,10 +5911,160 @@ Safe recruits (unassigned people): ${safeRecruits}`;
                       )}
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
+                  );
+                  })}
+                </div>
+              )}
             </div>
+          </div>
+        </section>
+      )}
+
+      {mainTab==='leaderboard' && (
+        <section className="space-y-4">
+          <h2 className="text-sm font-semibold">Kill Score Leaderboard</h2>
+          <LeaderboardUI leaderboard={leaderboard} realPlayerId={REAL_PLAYER_ID} />
+        </section>
+      )}
+
+      {mainTab==='factions' && (
+        <section className="space-y-4">
+          <h2 className="text-lg font-semibold">Factions</h2>
+          
+          {/* FP Summary */}
+          <div className="rounded-xl border border-slate-800 bg-slate-900 p-4 mb-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+              <div>
+                <div className="text-slate-400 text-xs mb-1">Available FP</div>
+                <div className="text-white font-semibold text-lg">{factionState.availableFP}</div>
+              </div>
+              <div>
+                <div className="text-slate-400 text-xs mb-1">Alsus</div>
+                <div className="text-white font-semibold">{factionState.alsusFP} FP ({factionState.alsusUnspentFP} unspent)</div>
+              </div>
+              <div>
+                <div className="text-slate-400 text-xs mb-1">Atrox</div>
+                <div className="text-white font-semibold">{factionState.atroxFP} FP ({factionState.atroxUnspentFP} unspent)</div>
+              </div>
+            </div>
+            
+            {/* Assign FP Buttons */}
+            <div className="mt-4 flex gap-2">
+              <button
+                onClick={() => assignFPToFaction('Alsus', 1)}
+                disabled={factionState.availableFP < 1}
+                className={`px-3 py-1.5 rounded text-sm ${
+                  factionState.availableFP < 1
+                    ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
+                    : 'bg-blue-600 hover:bg-blue-700 text-white'
+                }`}
+              >
+                Assign 1 FP to Alsus
+              </button>
+              <button
+                onClick={() => assignFPToFaction('Atrox', 1)}
+                disabled={factionState.availableFP < 1}
+                className={`px-3 py-1.5 rounded text-sm ${
+                  factionState.availableFP < 1
+                    ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
+                    : 'bg-red-600 hover:bg-red-700 text-white'
+                }`}
+              >
+                Assign 1 FP to Atrox
+              </button>
+            </div>
+          </div>
+
+          {/* Faction Selection */}
+          <div className="flex gap-2 mb-4">
+            <button
+              onClick={() => setSelectedFaction('Alsus')}
+              className={`px-4 py-2 rounded-lg font-semibold ${
+                selectedFaction === 'Alsus'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+              }`}
+            >
+              Alsus
+            </button>
+            <button
+              onClick={() => setSelectedFaction('Atrox')}
+              className={`px-4 py-2 rounded-lg font-semibold ${
+                selectedFaction === 'Atrox'
+                  ? 'bg-red-600 text-white'
+                  : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+              }`}
+            >
+              Atrox
+            </button>
+          </div>
+
+          {/* Perk Trees */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {(() => {
+              const branches = selectedFaction === 'Alsus'
+                ? [
+                    { id: 'Alsus_Tactics' as FactionBranchId, name: 'Magnus War Council', desc: 'Tactics / Army Quality' },
+                    { id: 'Alsus_Lux' as FactionBranchId, name: 'Lux Guardians', desc: 'Defence / Healing / Morale' },
+                    { id: 'Alsus_Crowns' as FactionBranchId, name: 'Pact of Crowns', desc: 'Economy / Stability' },
+                  ]
+                : [
+                    { id: 'Atrox_Blood' as FactionBranchId, name: 'Blood Legions', desc: 'Offence / Aggression' },
+                    { id: 'Atrox_Fortress' as FactionBranchId, name: 'Iron Bastions of Roctium', desc: 'Fortifications / Counter-attack' },
+                    { id: 'Atrox_Spoils' as FactionBranchId, name: 'Spoils of War', desc: 'Raiding / Loot' },
+                  ];
+
+              return branches.map(branch => {
+                const branchPerks = Object.values(factionState.perks)
+                  .filter(p => p.branchId === branch.id)
+                  .sort((a, b) => a.tier - b.tier);
+
+                return (
+                  <div key={branch.id} className="rounded-xl border border-slate-800 bg-slate-900 p-4">
+                    <h3 className="text-sm font-semibold mb-1">{branch.name}</h3>
+                    <p className="text-xs text-slate-400 mb-3">{branch.desc}</p>
+                    <div className="space-y-2">
+                      {branchPerks.map(perk => {
+                        const canUnlock = canUnlockPerk(perk.id);
+                        const unspentFP = selectedFaction === 'Alsus' ? factionState.alsusUnspentFP : factionState.atroxUnspentFP;
+                        
+                        return (
+                          <div
+                            key={perk.id}
+                            className={`rounded-lg border p-2 ${
+                              perk.unlocked
+                                ? 'border-emerald-600 bg-emerald-900/20'
+                                : canUnlock
+                                ? 'border-slate-600 bg-slate-800 cursor-pointer hover:bg-slate-700'
+                                : 'border-slate-700 bg-slate-800/50 opacity-60'
+                            }`}
+                            onClick={() => {
+                              if (!perk.unlocked && canUnlock) {
+                                unlockPerk(perk.id);
+                                saveGame();
+                              }
+                            }}
+                          >
+                            <div className="flex items-center justify-between mb-1">
+                              <div className="text-xs font-semibold">{perk.name}</div>
+                              <div className="text-xs text-slate-400">Tier {perk.tier}</div>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <div className="text-xs text-slate-400">Cost: {perk.costFP} FP</div>
+                              {perk.unlocked ? (
+                                <div className="text-xs text-emerald-400">✓ Unlocked</div>
+                              ) : !canUnlock && unspentFP < perk.costFP ? (
+                                <div className="text-xs text-red-400">Not enough Faction Points assigned to {selectedFaction}.</div>
+                              ) : null}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              });
+            })()}
           </div>
         </section>
       )}
@@ -5384,11 +6076,11 @@ Safe recruits (unassigned people): ${safeRecruits}`;
             {/* Left: ready banners info panel */}
             <div className="md:col-span-1 rounded-xl border border-slate-800 bg-slate-900 p-3">
               <div className="text-sm font-semibold mb-2">Ready Banners</div>
-              {banners.filter(b=>b.status==='ready').length===0 ? (
+              {banners.filter(b=>b.status==='ready' && b.status!=='destroyed').length===0 ? (
                 <div className="text-xs text-slate-500">No ready banners.</div>
               ) : (
                 <div className="space-y-2">
-                  {banners.filter(b=>b.status==='ready').map((b)=>{
+                  {banners.filter(b=>b.status==='ready' && b.status!=='destroyed').map((b)=>{
                     // Check if this banner is assigned to any mission
                     const assignedMission = missions.find(m => m.status === 'available' && m.staged.includes(b.id));
                     const isAssigned = assignedMission !== undefined;
@@ -5442,7 +6134,7 @@ Safe recruits (unassigned people): ${safeRecruits}`;
             {/* Right: missions list */}
             <div className="md:col-span-2 space-y-3">
               {missions.map((m)=>{
-                const readyBanners = banners.filter(b => b.status === 'ready');
+                const readyBanners = banners.filter(b => b.status === 'ready' && b.status !== 'destroyed');
                 const hasReadyBanners = readyBanners.length > 0;
                 const assignedBannerId = m.staged.length > 0 ? m.staged[0] : null;
                 const assignedBanner = assignedBannerId ? banners.find(b => b.id === assignedBannerId) : null;
@@ -5456,18 +6148,43 @@ Safe recruits (unassigned people): ${safeRecruits}`;
                 
                 // Determine mission state
                 const isReady = m.status === 'available' && !isOnCooldown;
-                const isCompletedRewardPending = m.status === 'complete';
+                const isCompletedRewardPending = m.status === 'completedRewardsPending';
+                const isCompletedRewardsClaimed = m.status === 'completedRewardsClaimed';
+                const isFailed = m.status === 'available' && m.battleResult && m.battleResult.winner !== 'player';
                 
                 return (
-                  <div key={m.id} className="rounded-xl border border-slate-800 bg-slate-900 p-3">
+                  <div key={m.id} className={`rounded-xl border ${m.isNew ? 'border-red-500' : 'border-slate-800'} bg-slate-900 p-3`}>
                     <div className="flex items-center justify-between">
-                      <div className="font-semibold">{m.name}</div>
                       <div className="flex items-center gap-2">
+                        <div className="font-semibold">{m.name}</div>
+                        {isCompletedRewardsClaimed && (
+                          <span className="px-2 py-0.5 bg-emerald-900 text-emerald-200 text-xs font-semibold rounded">
+                            Completed
+                          </span>
+                        )}
+                        {isFailed && (
+                          <span className="px-2 py-0.5 bg-red-900 text-red-200 text-xs font-semibold rounded">
+                            Failed
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {m.isNew && (
+                          <div className="px-2 py-0.5 bg-red-600 text-white text-xs font-bold rounded">
+                            NEW!
+                          </div>
+                        )}
                         {isReady && (
                           <>
                             {!assignedBanner ? (
                               <button 
                                 onClick={() => {
+                                  // Clear NEW flag when interacting with mission
+                                  if (m.isNew) {
+                                    setMissions((ms) => ms.map((mission) => 
+                                      mission.id === m.id ? { ...mission, isNew: false } : mission
+                                    ));
+                                  }
                                   // Auto-select if only one banner
                                   if (readyBanners.length === 1) {
                                     assignBannerToMission(m.id, readyBanners[0].id);
@@ -5487,11 +6204,17 @@ Safe recruits (unassigned people): ${safeRecruits}`;
                               </button>
                             ) : (
                               <>
-                                <button 
-                                  onClick={() => {
-                                    // Open selector to allow changing banner
-                                    setMissionBannerSelector(isSelectorOpen ? null : m.id);
-                                  }}
+                              <button 
+                                onClick={() => {
+                                  // Clear NEW flag when interacting with mission
+                                  if (m.isNew) {
+                                    setMissions((ms) => ms.map((mission) => 
+                                      mission.id === m.id ? { ...mission, isNew: false } : mission
+                                    ));
+                                  }
+                                  // Open selector to allow changing banner
+                                  setMissionBannerSelector(isSelectorOpen ? null : m.id);
+                                }}
                                   disabled={isLoading}
                                   className={`px-3 py-1.5 rounded text-sm ${
                                     isLoading 
@@ -5520,17 +6243,38 @@ Safe recruits (unassigned people): ${safeRecruits}`;
                         {m.status==='running' && (
                           <div className="text-xs text-slate-500">{secsLeft}s left</div>
                         )}
-                        {isCompletedRewardPending && (
+                        {isCompletedRewardPending && hasReport && m.battleResult && (
+                          <button 
+                            onClick={() => {
+                              setBattleReport({ missionId: m.id, result: m.battleResult! });
+                            }}
+                            className="px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-white text-sm"
+                          >
+                            View report
+                          </button>
+                        )}
+                        {isFailed && hasReport && m.battleResult && (
+                          <button 
+                            onClick={() => {
+                              setBattleReport({ missionId: m.id, result: m.battleResult! });
+                            }}
+                            className="px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-white text-sm"
+                            title="View previous battle report"
+                          >
+                            View report
+                          </button>
+                        )}
+                        {isCompletedRewardsClaimed && (
                           <>
-                            <button 
-                              onClick={() => claimMissionReward(m.id)}
-                              className="px-3 py-1.5 rounded bg-amber-500 hover:bg-amber-600 text-white text-sm"
-                            >
-                              Claim Reward
-                            </button>
                             {hasReport && m.battleResult && (
                               <button 
                                 onClick={() => {
+                                  // Clear NEW flag when viewing report
+                                  if (m.isNew) {
+                                    setMissions((ms) => ms.map((mission) => 
+                                      mission.id === m.id ? { ...mission, isNew: false } : mission
+                                    ));
+                                  }
                                   setBattleReport({ missionId: m.id, result: m.battleResult! });
                                 }}
                                 className="px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-white text-sm"
@@ -5538,6 +6282,24 @@ Safe recruits (unassigned people): ${safeRecruits}`;
                                 View report
                               </button>
                             )}
+                            <button
+                              onClick={() => {
+                                // Remove this mission and replace with new one
+                                // Exclude current mission ID and all other mission IDs to ensure we get a truly new mission
+                                const currentIds = missions.map(mission => mission.id);
+                                const newMissions = selectRandomMissions(1, currentIds);
+                                if (newMissions.length > 0) {
+                                  setMissions((ms) => ms.map((mission) => 
+                                    mission.id === m.id ? newMissions[0] : mission
+                                  ));
+                                }
+                                saveGame();
+                              }}
+                              className="px-3 py-1.5 rounded bg-red-600 hover:bg-red-700 text-white text-sm"
+                              title="Remove this completed mission and get a new one"
+                            >
+                              ✕ Close
+                            </button>
                           </>
                         )}
                         {isOnCooldown && (
@@ -5551,6 +6313,19 @@ Safe recruits (unassigned people): ${safeRecruits}`;
                     {m.description && (
                       <div className="mt-2 text-xs text-slate-400 leading-relaxed">
                         {m.description}
+                      </div>
+                    )}
+
+                    {/* Rewards summary for completed missions */}
+                    {isCompletedRewardsClaimed && m.rewardTier && m.rewards && (
+                      <div className="mt-2 text-xs text-amber-300 font-semibold">
+                        Rewards collected: {m.rewardTier}: {[
+                          m.rewards.food ? `${formatInt(m.rewards.food)} Food` : null,
+                          m.rewards.wood ? `${formatInt(m.rewards.wood)} Wood` : null,
+                          m.rewards.stone ? `${formatInt(m.rewards.stone)} Stone` : null,
+                          m.rewards.iron ? `${formatInt(m.rewards.iron)} Iron` : null,
+                          m.rewards.gold ? `${formatInt(m.rewards.gold)} Gold` : null,
+                        ].filter(Boolean).join(', ')}
                       </div>
                     )}
 
@@ -5983,6 +6758,26 @@ Safe recruits (unassigned people): ${safeRecruits}`;
                                     } 
                                   };
                                 }));
+                                
+                                // Update leaderboard from siege battle
+                                if (result) {
+                                  // Calculate enemy units killed (attackers killed)
+                                  const firstRound = result.siegeTimeline[0];
+                                  const lastRound = result.siegeTimeline[result.siegeTimeline.length - 1];
+                                  const enemyUnitsKilled = result.initialAttackers - lastRound.attackers;
+                                  
+                                  // Determine if victory (fortress holds)
+                                  const isVictory = result.outcome === 'fortress_holds_walls' || result.outcome === 'fortress_holds_inner';
+                                  
+                                  const leaderboardBattleResult: LeaderboardBattleResult = {
+                                    enemyUnitsKilled,
+                                    isVictory,
+                                    playerId: REAL_PLAYER_ID,
+                                    playerName: REAL_PLAYER_NAME,
+                                    faction: REAL_PLAYER_FACTION,
+                                  };
+                                  setLeaderboard(prev => updateLeaderboardFromBattleResult(prev, leaderboardBattleResult));
+                                }
                                 
                                 // Animate progress bar over BATTLE_PROGRESS_DURATION_MS
                                 const startTime = Date.now();
@@ -6506,6 +7301,13 @@ Safe recruits (unassigned people): ${safeRecruits}`;
                     return;
                   }
                   
+                  // Guard: Don't allow reinforcing destroyed banners
+                  const banner = banners.find(b => b.id === bannerId);
+                  if (!banner || banner.status === 'destroyed') {
+                    setReinforcementModal(null);
+                    return;
+                  }
+                  
                   // Check if this squad already has a reinforcement entry
                   const hasActiveReinforcement = barracks.trainingQueue.some(
                     entry => entry.type === 'reinforcement' && entry.bannerId === bannerId && entry.squadId === squadId
@@ -6584,11 +7386,18 @@ Safe recruits (unassigned people): ${safeRecruits}`;
                     return;
                   }
                   
+                  // Refill all damaged squads in the existing banner
+                  const banner = banners.find(b => b.id === hireAndRefillModal.bannerId);
+                  
+                  // Guard: Don't allow reinforcing destroyed banners
+                  if (!banner || banner.status === 'destroyed') {
+                    setHireAndRefillModal(null);
+                    return;
+                  }
+                  
                   // Deduct gold
                   setWarehouse(w => ({ ...w, gold: w.gold - hireAndRefillModal.totalCost }));
                   
-                  // Refill all damaged squads in the existing banner
-                  const banner = banners.find(b => b.id === hireAndRefillModal.bannerId);
                   if (banner) {
                       let displaySquads = banner.squads;
                       if (!displaySquads || displaySquads.length === 0) {
@@ -6679,7 +7488,20 @@ Safe recruits (unassigned people): ${safeRecruits}`;
           <div className="bg-slate-900 border border-slate-700 rounded-xl p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-2xl font-bold">Battle Report - {missions.find(m => m.id === battleReport.missionId)?.name}</h2>
-              <button onClick={() => setBattleReport(null)} className="text-slate-400 hover:text-white text-2xl">✕</button>
+              <button onClick={() => {
+                const mission = missions.find(m => m.id === battleReport.missionId);
+                // Only show reward popup if player won and rewards haven't been claimed yet
+                const isVictory = battleReport.result.winner === 'player';
+                if (isVictory && mission && mission.status === 'completedRewardsPending' && mission.enemyComposition) {
+                  const enemyTotal = mission.enemyComposition.warrior + mission.enemyComposition.archer;
+                  const { tier, rewards } = generateMissionRewards(enemyTotal);
+                  setBattleReport(null);
+                  setRewardPopup({ missionId: mission.id, tier, rewards });
+                } else {
+                  // Player lost or rewards already claimed - just close
+                  setBattleReport(null);
+                }
+              }} className="text-slate-400 hover:text-white text-2xl">✕</button>
             </div>
             
             <div className="grid grid-cols-2 gap-4 mb-4">
@@ -6798,11 +7620,152 @@ Safe recruits (unassigned people): ${safeRecruits}`;
               </div>
             </div>
             
-            <button 
-              onClick={() => setBattleReport(null)} 
-              className="mt-4 w-full px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg"
+            {(() => {
+              const mission = missions.find(m => m.id === battleReport.missionId);
+              const isCompleted = mission?.status === 'completedRewardsClaimed';
+              const isRewardsPending = mission?.status === 'completedRewardsPending';
+              const isVictory = battleReport.result.winner === 'player';
+              
+              if (isCompleted) {
+                return (
+                  <button 
+                    onClick={() => setBattleReport(null)} 
+                    className="mt-4 w-full px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg font-semibold"
+                  >
+                    Back
+                  </button>
+                );
+              }
+              
+              if (!isVictory) {
+                // Player lost - no rewards, just close button
+                return (
+                  <button 
+                    onClick={() => setBattleReport(null)} 
+                    className="mt-4 w-full px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg font-semibold"
+                  >
+                    Close
+                  </button>
+                );
+              }
+              
+              return (
+                <button 
+                  onClick={() => {
+                    // Only show reward popup if player won and rewards haven't been claimed yet
+                    if (isRewardsPending && mission?.enemyComposition) {
+                      const enemyTotal = mission.enemyComposition.warrior + mission.enemyComposition.archer;
+                      const { tier, rewards } = generateMissionRewards(enemyTotal);
+                      setBattleReport(null);
+                      setRewardPopup({ missionId: mission.id, tier, rewards });
+                    } else {
+                      setBattleReport(null);
+                    }
+                  }} 
+                  className="mt-4 w-full px-4 py-2 bg-emerald-600 hover:bg-emerald-700 rounded-lg font-semibold"
+                >
+                  {isRewardsPending ? 'Continue' : 'Close'}
+                </button>
+              );
+            })()}
+          </div>
+        </div>
+      )}
+
+      {/* Reward Popup Modal */}
+      {rewardPopup && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+          <div className="bg-slate-900 border-2 border-amber-600 rounded-xl p-8 max-w-md w-full mx-4 shadow-2xl">
+            <div className="text-center mb-6">
+              <div className="text-6xl mb-4">{REWARD_TIERS[rewardPopup.tier as RewardTier].icon}</div>
+              <h2 className="text-3xl font-bold text-amber-400 mb-2">
+                {REWARD_TIERS[rewardPopup.tier as RewardTier].name}
+              </h2>
+              <p className="text-slate-300 text-sm">
+                {REWARD_TIERS[rewardPopup.tier as RewardTier].flavor}
+              </p>
+            </div>
+
+            {/* Rewards List */}
+            <div className="bg-slate-800 rounded-lg p-4 mb-6 border border-slate-700">
+              <h3 className="text-sm font-semibold text-slate-300 mb-3">Rewards:</h3>
+              <div className="space-y-2">
+                {rewardPopup.rewards.gold > 0 && (
+                  <div className="flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-2">
+                      <span className="text-yellow-400">💰</span>
+                      <span className="text-slate-300">Gold</span>
+                    </div>
+                    <span className="text-yellow-400 font-semibold">{formatInt(rewardPopup.rewards.gold)}</span>
+                  </div>
+                )}
+                {rewardPopup.rewards.wood > 0 && (
+                  <div className="flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-2">
+                      <span className="text-amber-600">🪵</span>
+                      <span className="text-slate-300">Wood</span>
+                    </div>
+                    <span className="text-amber-400 font-semibold">{formatInt(rewardPopup.rewards.wood)}</span>
+                  </div>
+                )}
+                {rewardPopup.rewards.stone > 0 && (
+                  <div className="flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-2">
+                      <span className="text-slate-400">🪨</span>
+                      <span className="text-slate-300">Stone</span>
+                    </div>
+                    <span className="text-slate-300 font-semibold">{formatInt(rewardPopup.rewards.stone)}</span>
+                  </div>
+                )}
+                {rewardPopup.rewards.food > 0 && (
+                  <div className="flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-2">
+                      <span className="text-green-400">🌾</span>
+                      <span className="text-slate-300">Food</span>
+                    </div>
+                    <span className="text-green-400 font-semibold">{formatInt(rewardPopup.rewards.food)}</span>
+                  </div>
+                )}
+                {rewardPopup.rewards.iron > 0 && (
+                  <div className="flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-2">
+                      <span className="text-gray-400">⚙️</span>
+                      <span className="text-slate-300">Iron</span>
+                    </div>
+                    <span className="text-gray-300 font-semibold">{formatInt(rewardPopup.rewards.iron)}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <button
+              onClick={() => {
+                // Add rewards to warehouse
+                setWarehouse((w) => ({
+                  ...w,
+                  gold: Math.min(warehouseCap.gold, w.gold + (rewardPopup.rewards.gold || 0)),
+                  wood: Math.min(warehouseCap.wood, w.wood + (rewardPopup.rewards.wood || 0)),
+                  stone: Math.min(warehouseCap.stone, w.stone + (rewardPopup.rewards.stone || 0)),
+                  food: Math.min(warehouseCap.food, w.food + (rewardPopup.rewards.food || 0)),
+                  iron: Math.min(warehouseCap.iron, w.iron + (rewardPopup.rewards.iron || 0)),
+                }));
+                
+                // Mark mission as completedRewardsClaimed and store reward tier
+                setMissions((ms) => ms.map((m) => 
+                  m.id === rewardPopup.missionId 
+                    ? { ...m, status: 'completedRewardsClaimed' as const, rewardTier: rewardPopup.tier, rewards: rewardPopup.rewards }
+                    : m
+                ));
+                
+                // Close popup
+                setRewardPopup(null);
+                
+                // Save game after claiming rewards
+                saveGame();
+              }}
+              className="w-full px-6 py-3 bg-emerald-600 hover:bg-emerald-700 rounded-lg font-bold text-lg text-white transition-colors shadow-lg"
             >
-              Close
+              Claim Rewards
             </button>
           </div>
         </div>

@@ -1,5 +1,7 @@
 // Persistence and Offline Progression System
 
+import { createPlaceholderLeaderboard } from './leaderboard';
+
 // ============================================================================
 // GameState - Single source of truth for all game data
 // ============================================================================
@@ -47,6 +49,12 @@ export interface GameState {
     enabled: boolean;
     workers: number;
   };
+  ironMine: {
+    level: number;
+    stored: number;
+    enabled: boolean;
+    workers: number;
+  };
   house: number;
   townHall: {
     level: number;
@@ -85,7 +93,7 @@ export interface GameState {
       maxSize: number;
       currentSize: number;
     }>;
-    status: 'idle' | 'training' | 'ready' | 'deployed';
+    status: 'idle' | 'training' | 'ready' | 'deployed' | 'destroyed';
     reqPop: number;
     recruited: number;
     type: 'regular' | 'mercenary';
@@ -108,7 +116,7 @@ export interface GameState {
     name: string;
     description?: string;
     duration: number;
-    status: 'available' | 'running' | 'complete';
+    status: 'available' | 'running' | 'completedRewardsPending' | 'completedRewardsClaimed' | 'archived';
     staged: number[];
     deployed: number[];
     elapsed: number;
@@ -116,7 +124,9 @@ export interface GameState {
     battleResult?: any;
     startTime?: number; // UTC timestamp when mission started
     rewards?: { gold?: number; wood?: number; stone?: number; food?: number; iron?: number };
+    rewardTier?: string; // Reward tier name (e.g., "Scout's Cache")
     cooldownEndTime?: number; // UTC timestamp when cooldown ends
+    isNew?: boolean; // Flag for NEW! label
   }>;
   
   // Expeditions
@@ -155,8 +165,39 @@ export interface GameState {
   }>;
   
   // UI State (non-critical, but nice to preserve)
-  mainTab: 'production' | 'army' | 'missions' | 'expeditions';
+  mainTab: 'production' | 'army' | 'missions' | 'expeditions' | 'leaderboard' | 'factions';
   armyTab: 'banners';
+  
+  // Leaderboard
+  leaderboard: Array<{
+    playerId: string;
+    playerName: string;
+    faction: 'Alsus' | 'Atrox' | 'Neutral';
+    totalScore: number;
+    totalKills: number;
+    totalVictories: number;
+    rank: number;
+    title: string;
+  }>;
+  
+  // Faction System
+  factionState: {
+    availableFP: number;
+    alsusFP: number;
+    atroxFP: number;
+    alsusUnspentFP: number;
+    atroxUnspentFP: number;
+    perks: Record<string, {
+      id: string;
+      faction: 'Alsus' | 'Atrox';
+      branchId: string;
+      tier: number;
+      costFP: number;
+      unlocked: boolean;
+      name: string;
+      description?: string;
+    }>;
+  };
   
   // Settings/Flags
   tutorialCompleted: boolean;
@@ -186,6 +227,7 @@ export function createDefaultGameState(): GameState {
     lumberMill: { level: 1, stored: 0, enabled: true, workers: 1 },
     quarry: { level: 1, stored: 0, enabled: true, workers: 1 },
     farm: { level: 1, stored: 0, enabled: true, workers: 1 },
+    ironMine: { level: 1, stored: 0, enabled: true, workers: 1 },
     house: 1,
     townHall: { level: 1 },
     barracks: null,
@@ -251,6 +293,17 @@ export function createDefaultGameState(): GameState {
     
     mainTab: 'production',
     armyTab: 'banners',
+    
+    leaderboard: createPlaceholderLeaderboard('REAL PLAYER', 'Alsus'),
+    
+    factionState: {
+      availableFP: 0,
+      alsusFP: 0,
+      atroxFP: 0,
+      alsusUnspentFP: 0,
+      atroxUnspentFP: 0,
+      perks: {}, // Will be initialized in ResourceVillageUI
+    },
     
     tutorialCompleted: false,
     debugFlags: {},
@@ -379,6 +432,9 @@ class PersistenceService {
     sanitized.lumberMill.level = Math.max(1, Math.min(sanitized.lumberMill.level, 100));
     sanitized.quarry.level = Math.max(1, Math.min(sanitized.quarry.level, 100));
     sanitized.farm.level = Math.max(1, Math.min(sanitized.farm.level, 100));
+    if (sanitized.ironMine) {
+      sanitized.ironMine.level = Math.max(1, Math.min(sanitized.ironMine.level, 100));
+    }
     sanitized.house = Math.max(1, Math.min(sanitized.house, 100));
     sanitized.townHall.level = Math.max(1, Math.min(sanitized.townHall.level, 3));
     
@@ -443,6 +499,7 @@ export function simulateOfflineProgression(state: GameState, deltaSeconds: numbe
   const woodRate = getProductionRate('wood', updated.lumberMill.level, updated.lumberMill.enabled, updated.lumberMill.workers);
   const stoneRate = getProductionRate('stone', updated.quarry.level, updated.quarry.enabled, updated.quarry.workers);
   const foodRate = getProductionRate('food', updated.farm.level, updated.farm.enabled, updated.farm.workers);
+  const ironRate = updated.ironMine ? getProductionRate('iron', updated.ironMine.level, updated.ironMine.enabled, updated.ironMine.workers) : 0;
   
   // Calculate population growth
   const netPopChange = calculateNetPopulationChange(updated.tax, updated.happiness);
@@ -473,6 +530,9 @@ export function simulateOfflineProgression(state: GameState, deltaSeconds: numbe
   updated.warehouse.wood = Math.min(warehouseCap, updated.warehouse.wood + (woodRate * simulatedSeconds));
   updated.warehouse.stone = Math.min(warehouseCap, updated.warehouse.stone + (stoneRate * simulatedSeconds));
   updated.warehouse.food = Math.min(warehouseCap, updated.warehouse.food + (foodRate * simulatedSeconds));
+  if (updated.ironMine) {
+    updated.warehouse.iron = Math.min(warehouseCap, updated.warehouse.iron + (ironRate * simulatedSeconds));
+  }
   updated.warehouse.gold = Math.min(warehouseCap, updated.warehouse.gold + (goldIncomePerSecond * simulatedSeconds));
   
   // Apply population growth
@@ -483,10 +543,14 @@ export function simulateOfflineProgression(state: GameState, deltaSeconds: numbe
   const woodCap = getBuildingCapacity('wood', updated.lumberMill.level);
   const stoneCap = getBuildingCapacity('stone', updated.quarry.level);
   const foodCap = getBuildingCapacity('food', updated.farm.level);
-  
+
   updated.lumberMill.stored = Math.min(woodCap, updated.lumberMill.stored + (woodRate * simulatedSeconds));
   updated.quarry.stored = Math.min(stoneCap, updated.quarry.stored + (stoneRate * simulatedSeconds));
   updated.farm.stored = Math.min(foodCap, updated.farm.stored + (foodRate * simulatedSeconds));
+  if (updated.ironMine) {
+    const ironCap = getBuildingCapacity('iron', updated.ironMine.level);
+    updated.ironMine.stored = Math.min(ironCap, updated.ironMine.stored + (ironRate * simulatedSeconds));
+  }
   
   // Progress training queues
   if (updated.barracks) {
@@ -573,7 +637,10 @@ export function simulateOfflineProgression(state: GameState, deltaSeconds: numbe
       newMission.elapsed = elapsed;
       
       if (elapsed >= mission.duration) {
-        newMission.status = 'complete';
+        // Note: Offline simulation doesn't simulate battles, so we can't determine win/loss
+        // For offline completion, assume victory (rewards pending)
+        // In practice, battles are only simulated in real-time, so this is a fallback
+        newMission.status = 'completedRewardsPending';
         newMission.elapsed = mission.duration;
         // Mission completed - banners return to ready
         newMission.deployed.forEach(bannerId => {
@@ -596,13 +663,14 @@ export function simulateOfflineProgression(state: GameState, deltaSeconds: numbe
 }
 
 // Helper functions for offline simulation
-function getProductionRate(resource: 'wood' | 'stone' | 'food', level: number, enabled: boolean, workers: number): number {
+function getProductionRate(resource: 'wood' | 'stone' | 'food' | 'iron', level: number, enabled: boolean, workers: number): number {
   if (!enabled || workers === 0) return 0;
   
   const baseRates = {
     wood: 1,
     stone: 1,
     food: 5,
+    iron: 1, // Same as stone
   };
   
   const base = baseRates[resource];
@@ -612,7 +680,7 @@ function getProductionRate(resource: 'wood' | 'stone' | 'food', level: number, e
   return productionPerWorker * workers;
 }
 
-function getBuildingCapacity(resource: 'wood' | 'stone' | 'food', level: number): number {
+function getBuildingCapacity(resource: 'wood' | 'stone' | 'food' | 'iron', level: number): number {
   const base = 100;
   const l0 = Math.max(0, level - 1);
   return base * Math.pow(1.3, l0);
