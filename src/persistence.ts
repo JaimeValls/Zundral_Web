@@ -11,7 +11,7 @@ export interface GameState {
   version: number;
   lastSaveUtc: number; // UTC timestamp in milliseconds
   totalPlayTime: number; // Total seconds played
-  
+
   // Economy
   warehouse: {
     wood: number;
@@ -22,14 +22,14 @@ export interface GameState {
   };
   warehouseLevel: number;
   skillPoints: number;
-  
+
   // Population
   population: number;
   populationCap: number; // Calculated from house level
   recruitmentMode: 'regular' | 'forced';
   tax: 'very_low' | 'low' | 'normal' | 'high' | 'very_high';
   happiness: number;
-  
+
   // Buildings
   lumberMill: {
     level: number;
@@ -81,7 +81,22 @@ export interface GameState {
     activeFestival: boolean;
     festivalEndTime: number;
   } | null;
-  
+  militaryAcademy: {
+    level: number;
+  } | null;
+  commanders: Array<{
+    id: number;
+    name: string;
+    archetype: 'ranged_specialist' | 'melee_specialist' | 'balanced_leader';
+    rangedAttackBonusPercent: number;
+    meleeAttackBonusPercent: number;
+    assignedBannerId: number | null;
+    level: number;
+    currentXP: number;
+    xpToNextLevel: number;
+  }>;
+  commanderSeq: number;
+
   // Military
   banners: Array<{
     id: number;
@@ -89,7 +104,7 @@ export interface GameState {
     units: string[];
     squads: Array<{
       id: number;
-      type: 'warrior' | 'archer';
+      type: 'warrior' | 'militia' | 'longsword' | 'pikemen' | 'light_cavalry' | 'heavy_cavalry' | 'archer' | 'skirmisher' | 'crossbowmen';
       maxSize: number;
       currentSize: number;
     }>;
@@ -100,6 +115,13 @@ export interface GameState {
     reinforcingSquadId?: number;
     trainingPaused?: boolean;
     customNamed?: boolean;
+    // XP system
+    xp?: number;
+    level?: number;
+    xpCurrentLevel?: number;
+    xpNextLevel?: number;
+    // Commander system
+    commanderId?: number | null;
   }>;
   bannerSeq: number;
   squadSeq: number;
@@ -109,7 +131,7 @@ export interface GameState {
     bannerType: 'regular' | 'mercenary';
     message: string;
   }>;
-  
+
   // Missions
   missions: Array<{
     id: number;
@@ -120,7 +142,7 @@ export interface GameState {
     staged: number[];
     deployed: number[];
     elapsed: number;
-    enemyComposition?: { warrior: number; archer: number };
+    enemyComposition?: any;
     battleResult?: any;
     startTime?: number; // UTC timestamp when mission started
     rewards?: { gold?: number; wood?: number; stone?: number; food?: number; iron?: number };
@@ -128,7 +150,7 @@ export interface GameState {
     cooldownEndTime?: number; // UTC timestamp when cooldown ends
     isNew?: boolean; // Flag for NEW! label
   }>;
-  
+
   // Expeditions
   expeditions: Array<{
     expeditionId: string;
@@ -163,11 +185,11 @@ export interface GameState {
       lastBattle?: any;
     };
   }>;
-  
+
   // UI State (non-critical, but nice to preserve)
-  mainTab: 'production' | 'army' | 'missions' | 'expeditions' | 'leaderboard' | 'factions';
-  armyTab: 'banners';
-  
+  mainTab: 'production' | 'army' | 'missions' | 'expeditions' | 'leaderboard' | 'factions' | 'council';
+  armyTab: 'banners' | 'mercenaries' | 'regular';
+
   // Leaderboard
   leaderboard: Array<{
     playerId: string;
@@ -179,7 +201,7 @@ export interface GameState {
     rank: number;
     title: string;
   }>;
-  
+
   // Faction System
   factionState: {
     availableFP: number;
@@ -198,7 +220,7 @@ export interface GameState {
       description?: string;
     }>;
   };
-  
+
   // Settings/Flags
   tutorialCompleted: boolean;
   debugFlags: Record<string, boolean>;
@@ -213,17 +235,17 @@ export function createDefaultGameState(): GameState {
     version: 1,
     lastSaveUtc: Date.now(),
     totalPlayTime: 0,
-    
+
     warehouse: { wood: 0, stone: 0, food: 0, iron: 0, gold: 0 },
     warehouseLevel: 1,
     skillPoints: 0,
-    
+
     population: 5,
     populationCap: 5,
     recruitmentMode: 'regular',
     tax: 'normal',
     happiness: 50,
-    
+
     lumberMill: { level: 1, stored: 0, enabled: true, workers: 1 },
     quarry: { level: 1, stored: 0, enabled: true, workers: 1 },
     farm: { level: 1, stored: 0, enabled: true, workers: 1 },
@@ -232,12 +254,15 @@ export function createDefaultGameState(): GameState {
     townHall: { level: 1 },
     barracks: null,
     tavern: null,
-    
+    militaryAcademy: null,
+    commanders: [],
+    commanderSeq: 1,
+
     banners: [],
     bannerSeq: 1,
     squadSeq: 1,
     bannerLossNotices: [],
-    
+
     missions: [
       {
         id: 1,
@@ -273,7 +298,7 @@ export function createDefaultGameState(): GameState {
         enemyComposition: { warrior: 50, archer: 10 },
       },
     ],
-    
+
     expeditions: [
       {
         expeditionId: "godonis_mountain_expedition",
@@ -290,12 +315,12 @@ export function createDefaultGameState(): GameState {
         travelProgress: 0,
       },
     ],
-    
+
     mainTab: 'production',
-    armyTab: 'banners',
-    
+    armyTab: 'regular',
+
     leaderboard: createPlaceholderLeaderboard('REAL PLAYER', 'Alsus'),
-    
+
     factionState: {
       availableFP: 0,
       alsusFP: 0,
@@ -304,7 +329,7 @@ export function createDefaultGameState(): GameState {
       atroxUnspentFP: 0,
       perks: {}, // Will be initialized in ResourceVillageUI
     },
-    
+
     tutorialCompleted: false,
     debugFlags: {},
   };
@@ -320,7 +345,7 @@ const AUTOSAVE_INTERVAL_MS = 30000; // 30 seconds
 
 class PersistenceService {
   private autoSaveTimer: number | null = null;
-  
+
   loadState(): GameState | null {
     try {
       const saved = localStorage.getItem(SAVE_KEY);
@@ -328,15 +353,15 @@ class PersistenceService {
         console.log('[PERSISTENCE] No saved state found');
         return null;
       }
-      
+
       const parsed = JSON.parse(saved) as any;
-      
+
       // Remove checksum if present (it's not part of GameState)
       const { _checksum, ...stateWithoutChecksum } = parsed;
-      
+
       // Validate and sanitize loaded state
       const sanitized = this.sanitizeState(stateWithoutChecksum as GameState);
-      
+
       console.log('[PERSISTENCE] State loaded successfully. Last save:', new Date(sanitized.lastSaveUtc).toISOString());
       return sanitized;
     } catch (error) {
@@ -351,25 +376,25 @@ class PersistenceService {
       return null;
     }
   }
-  
+
   saveState(state: GameState): void {
     // Check if localStorage is available
     if (typeof localStorage === 'undefined') {
       console.error('[PERSISTENCE] localStorage is not available, cannot save');
       return;
     }
-    
+
     try {
       // Update metadata
       state.lastSaveUtc = Date.now();
-      
+
       // Sanitize before saving
       const sanitized = this.sanitizeState(state);
-      
+
       // Add checksum for basic tamper detection
       const checksum = this.calculateChecksum(sanitized);
       const stateWithChecksum = { ...sanitized, _checksum: checksum };
-      
+
       localStorage.setItem(SAVE_KEY, JSON.stringify(stateWithChecksum));
       console.log('[PERSISTENCE] State saved at', new Date(state.lastSaveUtc).toISOString());
     } catch (error) {
@@ -380,43 +405,53 @@ class PersistenceService {
       }
     }
   }
-  
+
   resetState(): GameState {
+    // Clear any existing save first
+    try {
+      localStorage.removeItem(SAVE_KEY);
+      console.log('[PERSISTENCE] Cleared existing save before reset');
+    } catch (e) {
+      console.error('[PERSISTENCE] Failed to clear save:', e);
+    }
+
     const defaultState = createDefaultGameState();
+    // Save the default state immediately
     this.saveState(defaultState);
+    console.log('[PERSISTENCE] Reset complete - default state saved with empty banners:', defaultState.banners.length);
     return defaultState;
   }
-  
+
   startAutoSave(saveCallback: () => GameState): void {
     // Clear existing timer
     if (this.autoSaveTimer !== null) {
       clearInterval(this.autoSaveTimer);
     }
-    
+
     // Set up new timer
     this.autoSaveTimer = window.setInterval(() => {
       const state = saveCallback();
       this.saveState(state);
     }, AUTOSAVE_INTERVAL_MS);
-    
+
     // Also save on page unload
     window.addEventListener('beforeunload', () => {
       const state = saveCallback();
       this.saveState(state);
     });
   }
-  
+
   stopAutoSave(): void {
     if (this.autoSaveTimer !== null) {
       clearInterval(this.autoSaveTimer);
       this.autoSaveTimer = null;
     }
   }
-  
+
   // Sanitize state to prevent cheating and fix invalid values
   private sanitizeState(state: GameState): GameState {
     const sanitized = { ...state };
-    
+
     // Cap resources to storage capacity
     const warehouseCap = this.getWarehouseCapacity(sanitized.warehouseLevel);
     sanitized.warehouse.wood = Math.max(0, Math.min(sanitized.warehouse.wood, warehouseCap));
@@ -424,10 +459,10 @@ class PersistenceService {
     sanitized.warehouse.food = Math.max(0, Math.min(sanitized.warehouse.food, warehouseCap));
     sanitized.warehouse.iron = Math.max(0, Math.min(sanitized.warehouse.iron, warehouseCap));
     sanitized.warehouse.gold = Math.max(0, Math.min(sanitized.warehouse.gold, warehouseCap));
-    
+
     // Ensure population is valid
     sanitized.population = Math.max(1, Math.min(sanitized.population, sanitized.populationCap || 999999));
-    
+
     // Ensure building levels are valid
     sanitized.lumberMill.level = Math.max(1, Math.min(sanitized.lumberMill.level, 100));
     sanitized.quarry.level = Math.max(1, Math.min(sanitized.quarry.level, 100));
@@ -437,31 +472,31 @@ class PersistenceService {
     }
     sanitized.house = Math.max(1, Math.min(sanitized.house, 100));
     sanitized.townHall.level = Math.max(1, Math.min(sanitized.townHall.level, 3));
-    
+
     if (sanitized.barracks) {
       sanitized.barracks.level = Math.max(1, Math.min(sanitized.barracks.level, 100));
     }
-    
+
     if (sanitized.tavern) {
       sanitized.tavern.level = Math.max(1, Math.min(sanitized.tavern.level, 100));
     }
-    
+
     // Ensure skill points are non-negative
     sanitized.skillPoints = Math.max(0, sanitized.skillPoints);
-    
+
     // Ensure happiness is in valid range
     sanitized.happiness = Math.max(0, Math.min(100, sanitized.happiness));
-    
+
     return sanitized;
   }
-  
+
   private getWarehouseCapacity(level: number): number {
     // Match the formula from ResourceVillageUI
     const base = 1000;
     const l0 = Math.max(0, level - 1);
     return base * Math.pow(1.3, l0);
   }
-  
+
   private calculateChecksum(state: GameState): string {
     // Simple checksum for basic tamper detection
     const str = JSON.stringify({
@@ -486,34 +521,34 @@ class PersistenceService {
 
 export function simulateOfflineProgression(state: GameState, deltaSeconds: number): GameState {
   const updated = { ...state };
-  
+
   // Cap offline time to max hours
   const maxOfflineSeconds = MAX_OFFLINE_HOURS * 3600;
   const simulatedSeconds = Math.min(deltaSeconds, maxOfflineSeconds);
-  
+
   if (simulatedSeconds <= 0) return updated;
-  
+
   console.log(`[OFFLINE] Simulating ${simulatedSeconds.toFixed(1)} seconds of offline progression`);
-  
+
   // Calculate production rates
   const woodRate = getProductionRate('wood', updated.lumberMill.level, updated.lumberMill.enabled, updated.lumberMill.workers);
   const stoneRate = getProductionRate('stone', updated.quarry.level, updated.quarry.enabled, updated.quarry.workers);
   const foodRate = getProductionRate('food', updated.farm.level, updated.farm.enabled, updated.farm.workers);
   const ironRate = updated.ironMine ? getProductionRate('iron', updated.ironMine.level, updated.ironMine.enabled, updated.ironMine.workers) : 0;
-  
+
   // Calculate population growth
   const netPopChange = calculateNetPopulationChange(updated.tax, updated.happiness);
-  
+
   // Calculate gold income from taxes (scales with population)
   const referencePopulation = 50; // Reference population for gold calculation
   const baseGoldPerSecondAtNormalTax = 1.0; // Base gold/sec at Normal tax with 50 population
-  
+
   // Effective population ensures we never use zero (minimum 1)
   const effectivePopulation = Math.max(1, updated.population);
-  
+
   // Population factor: how much the current population scales the base income
   const populationFactor = effectivePopulation / referencePopulation;
-  
+
   // Tax multiplier
   let taxMultiplier = 1.0;
   if (updated.tax === 'very_low') taxMultiplier = 0.6;
@@ -521,10 +556,10 @@ export function simulateOfflineProgression(state: GameState, deltaSeconds: numbe
   else if (updated.tax === 'normal') taxMultiplier = 1.0;
   else if (updated.tax === 'high') taxMultiplier = 1.25;
   else if (updated.tax === 'very_high') taxMultiplier = 1.5;
-  
+
   // Final formula: base * populationFactor * taxMultiplier
   const goldIncomePerSecond = baseGoldPerSecondAtNormalTax * populationFactor * taxMultiplier;
-  
+
   // Apply production
   const warehouseCap = getWarehouseCapacity(updated.warehouseLevel);
   updated.warehouse.wood = Math.min(warehouseCap, updated.warehouse.wood + (woodRate * simulatedSeconds));
@@ -534,11 +569,11 @@ export function simulateOfflineProgression(state: GameState, deltaSeconds: numbe
     updated.warehouse.iron = Math.min(warehouseCap, updated.warehouse.iron + (ironRate * simulatedSeconds));
   }
   updated.warehouse.gold = Math.min(warehouseCap, updated.warehouse.gold + (goldIncomePerSecond * simulatedSeconds));
-  
+
   // Apply population growth
   const newPopulation = Math.min(updated.populationCap, updated.population + (netPopChange * simulatedSeconds));
   updated.population = Math.max(1, newPopulation);
-  
+
   // Progress building stored resources
   const woodCap = getBuildingCapacity('wood', updated.lumberMill.level);
   const stoneCap = getBuildingCapacity('stone', updated.quarry.level);
@@ -551,13 +586,13 @@ export function simulateOfflineProgression(state: GameState, deltaSeconds: numbe
     const ironCap = getBuildingCapacity('iron', updated.ironMine.level);
     updated.ironMine.stored = Math.min(ironCap, updated.ironMine.stored + (ironRate * simulatedSeconds));
   }
-  
+
   // Progress training queues
   if (updated.barracks) {
     updated.barracks = { ...updated.barracks };
     updated.barracks.trainingQueue = updated.barracks.trainingQueue.map(entry => {
       const newEntry = { ...entry };
-      
+
       if (entry.type === 'mercenary' && entry.status === 'arriving') {
         newEntry.elapsedTime += simulatedSeconds;
         if (entry.arrivalTime && newEntry.elapsedTime >= entry.arrivalTime) {
@@ -578,29 +613,29 @@ export function simulateOfflineProgression(state: GameState, deltaSeconds: numbe
           }
         }
       }
-      
+
       return newEntry;
     });
   }
-  
+
   // Progress banner training
   updated.banners = updated.banners.map(banner => {
     if (banner.status !== 'training' || banner.trainingPaused) return banner;
-    
+
     const newBanner = { ...banner };
-    
+
     // Check recruitment mode and population availability
     const currentWorkers = updated.lumberMill.workers + updated.quarry.workers + updated.farm.workers;
     const freeWorkers = Math.max(0, updated.population - currentWorkers);
-    const canRecruit = updated.recruitmentMode === 'regular' 
-      ? freeWorkers > 0 
+    const canRecruit = updated.recruitmentMode === 'regular'
+      ? freeWorkers > 0
       : updated.population > 1;
-    
+
     if (canRecruit && newBanner.recruited < newBanner.reqPop) {
       const toRecruit = Math.min(simulatedSeconds, newBanner.reqPop - newBanner.recruited);
       newBanner.recruited += toRecruit;
       updated.population = Math.max(1, updated.population - toRecruit);
-      
+
       // Update squad sizes
       if (newBanner.squads && newBanner.squads.length > 0) {
         newBanner.squads = newBanner.squads.map(squad => {
@@ -616,26 +651,26 @@ export function simulateOfflineProgression(state: GameState, deltaSeconds: numbe
           }
         });
       }
-      
+
       if (newBanner.recruited >= newBanner.reqPop) {
         newBanner.status = 'ready';
         newBanner.reinforcingSquadId = undefined;
       }
     }
-    
+
     return newBanner;
   });
-  
+
   // Progress missions
   updated.missions = updated.missions.map(mission => {
     if (mission.status !== 'running') return mission;
-    
+
     const newMission = { ...mission };
-    
+
     if (mission.startTime) {
       const elapsed = (Date.now() - mission.startTime) / 1000;
       newMission.elapsed = elapsed;
-      
+
       if (elapsed >= mission.duration) {
         // Note: Offline simulation doesn't simulate battles, so we can't determine win/loss
         // For offline completion, assume victory (rewards pending)
@@ -652,31 +687,31 @@ export function simulateOfflineProgression(state: GameState, deltaSeconds: numbe
         newMission.deployed = [];
       }
     }
-    
+
     return newMission;
   });
-  
+
   // Update total play time
   updated.totalPlayTime += simulatedSeconds;
-  
+
   return updated;
 }
 
 // Helper functions for offline simulation
 function getProductionRate(resource: 'wood' | 'stone' | 'food' | 'iron', level: number, enabled: boolean, workers: number): number {
   if (!enabled || workers === 0) return 0;
-  
+
   const baseRates = {
     wood: 1,
     stone: 1,
     food: 5,
     iron: 1, // Same as stone
   };
-  
+
   const base = baseRates[resource];
   const l0 = Math.max(0, level - 1);
   const productionPerWorker = base * Math.pow(1.25, l0);
-  
+
   return productionPerWorker * workers;
 }
 
@@ -700,7 +735,7 @@ function calculateNetPopulationChange(tax: 'very_low' | 'low' | 'normal' | 'high
   else if (tax === 'normal') baseRate = 0.2;
   else if (tax === 'high') baseRate = -0.4;
   else if (tax === 'very_high') baseRate = -1.0;
-  
+
   // Happiness-based modifier
   let happinessModifier = 0;
   if (happiness >= 80) {
@@ -714,7 +749,7 @@ function calculateNetPopulationChange(tax: 'very_low' | 'low' | 'normal' | 'high
   } else {
     happinessModifier = -0.8;
   }
-  
+
   return baseRate + happinessModifier;
 }
 

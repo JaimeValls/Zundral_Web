@@ -2,3 +2,127 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Fullscreen mobile landscape layout */
+@layer base {
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+  }
+
+  #root {
+    width: 100vw;
+    height: 100vh;
+  }
+
+  /* On mobile landscape, ensure fullscreen */
+  @media (max-width: 767px) and (orientation: landscape) {
+    html, body {
+      overflow: hidden;
+      position: fixed;
+      width: 100vw;
+      height: 100vh;
+    }
+
+    #root {
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      position: fixed;
+      top: 0;
+      left: 0;
+    }
+
+    /* Fullscreen container for mobile landscape */
+    .mobile-landscape-fullscreen {
+      width: 100vw !important;
+      height: 100vh !important;
+      min-height: 100vh !important;
+      max-height: 100vh !important;
+      overflow: hidden;
+      padding: 0.5rem !important;
+    }
+  }
+
+  /* Prevent scrolling on mobile portrait (overlay will be shown) */
+  @media (max-width: 767px) and (orientation: portrait) {
+    html, body {
+      overflow: hidden;
+      position: fixed;
+      width: 100vw;
+      height: 100vh;
+    }
+
+    #root {
+      overflow: hidden;
+    }
+  }
+}
+
+/* Golden shimmer animation for full Collect buttons */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+@layer utilities {
+  .shimmer-gold {
+    position: relative;
+    overflow: hidden;
+  }
+  
+  .shimmer-gold::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      transparent 25%,
+      rgba(255, 215, 0, 0.35) 45%,
+      rgba(255, 223, 0, 0.5) 50%,
+      rgba(255, 215, 0, 0.35) 55%,
+      transparent 75%,
+      transparent 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 2.2s ease-in-out infinite;
+    pointer-events: none;
+    border-radius: inherit;
+    z-index: 0;
+    overflow: hidden;
+  }
+
+  .pulse-red {
+    animation: pulse-red 2s ease-in-out infinite;
+    overflow: hidden;
+    position: relative;
+  }
+
+  @keyframes pulse-red {
+    0%, 100% {
+      box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+    }
+    50% {
+      box-shadow: 0 0 0 4px rgba(239, 68, 68, 0);
+    }
+  }
+
+  @keyframes fade-out {
+    from {
+      opacity: 1;
+    }
+    to {
+      opacity: 0;
+    }
+  }
+}
+

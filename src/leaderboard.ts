@@ -105,10 +105,10 @@ export function updateLeaderboardFromBattleResult(
   battleResult: BattleResult
 ): LeaderboardEntry[] {
   const updated = [...leaderboard];
-  
+
   // Find or create entry for this player
   let entryIndex = updated.findIndex(e => e.playerId === battleResult.playerId);
-  
+
   if (entryIndex === -1) {
     // Create new entry
     const newEntry: LeaderboardEntry = {
@@ -124,18 +124,18 @@ export function updateLeaderboardFromBattleResult(
     updated.push(newEntry);
     entryIndex = updated.length - 1;
   }
-  
+
   // Update entry
   const entry = updated[entryIndex];
   const battlePoints = calculateBattlePoints(battleResult.enemyUnitsKilled, battleResult.isVictory);
-  
+
   updated[entryIndex] = {
     ...entry,
     totalKills: entry.totalKills + battleResult.enemyUnitsKilled,
     totalVictories: entry.totalVictories + (battleResult.isVictory ? 1 : 0),
     totalScore: entry.totalScore + battlePoints,
   };
-  
+
   // Sort and reassign ranks
   return recalculateRanksAndTitles(updated);
 }
@@ -148,9 +148,9 @@ export function recalculateRanksAndTitles(leaderboard: LeaderboardEntry[]): Lead
     if (b.totalVictories !== a.totalVictories) return b.totalVictories - a.totalVictories;
     return a.playerId.localeCompare(b.playerId);
   });
-  
+
   const totalPlayers = sorted.length;
-  
+
   // Assign ranks and titles
   return sorted.map((entry, index) => ({
     ...entry,
@@ -165,7 +165,7 @@ export function recalculateRanksAndTitles(leaderboard: LeaderboardEntry[]): Lead
 
 export function createPlaceholderLeaderboard(realPlayerName: string = 'REAL PLAYER', realPlayerFaction: Faction = 'Alsus'): LeaderboardEntry[] {
   const entries: LeaderboardEntry[] = [];
-  
+
   // Real player entry
   entries.push({
     playerId: 'real_player',
@@ -177,24 +177,24 @@ export function createPlaceholderLeaderboard(realPlayerName: string = 'REAL PLAY
     rank: 0,
     title: TITLES[0],
   });
-  
+
   // Generate 19 fake players with varied stats
   const factions: Faction[] = ['Alsus', 'Atrox', 'Neutral'];
   const namePrefixes = ['Shadow', 'Iron', 'Storm', 'Blood', 'Fire', 'Dark', 'Light', 'Frost', 'Thunder', 'Steel'];
   const nameSuffixes = ['Warrior', 'Blade', 'Shield', 'Arrow', 'Spear', 'Axe', 'Hammer', 'Bow', 'Sword', 'Dagger'];
-  
+
   for (let i = 1; i <= 19; i++) {
     const prefix = namePrefixes[Math.floor(Math.random() * namePrefixes.length)];
     const suffix = nameSuffixes[Math.floor(Math.random() * nameSuffixes.length)];
     const playerName = `${prefix}${suffix}${i}`;
     const faction = factions[Math.floor(Math.random() * factions.length)];
-    
+
     // Generate varied stats
     // Higher index = generally higher stats (but with some randomness)
     const baseKills = 50 + (i * 20) + Math.floor(Math.random() * 100);
     const baseVictories = Math.floor(baseKills / 10) + Math.floor(Math.random() * 5);
     const baseScore = baseKills + Math.floor(baseKills * 0.2 * baseVictories);
-    
+
     entries.push({
       playerId: `player${i}`,
       playerName,
@@ -206,7 +206,7 @@ export function createPlaceholderLeaderboard(realPlayerName: string = 'REAL PLAY
       title: TITLES[0],
     });
   }
-  
+
   // Recalculate ranks and titles
   return recalculateRanksAndTitles(entries);
 }

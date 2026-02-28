@@ -3,17 +3,16 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>CK3‑style Battle Simulator (Warriors vs Archers)</title>
+<title>CK3‑style Battle Simulator (All Unit Types)</title>
 <style>
   :root{--bg:#0f1216;--panel:#171b21;--panel-2:#1e2430;--text:#e8edf3;--muted:#a7b0bd;--accent:#7cc7ff;--accent-2:#9dffa6;--danger:#ff5d5d;--ok:#8ee59c;--border:#2a313d}
   *{box-sizing:border-box}
   body{margin:0;background:#0f1216;color:var(--text);font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial}
   h1{margin:16px 20px 8px 20px}
-  .wrap{max-width:1260px;margin:0 auto;padding:0 20px 24px}
+  .wrap{max-width:1400px;margin:0 auto;padding:0 20px 24px}
   .grid{display:grid;gap:16px}
-  .cols-3{grid-template-columns:2fr 2fr 1.4fr}
   .cols-2{grid-template-columns:1.6fr 1.4fr}
-  @media (max-width:1100px){.cols-3,.cols-2{grid-template-columns:1fr}}
+  @media (max-width:1100px){.cols-2{grid-template-columns:1fr}}
   .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:14px}
   .sub{color:var(--muted);font-size:12px}
   label{display:block;margin:8px 0 4px;font-weight:600}
@@ -37,35 +36,25 @@
   .legend-item{display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border:1px solid var(--border);border-radius:999px;background:#0c1016;color:var(--muted)}
   .legend-item .swatch{width:12px;height:12px;border-radius:3px;display:inline-block}
   .mono{font-family:ui-monospace,Menlo,Consolas,monospace}
+  .unit-stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;max-height:600px;overflow-y:auto;padding:4px}
+  .unit-panel{background:var(--panel-2);border:1px solid var(--border);border-radius:10px;padding:12px}
+  .unit-panel h4{margin:0 0 8px 0;font-size:14px;color:var(--accent)}
+  .unit-panel label{font-size:12px;margin:6px 0 2px}
+  .unit-panel input{font-size:12px;padding:6px}
+  .divisions-table{width:100%;margin-top:8px}
+  .divisions-table th{text-align:left;padding:8px}
+  .divisions-table td{text-align:center;padding:6px}
+  .divisions-table input{width:100px;margin:0 auto}
 </style>
 </head>
 <body>
 <h1>CK3‑style Battle Simulator</h1>
 <div class="wrap">
-  <div class="grid cols-3">
+  <div class="grid cols-2">
     <div class="card">
       <h3>Unit stats per 100</h3>
       <div class="sub">Tune to mirror CK3/HoI4 expectations. Tip, Warriors can have ~0 Skirmish Attack.</div>
-      <div class="grid" style="grid-template-columns:1fr 1fr;gap:12px;margin-top:8px">
-        <div>
-          <h4>Warrior</h4>
-          <label>Skirmish Attack</label><input id="w_sa" type="number" step="0.1" value="0">
-          <label>Skirmish Defence</label><input id="w_sd" type="number" step="0.1" value="15">
-          <label>Melee Attack</label><input id="w_ma" type="number" step="0.1" value="15">
-          <label>Melee Defence</label><input id="w_md" type="number" step="0.1" value="12">
-          <label>Pursuit</label><input id="w_pu" type="number" step="0.1" value="3">
-          <label>Morale /100</label><input id="w_mo" type="number" step="0.1" value="110">
-        </div>
-        <div>
-          <h4>Archer</h4>
-          <label>Skirmish Attack</label><input id="a_sa" type="number" step="0.1" value="30">
-          <label>Skirmish Defence</label><input id="a_sd" type="number" step="0.1" value="6">
-          <label>Melee Attack</label><input id="a_ma" type="number" step="0.1" value="5">
-          <label>Melee Defence</label><input id="a_md" type="number" step="0.1" value="5">
-          <label>Pursuit</label><input id="a_pu" type="number" step="0.1" value="4">
-          <label>Morale /100</label><input id="a_mo" type="number" step="0.1" value="80">
-        </div>
-      </div>
+      <div class="unit-stats-grid" id="unit_stats_grid"></div>
       <div class="btns" style="margin-top:8px">
         <button class="alt" id="load_tested">Load Tested Values</button>
         <button class="alt" id="update_game_stats">Update Game Unit Stats</button>
@@ -74,19 +63,19 @@
 
     <div class="card">
       <h3>Divisions</h3>
-      <div class="row">
-        <div style="flex:1">
-          <h4>A</h4>
-          <label>Warriors</label><input id="A_w" type="number" step="10" value="850">
-          <label>Archers</label><input id="A_a" type="number" step="10" value="150">
-          <div class="btns"><button class="alt" id="A_5050">A 50/50</button><span class="sub">Total <span id="A_total" class="mono">1000</span></span></div>
-        </div>
-        <div style="flex:1">
-          <h4>B</h4>
-          <label>Warriors</label><input id="B_w" type="number" step="10" value="1000">
-          <label>Archers</label><input id="B_a" type="number" step="10" value="0">
-          <div class="btns"><button class="alt" id="B_5050">B 50/50</button><span class="sub">Total <span id="B_total" class="mono">1000</span></span></div>
-        </div>
+      <table class="divisions-table">
+        <thead>
+          <tr>
+            <th>Unit</th>
+            <th>A count</th>
+            <th>B count</th>
+          </tr>
+        </thead>
+        <tbody id="divisions_tbody"></tbody>
+      </table>
+      <div style="margin-top:8px;display:flex;justify-content:space-between;align-items:center">
+        <div class="sub">A Total: <span id="A_total" class="mono">0</span></div>
+        <div class="sub">B Total: <span id="B_total" class="mono">0</span></div>
       </div>
       <div class="btns" style="margin-top:8px">
         <button id="run">Run battle</button>
@@ -96,21 +85,22 @@
         <button class="alt" id="tests">Run self‑tests</button>
       </div>
     </div>
+  </div>
 
-    <div class="card">
-      <h3>Battle parameters</h3>
-      <div class="row">
-        <div style="flex:1">
-          <label>Skirmish ticks</label><input id="p_skirm" type="number" value="30">
-          <label>Pursuit ticks</label><input id="p_purs" type="number" value="20">
-          <label>RNG variance (±%)</label><input id="p_rng" type="range" min="0" max="30" step="1" value="5"><span class="sub"> <span id="rng_label">5</span>%</span>
-        </div>
-        <div style="flex:1">
-          <label>Base casualty rate</label><input id="p_cas" type="number" step="0.05" value="0.6">
-          <label>Morale per casualty</label><input id="p_morc" type="number" step="0.1" value="0.8">
-          <label>Advantage morale / tick</label><input id="p_adv" type="number" step="0.1" value="3">
-          <label>Break at morale %</label><input id="p_break_pct" type="number" step="1" value="35">
-        </div>
+  <div class="card" style="margin-top:16px">
+    <h3>Battle parameters</h3>
+    <div class="sub" style="margin-bottom:8px">Once you are happy with unit stats, tune these global battle parameters.</div>
+    <div class="row">
+      <div style="flex:1">
+        <label>Skirmish ticks</label><input id="p_skirm" type="number" value="30">
+        <label>Pursuit ticks</label><input id="p_purs" type="number" value="20">
+        <label>RNG variance (±%)</label><input id="p_rng" type="range" min="0" max="30" step="1" value="5"><span class="sub"> <span id="rng_label">5</span>%</span>
+      </div>
+      <div style="flex:1">
+        <label>Base casualty rate</label><input id="p_cas" type="number" step="0.05" value="0.6">
+        <label>Morale per casualty</label><input id="p_morc" type="number" step="0.1" value="0.8">
+        <label>Advantage morale / tick</label><input id="p_adv" type="number" step="0.1" value="3">
+        <label>Break at morale %</label><input id="p_break_pct" type="number" step="1" value="35">
       </div>
     </div>
   </div>
@@ -173,42 +163,162 @@ const $=id=>document.getElementById(id);
 const toNum=el=>parseFloat(el.value||0);
 const per100=x=>x/100;
 
+// Unit type definitions
+const unitTypes = ['warrior', 'militia', 'longsword', 'pikemen', 'light_cavalry', 'heavy_cavalry', 'archer', 'skirmisher', 'crossbowmen'];
+const unitDisplayNames = {
+  warrior: 'Shieldmen',
+  militia: 'Militia',
+  longsword: 'Longswords',
+  pikemen: 'Pikemen',
+  light_cavalry: 'Light Cavalry',
+  heavy_cavalry: 'Heavy Cavalry',
+  archer: 'Archers',
+  skirmisher: 'Skirmishers',
+  crossbowmen: 'Crossbowmen'
+};
+
+// Default unit stats
+const defaultStats = {
+  warrior: {skirmish_attack:0,skirmish_defence:15,melee_attack:15,melee_defence:12,pursuit:3,morale_per_100:110},
+  archer: {skirmish_attack:30,skirmish_defence:6,melee_attack:5,melee_defence:5,pursuit:4,morale_per_100:80},
+  skirmisher: {skirmish_attack:18,skirmish_defence:10,melee_attack:10,melee_defence:9,pursuit:5,morale_per_100:100},
+  crossbowmen: {skirmish_attack:42,skirmish_defence:10,melee_attack:3,melee_defence:4,pursuit:3,morale_per_100:90},
+  militia: {skirmish_attack:0,skirmish_defence:8,melee_attack:8,melee_defence:6,pursuit:2,morale_per_100:70},
+  longsword: {skirmish_attack:0,skirmish_defence:10,melee_attack:22,melee_defence:10,pursuit:4,morale_per_100:120},
+  pikemen: {skirmish_attack:0,skirmish_defence:12,melee_attack:10,melee_defence:16,pursuit:2,morale_per_100:110},
+  light_cavalry: {skirmish_attack:6,skirmish_defence:8,melee_attack:16,melee_defence:10,pursuit:9,morale_per_100:110},
+  heavy_cavalry: {skirmish_attack:4,skirmish_defence:10,melee_attack:24,melee_defence:14,pursuit:10,morale_per_100:130}
+};
+
+// Generate unit stats UI
+function generateUnitStatsUI(){
+  const grid = $("unit_stats_grid");
+  grid.innerHTML = '';
+  unitTypes.forEach(unitType => {
+    const panel = document.createElement('div');
+    panel.className = 'unit-panel';
+    const displayName = unitDisplayNames[unitType];
+    panel.innerHTML = `
+      <h4>${displayName}</h4>
+      <label>Skirmish Attack</label><input id="${unitType}_sa" type="number" step="0.1" value="${defaultStats[unitType].skirmish_attack}">
+      <label>Skirmish Defence</label><input id="${unitType}_sd" type="number" step="0.1" value="${defaultStats[unitType].skirmish_defence}">
+      <label>Melee Attack</label><input id="${unitType}_ma" type="number" step="0.1" value="${defaultStats[unitType].melee_attack}">
+      <label>Melee Defence</label><input id="${unitType}_md" type="number" step="0.1" value="${defaultStats[unitType].melee_defence}">
+      <label>Pursuit</label><input id="${unitType}_pu" type="number" step="0.1" value="${defaultStats[unitType].pursuit}">
+      <label>Morale /100</label><input id="${unitType}_mo" type="number" step="0.1" value="${defaultStats[unitType].morale_per_100}">
+    `;
+    grid.appendChild(panel);
+  });
+}
+
+// Generate divisions table
+function generateDivisionsTable(){
+  const tbody = $("divisions_tbody");
+  tbody.innerHTML = '';
+  unitTypes.forEach(unitType => {
+    const tr = document.createElement('tr');
+    const displayName = unitDisplayNames[unitType];
+    tr.innerHTML = `
+      <td>${displayName}</td>
+      <td><input id="A_${unitType}" type="number" step="10" value="0" class="div-input"></td>
+      <td><input id="B_${unitType}" type="number" step="10" value="0" class="div-input"></td>
+    `;
+    tbody.appendChild(tr);
+  });
+  // Set default values for warrior and archer
+  $("A_warrior").value = 850;
+  $("A_archer").value = 150;
+  $("B_warrior").value = 1000;
+  $("B_archer").value = 0;
+  updateTotals();
+}
+
+// Update division totals
+function updateTotals(){
+  let aTotal = 0, bTotal = 0;
+  unitTypes.forEach(unitType => {
+    aTotal += toNum($(`A_${unitType}`)) || 0;
+    bTotal += toNum($(`B_${unitType}`)) || 0;
+  });
+  $("A_total").textContent = aTotal.toFixed(0);
+  $("B_total").textContent = bTotal.toFixed(0);
+}
+
 function getStats(){
-  return {
-    warrior:{skirmish_attack:toNum($("w_sa")),skirmish_defence:toNum($("w_sd")),melee_attack:toNum($("w_ma")),melee_defence:toNum($("w_md")),pursuit:toNum($("w_pu")),morale_per_100:toNum($("w_mo"))},
-    archer:{skirmish_attack:toNum($("a_sa")),skirmish_defence:toNum($("a_sd")),melee_attack:toNum($("a_ma")),melee_defence:toNum($("a_md")),pursuit:toNum($("a_pu")),morale_per_100:toNum($("a_mo"))}
-  };
+  const stats = {};
+  unitTypes.forEach(unitType => {
+    stats[unitType] = {
+      skirmish_attack: toNum($(`${unitType}_sa`)),
+      skirmish_defence: toNum($(`${unitType}_sd`)),
+      melee_attack: toNum($(`${unitType}_ma`)),
+      melee_defence: toNum($(`${unitType}_md`)),
+      pursuit: toNum($(`${unitType}_pu`)),
+      morale_per_100: toNum($(`${unitType}_mo`))
+    };
+  });
+  return stats;
 }
+
 function getDivs(){
-  return {A:{warrior:toNum($("A_w")),archer:toNum($("A_a"))},B:{warrior:toNum($("B_w")),archer:toNum($("B_a"))}};
+  const A = {}, B = {};
+  unitTypes.forEach(unitType => {
+    A[unitType] = toNum($(`A_${unitType}`)) || 0;
+    B[unitType] = toNum($(`B_${unitType}`)) || 0;
+  });
+  return {A, B};
 }
+
 function getParams(){
   return {skirmish_ticks:toNum($("p_skirm")),pursuit_ticks:toNum($("p_purs")),base_casualty_rate:toNum($("p_cas")),morale_per_casualty:toNum($("p_morc")),advantage_morale_tick:toNum($("p_adv")),break_pct:toNum($("p_break_pct")),rng_variance:toNum($("p_rng"))/100};
 }
-function total(div){return Math.max(0,(div.warrior||0)+(div.archer||0));}
-function morale(div, stats){return per100(div.warrior)*stats.warrior.morale_per_100 + per100(div.archer)*stats.archer.morale_per_100;}
+
+function total(div){
+  let sum = 0;
+  for(const unitType in div){
+    sum += div[unitType] || 0;
+  }
+  return Math.max(0, sum);
+}
+
+function morale(div, stats){
+  let totalMorale = 0;
+  for(const unitType in div){
+    const count = div[unitType] || 0;
+    const unitStat = stats[unitType];
+    if(unitStat){
+      totalMorale += per100(count) * unitStat.morale_per_100;
+    }
+  }
+  return totalMorale;
+}
 
 function phaseStats(division, stats, phase){
   let EA=0,ED=0,P=0;
-  for(const t of ["warrior","archer"]){
-    const c=division[t]||0; const c100=per100(c); const s=stats[t];
+  for(const unitType in division){
+    const count = division[unitType] || 0;
+    const c100 = per100(count);
+    const s = stats[unitType];
+    if(!s) continue;
     if(phase==='skirmish'){EA+=c100*s.skirmish_attack; ED+=c100*s.skirmish_defence;}
     else if(phase==='melee'){EA+=c100*s.melee_attack; ED+=c100*s.melee_defence;}
     P+=c100*s.pursuit;
   }
   return {EA:Math.max(0.1,EA), ED:Math.max(0.1,ED), P:Math.max(0,P)};
 }
+
 function applyCasualties(div, losses){
   const s=total(div); if(s<=0||losses<=0) return;
-  for(const k of ["warrior","archer"]) {
-    const share=(div[k]||0)/s; div[k]=Math.max(0,(div[k]||0)-losses*share);
+  for(const unitType in div){
+    const count = div[unitType] || 0;
+    const share = count / s;
+    div[unitType] = Math.max(0, count - losses * share);
   }
 }
 
 function simulate(Ain,Bin, stats, p){
   const A={...Ain}, B={...Bin};
   let mA=morale(A,stats), mB=morale(B,stats);
-  const mA0=mA, mB0=mB; // percent-based break from starting morale
+  const mA0=mA, mB0=mB;
   const tA = Math.max(0, (p.break_pct||20)/100 * mA0);
   const tB = Math.max(0, (p.break_pct||20)/100 * mB0);
   let brokeA=false, brokeB=false;
@@ -237,18 +347,16 @@ function simulate(Ain,Bin, stats, p){
   while(total(A)>0 && total(B)>0 && mA>tA && mB>tB){
     step('melee'); if(++guard>5000) break;
   }
-  // Detect rout state before pursuit
   if(mA<=tA && total(A)>0) brokeA=true;
   if(mB<=tB && total(B)>0) brokeB=true;
 
-  // Winner before pursuit
   let winner='draw';
   if((mA<=tA||total(A)<=0)&&(mB<=tB||total(B)<=0)) winner='draw';
   else if(mA<=tA||total(A)<=0) winner='B';
   else if(mB<=tB||total(B)<=0) winner='A';
   else winner = mA>mB? 'A' : (mB>mA? 'B' : (total(A)>total(B)? 'A' : (total(B)>total(A)? 'B' : 'draw')));
 
-  // Pursuit (always paint band if winner set and ticks>0)
+  // Pursuit
   if((winner==='A'||winner==='B') && p.pursuit_ticks>0){
     for(let i=0;i<p.pursuit_ticks;i++){
       const SA=phaseStats(A,stats,'melee');
@@ -263,10 +371,9 @@ function simulate(Ain,Bin, stats, p){
         applyCasualties(A,lossA); mA -= p.morale_per_casualty*lossA;
         tl.push({tick:++tick,phase:'pursuit',A_troops:total(A),B_troops:total(B),A_morale:mA,B_morale:mB,AtoB:0,BtoA:lossA,Aratio:NaN,Bratio:NaN});
       }
-      if(total(A)<=0||total(B)<=0) { /* keep band painting */ }
+      if(total(A)<=0||total(B)<=0) { }
     }
   }
-  // Final snapshot AFTER pursuit
   const sA=total(A), sB=total(B);
   const summary = {winner, ticks:tick,
     final_A_total:sA.toFixed(2), final_B_total:sB.toFixed(2),
@@ -292,6 +399,7 @@ function renderTable(rows){
     tbody.appendChild(tr);
   }
 }
+
 function renderSummary(s){
   $("k_winner").textContent=s.winner.toUpperCase();
   $("k_ticks").textContent=s.ticks;
@@ -320,7 +428,6 @@ function lossesByPhase(tl){
   $("losses").innerHTML=html;
 }
 
-// dual‑axis plot with phase bands
 function plot(canvas, series, timeline){
   if(!canvas) return; const ctx=canvas.getContext('2d'); if(!ctx) return;
   const w=canvas.width=canvas.clientWidth*2, h=canvas.height=canvas.clientHeight*2;
@@ -331,26 +438,21 @@ function plot(canvas, series, timeline){
   const tMin=Math.min(...troopsAll,0), tMax=Math.max(...troopsAll,1);
   const mMin=Math.min(...moraleAll,0), mMax=Math.max(...moraleAll,1);
   const syT=y=> H-(y-tMin)/(tMax-tMin||1)*H; const syM=y=> H-(y-mMin)/(mMax-mMin||1)*H;
-  // background
   ctx.fillStyle='#0f141b'; ctx.fillRect(0,0,W,H);
-  // phase bands
   if(timeline.length){
     const bands=[]; let s=0, cur=timeline[0].phase;
     for(let i=1;i<timeline.length;i++){ if(timeline[i].phase!==cur){ bands.push({ph:cur,s:s+1,e:i}); s=i; cur=timeline[i].phase; } }
     bands.push({ph:cur,s:s+1,e:timeline.length});
     for(const b of bands){ const x0=sx(b.s), x1=sx(b.e); let c='rgba(154,163,178,0.14)'; if(b.ph==='skirmish') c='rgba(45,156,255,0.16)'; else if(b.ph==='pursuit') c='rgba(255,93,93,0.16)'; ctx.fillStyle=c; ctx.fillRect(x0,0,Math.max(1,x1-x0),H); ctx.fillStyle='#cfd6e1'; ctx.font='bold 16px system-ui'; ctx.textAlign='center'; ctx.fillText(b.ph.charAt(0).toUpperCase()+b.ph.slice(1), x0+(x1-x0)/2, 6); }
   }
-  // grid
   ctx.strokeStyle='#202733'; ctx.lineWidth=1; for(let i=0;i<=5;i++){ const y=i*(H/5); ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
   for(let i=0;i<=10;i++){ const x=i*(W/10); ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
   ctx.strokeStyle='#2c3545'; ctx.lineWidth=2; ctx.strokeRect(0,0,W,H);
-  // y labels
   ctx.fillStyle='#a7b0bd'; ctx.font='12px system-ui'; ctx.textAlign='right'; ctx.textBaseline='middle';
   for(let i=0;i<=4;i++){ const v=tMin+(tMax-tMin)*i/4; const y=syT(v); ctx.fillText(Math.round(v), -6, y); }
   ctx.fillText('Troops', -6, -6);
   ctx.textAlign='left'; for(let i=0;i<=4;i++){ const v=mMin+(mMax-mMin)*i/4; const y=syM(v); ctx.fillText(Math.round(v), W+6, y); }
   ctx.fillText('Morale', W+6, -6);
-  // lines
   const draw=(arr,sy,col)=>{ if(!arr.length) return; ctx.beginPath(); ctx.lineWidth=3; ctx.strokeStyle=col; ctx.moveTo(sx(1), sy(arr[0])); for(let i=1;i<arr.length;i++){ ctx.lineTo(sx(i+1), sy(arr[i])); } ctx.stroke(); };
   draw(series.A_morale, syM, '#6fb3ff'); draw(series.B_morale, syM, '#8b0000');
   draw(series.A_troops, syT, '#2d9cff'); draw(series.B_troops, syT, '#ff5d5d');
@@ -372,51 +474,36 @@ function run(){
   window.__timeline=timeline;
 }
 
-// wiring
-["A_w","A_a","B_w","B_a"].forEach(id=>$(id).addEventListener('input',()=>{
-  $("A_total").textContent=(toNum($("A_w"))+toNum($("A_a"))).toFixed(0);
-  $("B_total").textContent=(toNum($("B_w"))+toNum($("B_a"))).toFixed(0);
-}));
-$("A_5050").addEventListener('click',()=>{$("A_w").value=500;$("A_a").value=500;$("A_total").textContent='1000';});
-$("B_5050").addEventListener('click',()=>{$("B_w").value=500;$("B_a").value=500;$("B_total").textContent='1000';});
+// Initialize UI
+generateUnitStatsUI();
+generateDivisionsTable();
+
+// Wire up division input listeners
+unitTypes.forEach(unitType => {
+  $(`A_${unitType}`).addEventListener('input', updateTotals);
+  $(`B_${unitType}`).addEventListener('input', updateTotals);
+});
+
 $("p_rng").addEventListener('input',()=>$("rng_label").textContent=$("p_rng").value);
 $("run").addEventListener('click', run);
 $("reset").addEventListener('click', ()=>location.reload());
 $("clear").addEventListener('click', ()=>{ $("tbl").querySelector('tbody').innerHTML=''; ["k_winner","k_ticks","k_A","k_B"].forEach(id=>$(id).textContent='—'); const c=$("chart1"); if(c){const x=c.getContext('2d'); x&&x.clearRect(0,0,c.width,c.height);} $("losses").innerHTML='';});
 $("csv").addEventListener('click',()=>{const tl=window.__timeline||[]; if(!tl.length){alert('Run a battle first.');return;} const blob=new Blob([toCSV(tl)],{type:'text/csv;charset=utf-8;'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='battle_timeline.csv'; a.click(); setTimeout(()=>URL.revokeObjectURL(url),400);});
+
 $("load_tested").addEventListener('click', ()=>{
-  $("w_sa").value = 0;
-  $("w_sd").value = 15;
-  $("w_ma").value = 15;
-  $("w_md").value = 12;
-  $("w_pu").value = 3;
-  $("w_mo").value = 110;
-  $("a_sa").value = 15;
-  $("a_sd").value = 6;
-  $("a_ma").value = 5;
-  $("a_md").value = 5;
-  $("a_pu").value = 4;
-  $("a_mo").value = 80;
+  unitTypes.forEach(unitType => {
+    const def = defaultStats[unitType];
+    $(`${unitType}_sa`).value = def.skirmish_attack;
+    $(`${unitType}_sd`).value = def.skirmish_defence;
+    $(`${unitType}_ma`).value = def.melee_attack;
+    $(`${unitType}_md`).value = def.melee_defence;
+    $(`${unitType}_pu`).value = def.pursuit;
+    $(`${unitType}_mo`).value = def.morale_per_100;
+  });
 });
+
 $("update_game_stats").addEventListener('click', ()=>{
-  const stats = {
-    warrior: {
-      skirmish_attack: toNum($("w_sa")),
-      skirmish_defence: toNum($("w_sd")),
-      melee_attack: toNum($("w_ma")),
-      melee_defence: toNum($("w_md")),
-      pursuit: toNum($("w_pu")),
-      morale_per_100: toNum($("w_mo"))
-    },
-    archer: {
-      skirmish_attack: toNum($("a_sa")),
-      skirmish_defence: toNum($("a_sd")),
-      melee_attack: toNum($("a_ma")),
-      melee_defence: toNum($("a_md")),
-      pursuit: toNum($("a_pu")),
-      morale_per_100: toNum($("a_mo"))
-    }
-  };
+  const stats = getStats();
   const battleParams = {
     skirmish_ticks: toNum($("p_skirm")),
     pursuit_ticks: toNum($("p_purs")),
@@ -426,53 +513,39 @@ $("update_game_stats").addEventListener('click', ()=>{
     break_pct: toNum($("p_break_pct")),
     rng_variance: toNum($("p_rng")) / 100
   };
-  const divisions = {
-    A: {
-      warrior: toNum($("A_w")),
-      archer: toNum($("A_a"))
-    },
-    B: {
-      warrior: toNum($("B_w")),
-      archer: toNum($("B_a"))
-    }
-  };
-  const confirmMsg = 'This will update the unit stats, battle parameters, and divisions used in game missions.\n\n' +
-    'Warrior: SA=' + stats.warrior.skirmish_attack + ', SD=' + stats.warrior.skirmish_defence + ', MA=' + stats.warrior.melee_attack + 
-    ', MD=' + stats.warrior.melee_defence + ', P=' + stats.warrior.pursuit + ', M=' + stats.warrior.morale_per_100 + '\n' +
-    'Archer: SA=' + stats.archer.skirmish_attack + ', SD=' + stats.archer.skirmish_defence + ', MA=' + stats.archer.melee_attack + 
-    ', MD=' + stats.archer.melee_defence + ', P=' + stats.archer.pursuit + ', M=' + stats.archer.morale_per_100 + '\n\n' +
-    'Battle Params: Skirmish=' + battleParams.skirmish_ticks + ', Pursuit=' + battleParams.pursuit_ticks + 
-    ', Casualty=' + battleParams.base_casualty_rate + ', Break=' + battleParams.break_pct + '%\n\n' +
-    'Continue?';
+  const divisions = getDivs();
+  let confirmMsg = 'This will update the unit stats, battle parameters, and divisions used in game missions.\n\n';
+  unitTypes.forEach(unitType => {
+    const s = stats[unitType];
+    confirmMsg += `${unitDisplayNames[unitType]}: SA=${s.skirmish_attack}, SD=${s.skirmish_defence}, MA=${s.melee_attack}, MD=${s.melee_defence}, P=${s.pursuit}, M=${s.morale_per_100}\n`;
+  });
+  confirmMsg += `\nBattle Params: Skirmish=${battleParams.skirmish_ticks}, Pursuit=${battleParams.pursuit_ticks}, Casualty=${battleParams.base_casualty_rate}, Break=${battleParams.break_pct}%\n\nContinue?`;
   const confirmed = confirm(confirmMsg);
   if(confirmed){
     localStorage.setItem('gameUnitStats', JSON.stringify(stats));
     localStorage.setItem('gameBattleParams', JSON.stringify(battleParams));
     localStorage.setItem('gameDivisions', JSON.stringify(divisions));
-    // Dispatch custom event to notify the game
     window.dispatchEvent(new CustomEvent('unitStatsUpdated', { detail: { stats, battleParams, divisions } }));
     alert('Unit stats, battle parameters, and divisions updated! The game will use these values for future battles.');
   }
 });
 
-// Load saved unit stats, battle parameters, and divisions from localStorage on page load
+// Load saved values on page load
 (function(){
   const savedStats = localStorage.getItem('gameUnitStats');
   if(savedStats){
     try{
       const stats = JSON.parse(savedStats);
-      $("w_sa").value = stats.warrior.skirmish_attack;
-      $("w_sd").value = stats.warrior.skirmish_defence;
-      $("w_ma").value = stats.warrior.melee_attack;
-      $("w_md").value = stats.warrior.melee_defence;
-      $("w_pu").value = stats.warrior.pursuit;
-      $("w_mo").value = stats.warrior.morale_per_100;
-      $("a_sa").value = stats.archer.skirmish_attack;
-      $("a_sd").value = stats.archer.skirmish_defence;
-      $("a_ma").value = stats.archer.melee_attack;
-      $("a_md").value = stats.archer.melee_defence;
-      $("a_pu").value = stats.archer.pursuit;
-      $("a_mo").value = stats.archer.morale_per_100;
+      unitTypes.forEach(unitType => {
+        if(stats[unitType]){
+          $(`${unitType}_sa`).value = stats[unitType].skirmish_attack;
+          $(`${unitType}_sd`).value = stats[unitType].skirmish_defence;
+          $(`${unitType}_ma`).value = stats[unitType].melee_attack;
+          $(`${unitType}_md`).value = stats[unitType].melee_defence;
+          $(`${unitType}_pu`).value = stats[unitType].pursuit;
+          $(`${unitType}_mo`).value = stats[unitType].morale_per_100;
+        }
+      });
     }catch(e){
       console.warn('Failed to load saved unit stats:', e);
     }
@@ -497,30 +570,51 @@ $("update_game_stats").addEventListener('click', ()=>{
   if(savedDivs){
     try{
       const divs = JSON.parse(savedDivs);
-      $("A_w").value = divs.A.warrior;
-      $("A_a").value = divs.A.archer;
-      $("B_w").value = divs.B.warrior;
-      $("B_a").value = divs.B.archer;
-      $("A_total").textContent = (divs.A.warrior + divs.A.archer).toFixed(0);
-      $("B_total").textContent = (divs.B.warrior + divs.B.archer).toFixed(0);
+      unitTypes.forEach(unitType => {
+        if(divs.A && divs.A[unitType] !== undefined) $(`A_${unitType}`).value = divs.A[unitType];
+        if(divs.B && divs.B[unitType] !== undefined) $(`B_${unitType}`).value = divs.B[unitType];
+      });
+      updateTotals();
     }catch(e){
       console.warn('Failed to load saved divisions:', e);
     }
   }
 })();
 
-// initial blank plot
 plot($("chart1"), {A_morale:[],B_morale:[],A_troops:[],B_troops:[]}, []);
 
 // Self‑tests
 function selfTests(){
   const out=[]; const ok=m=>out.push('✅ '+m); const no=(m,e)=>out.push('❌ '+m+': '+e);
   try{ if(!$("chart1")) throw new Error('missing #chart1'); ok('Canvas present'); }catch(e){ no('Canvas present', e.message); }
-  try{ const {timeline,summary}=simulate({warrior:500,archer:500},{warrior:500,archer:500}, getStats(), getParams()); if(!timeline.length) throw new Error('no ticks'); ok('Battle produced timeline'); if(!summary||!summary.winner) throw new Error('no summary'); ok('Summary valid'); }catch(e){ no('Simulation', e.message); }
+  try{ 
+    const testDiv = {};
+    unitTypes.forEach(ut => testDiv[ut] = 100);
+    const {timeline,summary}=simulate(testDiv,testDiv, getStats(), getParams()); 
+    if(!timeline.length) throw new Error('no ticks'); 
+    ok('Battle produced timeline'); 
+    if(!summary||!summary.winner) throw new Error('no summary'); 
+    ok('Summary valid'); 
+  }catch(e){ no('Simulation', e.message); }
   try{ const tl=[{phase:'skirmish',A_troops:1000,B_troops:1000},{phase:'melee',A_troops:900,B_troops:950},{phase:'pursuit',A_troops:880,B_troops:900}]; lossesByPhase(tl); ok('Loss table from mock timeline'); }catch(e){ no('Loss table', e.message); }
   try{ plot($("chart1"), {A_morale:[1,2,3],B_morale:[1,2,1],A_troops:[1000,900,800],B_troops:[1000,950,940]}, [{phase:'skirmish'},{phase:'melee'},{phase:'pursuit'}]); ok('Plot executed'); }catch(e){ no('Plot', e.message); }
-  try{ const p=getParams(); p.break_pct=50; const r=simulate({warrior:800,archer:200},{warrior:1000,archer:0}, getStats(), p); const hasP=r.timeline.some(x=>x.phase==='pursuit'); if(!hasP) throw new Error('no pursuit with 50% break'); ok('Pursuit appears with higher break %'); }catch(e){ no('Pursuit test', e.message); }
-  try{ const p=getParams(); p.break_pct=60; const r=simulate({warrior:800,archer:200},{warrior:1000,archer:0}, getStats(), p); if(typeof r.summary.brokeA!=="boolean"||typeof r.summary.brokeB!=="boolean") throw new Error('flags missing'); ok('Rout flags present'); }catch(e){ no('Rout flags', e.message); }
+  try{ 
+    const p=getParams(); p.break_pct=50; 
+    const testDiv = {};
+    unitTypes.forEach(ut => testDiv[ut] = 100);
+    const r=simulate(testDiv,testDiv, getStats(), p); 
+    const hasP=r.timeline.some(x=>x.phase==='pursuit'); 
+    if(!hasP) throw new Error('no pursuit with 50% break'); 
+    ok('Pursuit appears with higher break %'); 
+  }catch(e){ no('Pursuit test', e.message); }
+  try{ 
+    const p=getParams(); p.break_pct=60; 
+    const testDiv = {};
+    unitTypes.forEach(ut => testDiv[ut] = 100);
+    const r=simulate(testDiv,testDiv, getStats(), p); 
+    if(typeof r.summary.brokeA!=="boolean"||typeof r.summary.brokeB!=="boolean") throw new Error('flags missing'); 
+    ok('Rout flags present'); 
+  }catch(e){ no('Rout flags', e.message); }
   $("tests_card").style.display='block'; $("test_out").innerHTML=out.join('<br>');
 }
 $("tests").addEventListener('click', selfTests);

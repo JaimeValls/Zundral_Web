@@ -35,7 +35,7 @@ const TECHNOLOGIES: Technology[] = [
   { id: 'diplomacy_corps', name: 'Diplomacy Corps', category: 'government', description: 'Placeholder: enhanced diplomatic relations.', cost: 10, status: 'locked' },
   { id: 'legal_code', name: 'Legal Code', category: 'government', description: 'Placeholder: codified laws and justice.', cost: 10, status: 'locked' },
   { id: 'standing_bureaucracy', name: 'Standing Bureaucracy', category: 'government', description: 'Placeholder: permanent administrative structure.', cost: 10, status: 'locked' },
-  
+
   // Urban Development
   { id: 'stone_housing', name: 'Stone Housing', category: 'urban', description: 'Placeholder: sturdier urban homes.', cost: 10, status: 'locked' },
   { id: 'paved_streets', name: 'Paved Streets', category: 'urban', description: 'Placeholder: better urban infrastructure.', cost: 10, status: 'locked' },
@@ -44,7 +44,7 @@ const TECHNOLOGIES: Technology[] = [
   { id: 'guild_districts', name: 'Guild Districts', category: 'urban', description: 'Placeholder: organized craft areas.', cost: 10, status: 'locked' },
   { id: 'city_walls', name: 'City Walls', category: 'urban', description: 'Placeholder: defensive urban structures.', cost: 10, status: 'locked' },
   { id: 'urban_planning', name: 'Urban Planning', category: 'urban', description: 'Placeholder: systematic city development.', cost: 10, status: 'locked' },
-  
+
   // Farming
   { id: 'heavy_plough', name: 'Heavy Plough', category: 'farming', description: 'Placeholder: more efficient tilling.', cost: 10, status: 'locked' },
   { id: 'three_field_rotation', name: 'Three-Field Rotation', category: 'farming', description: 'Placeholder: more reliable harvests.', cost: 10, status: 'locked' },
@@ -53,7 +53,7 @@ const TECHNOLOGIES: Technology[] = [
   { id: 'orchard_farming', name: 'Orchard Farming', category: 'farming', description: 'Placeholder: specialized fruit cultivation.', cost: 10, status: 'locked' },
   { id: 'watermills', name: 'Watermills', category: 'farming', description: 'Placeholder: mechanical grain processing.', cost: 10, status: 'locked' },
   { id: 'cash_crops', name: 'Cash Crops', category: 'farming', description: 'Placeholder: profitable crop specialization.', cost: 10, status: 'locked' },
-  
+
   // Industry
   { id: 'iron_tools', name: 'Iron Tools', category: 'industry', description: 'Placeholder: better basic tools.', cost: 10, status: 'locked' },
   { id: 'workshops', name: 'Workshops', category: 'industry', description: 'Placeholder: early craft specialisation.', cost: 10, status: 'locked' },
@@ -84,12 +84,12 @@ export default function TechnologiesUI({ isOpen, onClose, skillPoints, onStartRe
 
         // Find completed technologies
         const completed = updated.filter(tech => tech.timeRemaining <= 0);
-        
+
         // Mark as unlocked and remove from researching
         completed.forEach(completedTech => {
-          setTechnologies(prevTechs => 
-            prevTechs.map(tech => 
-              tech.id === completedTech.techId 
+          setTechnologies(prevTechs =>
+            prevTechs.map(tech =>
+              tech.id === completedTech.techId
                 ? { ...tech, status: 'unlocked' as const }
                 : tech
             )
@@ -121,9 +121,9 @@ export default function TechnologiesUI({ isOpen, onClose, skillPoints, onStartRe
     onStartResearch(tech.id, tech.cost);
 
     // Update technology status
-    setTechnologies(prev => 
-      prev.map(t => 
-        t.id === tech.id 
+    setTechnologies(prev =>
+      prev.map(t =>
+        t.id === tech.id
           ? { ...t, status: 'researching' as const }
           : t
       )
@@ -148,30 +148,30 @@ export default function TechnologiesUI({ isOpen, onClose, skillPoints, onStartRe
   const formatInt = (n: number) => Math.floor(n).toLocaleString();
 
   return (
-    <div className="fixed inset-0 bg-black/60 grid place-items-center p-4 z-50">
-      <div className="w-full max-w-5xl max-h-[90vh] rounded-2xl bg-slate-900 border border-slate-800 flex flex-col overflow-hidden">
+    <div className="fixed inset-0 bg-black/60 grid place-items-center p-2 sm:p-4 z-50">
+      <div className="w-full h-full sm:h-auto sm:max-w-5xl sm:max-h-[90vh] rounded-none sm:rounded-2xl bg-slate-900 border-0 sm:border border-slate-800 flex flex-col overflow-hidden">
         {/* TOP BAR */}
-        <div className="flex items-center justify-between p-4 border-b border-slate-800">
-          <h2 className="text-xl font-bold">TECHNOLOGIES – Realm Research</h2>
+        <div className="flex items-center justify-between p-3 sm:p-4 border-b border-slate-800">
+          <h2 className="text-base sm:text-lg md:text-xl font-bold">TECHNOLOGIES – Realm Research</h2>
           <button
             onClick={onClose}
-            className="px-3 py-1 rounded-lg bg-slate-700 hover:bg-slate-600 text-white"
+            className="px-3 py-2 sm:py-1 rounded-lg bg-slate-700 active:bg-slate-600 hover:bg-slate-600 text-white touch-manipulation min-h-[44px] sm:min-h-0 min-w-[44px] sm:min-w-0"
           >
             X
           </button>
         </div>
 
         {/* Skill Points Display */}
-        <div className="px-4 py-2 border-b border-slate-800 bg-slate-800/50">
-          <div className="text-sm font-semibold text-slate-300">
+        <div className="px-3 sm:px-4 py-2 border-b border-slate-800 bg-slate-800/50">
+          <div className="text-xs sm:text-sm font-semibold text-slate-300">
             Skill Points: {formatInt(skillPoints)}
           </div>
         </div>
 
-        {/* BODY: Two columns */}
-        <div className="flex-1 overflow-hidden flex gap-4 p-4">
+        {/* BODY: Two columns - Stack on mobile */}
+        <div className="flex-1 overflow-hidden flex flex-col md:flex-row gap-2 sm:gap-4 p-2 sm:p-4">
           {/* LEFT COLUMN: Technologies List */}
-          <div className="w-1/2 flex flex-col">
+          <div className="w-full md:w-1/2 flex flex-col">
             <div className="rounded-xl border border-slate-700 bg-slate-800 flex flex-col overflow-hidden">
               {/* Title bar with tabs inside */}
               <div className="p-3 border-b border-slate-700">
@@ -182,47 +182,43 @@ export default function TechnologiesUI({ isOpen, onClose, skillPoints, onStartRe
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     onClick={() => setActiveTab('government')}
-                    className={`px-3 py-1.5 text-xs font-semibold rounded ${
-                      activeTab === 'government'
+                    className={`px-3 py-1.5 text-xs font-semibold rounded ${activeTab === 'government'
                         ? 'bg-slate-900 text-white'
                         : 'bg-slate-700 text-slate-400 hover:text-white'
-                    }`}
+                      }`}
                   >
                     Government
                   </button>
                   <button
                     onClick={() => setActiveTab('urban')}
-                    className={`px-3 py-1.5 text-xs font-semibold rounded ${
-                      activeTab === 'urban'
+                    className={`px-3 py-1.5 text-xs font-semibold rounded ${activeTab === 'urban'
                         ? 'bg-slate-900 text-white'
                         : 'bg-slate-700 text-slate-400 hover:text-white'
-                    }`}
+                      }`}
                   >
                     Urban Development
                   </button>
                   <button
                     onClick={() => setActiveTab('farming')}
-                    className={`px-3 py-1.5 text-xs font-semibold rounded ${
-                      activeTab === 'farming'
+                    className={`px-3 py-1.5 text-xs font-semibold rounded ${activeTab === 'farming'
                         ? 'bg-slate-900 text-white'
                         : 'bg-slate-700 text-slate-400 hover:text-white'
-                    }`}
+                      }`}
                   >
                     Farming
                   </button>
                   <button
                     onClick={() => setActiveTab('industry')}
-                    className={`px-3 py-1.5 text-xs font-semibold rounded ${
-                      activeTab === 'industry'
+                    className={`px-3 py-1.5 text-xs font-semibold rounded ${activeTab === 'industry'
                         ? 'bg-slate-900 text-white'
                         : 'bg-slate-700 text-slate-400 hover:text-white'
-                    }`}
+                      }`}
                   >
                     Industry
                   </button>
                 </div>
               </div>
-              
+
               {/* Scrollable list */}
               <div className="flex-1 overflow-y-auto p-4">
                 <div className="space-y-3">
@@ -230,7 +226,7 @@ export default function TechnologiesUI({ isOpen, onClose, skillPoints, onStartRe
                     const isResearching = tech.status === 'researching';
                     const isUnlocked = tech.status === 'unlocked';
                     const canResearch = skillPoints >= tech.cost && tech.status === 'locked';
-                    
+
                     return (
                       <div
                         key={tech.id}
@@ -241,12 +237,12 @@ export default function TechnologiesUI({ isOpen, onClose, skillPoints, onStartRe
                           <div className="font-semibold">
                             {tech.name}
                           </div>
-                          
+
                           {/* Description */}
                           <div className="text-xs text-slate-400">
                             {tech.description}
                           </div>
-                          
+
                           {/* Cost */}
                           <div className="text-xs">
                             <span className="text-slate-400">Cost: </span>
@@ -254,7 +250,7 @@ export default function TechnologiesUI({ isOpen, onClose, skillPoints, onStartRe
                               {formatInt(tech.cost)} Skill Points
                             </span>
                           </div>
-                          
+
                           {/* Status and button */}
                           {isUnlocked ? (
                             <div className="text-xs text-emerald-400 font-semibold">
@@ -282,7 +278,7 @@ export default function TechnologiesUI({ isOpen, onClose, skillPoints, onStartRe
                               <button
                                 onClick={() => handleResearch(tech)}
                                 disabled={!canResearch}
-                                className="w-full px-3 py-2 rounded bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="w-full px-3 py-2 sm:py-1.5 rounded bg-sky-600 active:bg-sky-700 hover:bg-sky-700 text-white text-xs sm:text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation min-h-[44px] sm:min-h-0"
                                 title="Consumes 10 Skill Points and starts research"
                               >
                                 RESEARCH
@@ -299,13 +295,13 @@ export default function TechnologiesUI({ isOpen, onClose, skillPoints, onStartRe
           </div>
 
           {/* RIGHT COLUMN: Technologies in Progress */}
-          <div className="w-1/2 flex flex-col">
+          <div className="w-full md:w-1/2 flex flex-col">
             <div className="rounded-xl border border-slate-700 bg-slate-800 flex flex-col overflow-hidden">
               {/* Title bar */}
               <div className="p-3 border-b border-slate-700">
                 <h3 className="text-sm font-semibold text-slate-300">Technologies in Progress</h3>
               </div>
-              
+
               {/* Content */}
               <div className="flex-1 overflow-y-auto p-4">
                 {researchingTechs.length === 0 ? (
@@ -321,22 +317,22 @@ export default function TechnologiesUI({ isOpen, onClose, skillPoints, onStartRe
                       <div key={tech.id} className="rounded-lg border border-slate-600 bg-slate-900 p-4 space-y-3">
                         {/* Technology name */}
                         <div className="font-semibold text-lg">{tech.name}</div>
-                        
+
                         {/* Category */}
                         <div className="text-sm text-slate-400">
                           Category: {getCategoryName(tech.category)}
                         </div>
-                        
+
                         {/* Target status */}
                         <div className="text-sm text-slate-300">
                           Researching (Cost already paid)
                         </div>
-                        
+
                         {/* Timer */}
                         <div className="text-sm text-slate-300">
                           Time remaining: {tech.timeRemaining}s
                         </div>
-                        
+
                         {/* Progress bar */}
                         <div className="space-y-2">
                           <div className="h-4 rounded bg-slate-800 overflow-hidden">

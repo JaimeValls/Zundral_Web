@@ -28,6 +28,7 @@ if ($LASTEXITCODE -ne 0) {
 
 Write-Host "`nStarting development server..." -ForegroundColor Yellow
 Write-Host "The server will be available at http://localhost:5173" -ForegroundColor Cyan
+Write-Host "You can also use http://192.168.1.18:5173 from other devices on the same network" -ForegroundColor Cyan
 Write-Host "Press Ctrl+C to stop the server`n" -ForegroundColor Yellow
 
-npm run dev
+npm run dev -- --host 0.0.0.0

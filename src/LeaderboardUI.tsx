@@ -20,7 +20,7 @@ export default function LeaderboardUI({ leaderboard, realPlayerId }: Leaderboard
   const sortedLeaderboard = useMemo(() => {
     const sorted = [...leaderboard].sort((a, b) => {
       let comparison = 0;
-      
+
       if (sortField === 'score') {
         comparison = b.totalScore - a.totalScore;
       } else if (sortField === 'kills') {
@@ -28,7 +28,7 @@ export default function LeaderboardUI({ leaderboard, realPlayerId }: Leaderboard
       } else if (sortField === 'victories') {
         comparison = b.totalVictories - a.totalVictories;
       }
-      
+
       // If equal, use score as tiebreaker
       if (comparison === 0) {
         comparison = b.totalScore - a.totalScore;
@@ -41,10 +41,10 @@ export default function LeaderboardUI({ leaderboard, realPlayerId }: Leaderboard
       if (comparison === 0) {
         comparison = b.totalVictories - a.totalVictories;
       }
-      
+
       return sortDirection === 'desc' ? comparison : -comparison;
     });
-    
+
     return sorted;
   }, [leaderboard, sortField, sortDirection]);
 
@@ -116,19 +116,19 @@ export default function LeaderboardUI({ leaderboard, realPlayerId }: Leaderboard
                 <th className="px-3 py-2 text-left text-xs font-semibold text-slate-300">Player</th>
                 <th className="px-3 py-2 text-left text-xs font-semibold text-slate-300">Title</th>
                 <th className="px-3 py-2 text-left text-xs font-semibold text-slate-300">Faction</th>
-                <th 
+                <th
                   className="px-3 py-2 text-left text-xs font-semibold text-slate-300 cursor-pointer hover:bg-slate-800 select-none"
                   onClick={() => handleSort('score')}
                 >
                   Score {getSortIcon('score')}
                 </th>
-                <th 
+                <th
                   className="px-3 py-2 text-left text-xs font-semibold text-slate-300 cursor-pointer hover:bg-slate-800 select-none"
                   onClick={() => handleSort('kills')}
                 >
                   Kills {getSortIcon('kills')}
                 </th>
-                <th 
+                <th
                   className="px-3 py-2 text-left text-xs font-semibold text-slate-300 cursor-pointer hover:bg-slate-800 select-none"
                   onClick={() => handleSort('victories')}
                 >
