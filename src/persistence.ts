@@ -1,6 +1,8 @@
 // Persistence and Offline Progression System
 
 import { createPlaceholderLeaderboard } from './leaderboard';
+import { AUTOSAVE_INTERVAL_MS, MAX_OFFLINE_HOURS } from './constants';
+import { getWarehouseCapacity } from './gameFormulas';
 
 // ============================================================================
 // GameState - Single source of truth for all game data
@@ -340,8 +342,7 @@ export function createDefaultGameState(): GameState {
 // ============================================================================
 
 const SAVE_KEY = 'rts_agent_save_v1';
-const MAX_OFFLINE_HOURS = 12;
-const AUTOSAVE_INTERVAL_MS = 30000; // 30 seconds
+// MAX_OFFLINE_HOURS and AUTOSAVE_INTERVAL_MS are imported from './constants'
 
 class PersistenceService {
   private autoSaveTimer: number | null = null;
@@ -453,7 +454,7 @@ class PersistenceService {
     const sanitized = { ...state };
 
     // Cap resources to storage capacity
-    const warehouseCap = this.getWarehouseCapacity(sanitized.warehouseLevel);
+    const warehouseCap = getWarehouseCapacity(sanitized.warehouseLevel);
     sanitized.warehouse.wood = Math.max(0, Math.min(sanitized.warehouse.wood, warehouseCap));
     sanitized.warehouse.stone = Math.max(0, Math.min(sanitized.warehouse.stone, warehouseCap));
     sanitized.warehouse.food = Math.max(0, Math.min(sanitized.warehouse.food, warehouseCap));
@@ -488,13 +489,6 @@ class PersistenceService {
     sanitized.happiness = Math.max(0, Math.min(100, sanitized.happiness));
 
     return sanitized;
-  }
-
-  private getWarehouseCapacity(level: number): number {
-    // Match the formula from ResourceVillageUI
-    const base = 1000;
-    const l0 = Math.max(0, level - 1);
-    return base * Math.pow(1.3, l0);
   }
 
   private calculateChecksum(state: GameState): string {
@@ -717,12 +711,6 @@ function getProductionRate(resource: 'wood' | 'stone' | 'food' | 'iron', level: 
 
 function getBuildingCapacity(resource: 'wood' | 'stone' | 'food' | 'iron', level: number): number {
   const base = 100;
-  const l0 = Math.max(0, level - 1);
-  return base * Math.pow(1.3, l0);
-}
-
-function getWarehouseCapacity(level: number): number {
-  const base = 1000;
   const l0 = Math.max(0, level - 1);
   return base * Math.pow(1.3, l0);
 }
