@@ -1,189 +1,183 @@
-import React from 'react';
+// ============================================================================
+// Zundral — AnchoredUnitPicker
+// Floating unit-type selection picker anchored to a triggering button.
+// ============================================================================
 
-interface AnchoredUnitPickerProps {
-    isOpen: boolean;
-    onClose: () => void;
-    anchorRect: DOMRect | null;
-    warehouse: { iron: number };
-    onSelectUnit: (unitType: UnitType) => void;
-    currentUnitType?: UnitType;
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import type { UnitType, UnitCategory, WarehouseState } from '../types';
+import { unitCategory, ironCostPerSquad, unitDisplayNames } from '../constants';
+import { useMobileDetection } from '../hooks/useMobileDetection';
+
+export interface AnchoredUnitPickerProps {
+  isOpen: boolean;
+  onClose: () => void;
+  anchorRect: DOMRect | null;
+  onSelectUnit: (unitType: UnitType) => void;
+  warehouse: WarehouseState;
+  currentUnitType?: UnitType;
 }
 
-type UnitType = 'warrior' | 'militia' | 'longsword' | 'pikemen' | 'light_cavalry' | 'heavy_cavalry' | 'archer' | 'skirmisher' | 'crossbowmen';
-type UnitCategory = 'infantry' | 'ranged_infantry' | 'cavalry';
+const AnchoredUnitPicker: React.FC<AnchoredUnitPickerProps> = ({
+  isOpen,
+  onClose,
+  anchorRect,
+  onSelectUnit,
+  warehouse,
+  currentUnitType,
+}) => {
+  const [selectedCategory, setSelectedCategory] = useState<UnitCategory>('infantry');
+  const pickerRef = useRef<HTMLDivElement>(null);
+  const isMobile = useMobileDetection();
 
-const unitCategory: Record<UnitType, UnitCategory> = {
-    militia: 'infantry',
-    warrior: 'infantry',
-    longsword: 'infantry',
-    pikemen: 'infantry',
-    archer: 'ranged_infantry',
-    skirmisher: 'ranged_infantry',
-    crossbowmen: 'ranged_infantry',
-    light_cavalry: 'cavalry',
-    heavy_cavalry: 'cavalry'
-};
+  // Close on click outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (pickerRef.current && !pickerRef.current.contains(event.target as Node)) {
+        onClose();
+      }
+    };
 
-const unitDisplayNames: Record<UnitType, string> = {
-    warrior: 'Shieldmen',
-    militia: 'Militia',
-    longsword: 'Longswords',
-    pikemen: 'Pikemen',
-    light_cavalry: 'Light Cavalry',
-    heavy_cavalry: 'Heavy Cavalry',
-    archer: 'Archers',
-    skirmisher: 'Skirmishers',
-    crossbowmen: 'Crossbowmen'
-};
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isOpen, onClose]);
 
-const ironCostPerSquad: Record<UnitType, number> = {
-    militia: 0,
-    warrior: 10,
-    longsword: 20,
-    pikemen: 15,
-    light_cavalry: 25,
-    heavy_cavalry: 40,
-    archer: 5,
-    skirmisher: 8,
-    crossbowmen: 15
-};
+  // Calculate position
+  const positionStyle: React.CSSProperties = useMemo(() => {
+    if (!anchorRect) return {};
 
-export default function AnchoredUnitPicker({ isOpen, onClose, anchorRect, warehouse, onSelectUnit, currentUnitType }: AnchoredUnitPickerProps) {
-    if (!isOpen || !anchorRect) return null;
+    const PADDING = 12;
+    const WIDTH = isMobile ? Math.min(window.innerWidth - PADDING * 2, 340) : 340;
+    const HEIGHT = isMobile ? 360 : 400;
 
-    // Calculate position
-    const viewportWidth = window.innerWidth;
-    const viewportHeight = window.innerHeight;
-    const isMobile = viewportWidth < 640;
-    const pickerWidth = isMobile ? Math.min(340, viewportWidth - 24) : 340;
-    const pickerHeight = isMobile ? 360 : 400;
-
-    let left = anchorRect.left;
     let top = anchorRect.bottom + 8;
+    let left = anchorRect.left;
 
-    // Center on mobile if needed, or stick to anchor
     if (isMobile) {
-        left = (viewportWidth - pickerWidth) / 2;
+      left = (window.innerWidth - WIDTH) / 2;
     } else {
-        // Flip horizontally if too close to right edge
-        if (left + pickerWidth > viewportWidth) {
-            left = anchorRect.right - pickerWidth;
-        }
+      if (left + WIDTH > window.innerWidth) left = window.innerWidth - WIDTH - PADDING;
+      if (left < PADDING) left = PADDING;
     }
 
-    // Flip vertically if too close to bottom
-    if (top + pickerHeight > viewportHeight) {
-        top = anchorRect.top - pickerHeight - 8;
-    }
+    if (top + HEIGHT > window.innerHeight) top = anchorRect.top - HEIGHT - 8;
+    top = Math.max(PADDING, Math.min(top, window.innerHeight - HEIGHT - PADDING));
 
-    // Ensure it stays within viewport
-    left = Math.max(8, Math.min(left, viewportWidth - pickerWidth - 8));
-    top = Math.max(8, Math.min(top, viewportHeight - pickerHeight - 8));
+    return {
+      top: `${top + window.scrollY}px`,
+      left: `${left + window.scrollX}px`,
+      width: `${WIDTH}px`,
+      position: 'absolute',
+      zIndex: 60,
+    };
+  }, [anchorRect, isMobile]);
 
-    const categories: { id: UnitCategory; label: string; units: UnitType[] }[] = [
-        { id: 'infantry', label: 'Infantry', units: ['militia', 'warrior', 'longsword', 'pikemen'] },
-        { id: 'ranged_infantry', label: 'Ranged', units: ['archer', 'skirmisher', 'crossbowmen'] },
-        { id: 'cavalry', label: 'Cavalry', units: ['light_cavalry', 'heavy_cavalry'] }
-    ];
+  if (!isOpen || !anchorRect) return null;
 
-    const [selectedCategory, setSelectedCategory] = React.useState<UnitCategory>('infantry');
+  return (
+    <>
+      <div
+        className="fixed inset-0 bg-black/60 backdrop-blur-[2px] z-50 transition-opacity animate-in fade-in duration-300"
+        onClick={onClose}
+      />
 
-    const currentUnits = categories.find(c => c.id === selectedCategory)?.units || [];
-
-    return (
-        <>
-            {/* Backdrop */}
-            <div
-                className="fixed inset-0 bg-black/60 backdrop-blur-[2px] z-[55] transition-opacity"
-                onClick={onClose}
-            />
-
-            {/* Picker */}
-            <div
-                className="fixed z-[60] bg-slate-900 border border-slate-700 shadow-2xl p-3 animate-in fade-in zoom-in-95 duration-200 rounded-lg"
-                style={{
-                    left: `${left}px`,
-                    top: `${top}px`,
-                    width: `${pickerWidth}px`,
-                    maxHeight: `${pickerHeight}px`
-                }}
+      <div
+        ref={pickerRef}
+        style={positionStyle}
+        className="max-h-[400px] flex flex-col bg-slate-900 border border-slate-800 rounded-[2.5rem] shadow-[0_20px_60px_rgba(0,0,0,0.8)] overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+      >
+        {/* Header */}
+        <div className="flex flex-col gap-0.5 p-4 pb-3">
+          <span className="text-[9px] font-black text-pink-500 uppercase tracking-[0.2em] leading-none">Deployment</span>
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-black text-white uppercase tracking-tight">Select Unit Class</h3>
+            <button
+              onClick={onClose}
+              className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-slate-400 hover:text-white transition-colors border border-slate-700/50"
             >
-                {/* Header */}
-                <div className="flex items-center justify-between mb-3 px-1">
-                    <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-wide">Select Unit Type</h3>
-                    <button
-                        onClick={onClose}
-                        className="w-7 h-7 rounded bg-slate-800 text-slate-400 flex items-center justify-center text-xs hover:bg-slate-700 hover:text-slate-300 transition-colors border border-slate-700"
-                    >
-                        ✕
-                    </button>
-                </div>
+              ✕
+            </button>
+          </div>
+        </div>
 
-                {/* Category Tabs - Matching Army UI */}
-                <div className="flex p-0.5 bg-slate-950 rounded border border-slate-800 mb-3">
-                    {categories.map(cat => (
-                        <button
-                            key={cat.id}
-                            onClick={() => setSelectedCategory(cat.id)}
-                            className={`flex-1 px-2 py-1 text-[9px] rounded font-semibold uppercase tracking-wide transition-colors ${selectedCategory === cat.id
-                                ? 'bg-emerald-600 text-white'
-                                : 'text-slate-500 hover:text-slate-300'
-                                }`}
-                        >
-                            {cat.label}
-                        </button>
-                    ))}
-                </div>
+        {/* Category Tabs */}
+        <div className="flex px-4 gap-1 mb-2 border-b border-slate-800/50 pb-2">
+          {(['infantry', 'ranged_infantry', 'cavalry'] as UnitCategory[]).map(cat => (
+            <button
+              key={cat}
+              onClick={() => setSelectedCategory(cat)}
+              className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${
+                selectedCategory === cat
+                  ? 'text-pink-500 bg-pink-500/5'
+                  : 'text-slate-500 hover:text-slate-300'
+              }`}
+            >
+              {cat === 'infantry' ? 'Infantry' : cat === 'ranged_infantry' ? 'Ranged' : 'Cavalry'}
+            </button>
+          ))}
+        </div>
 
-                {/* Unit Grid - 2 Columns */}
-                <div className="grid grid-cols-2 gap-2 overflow-y-auto max-h-[240px] pr-1 custom-scrollbar">
-                    {currentUnits.map(unitType => {
-                        const ironCost = ironCostPerSquad[unitType];
-                        const canAfford = warehouse.iron >= ironCost;
-                        const isFree = ironCost === 0;
-                        const isActive = unitType === currentUnitType;
+        {/* Unit List */}
+        <div className="flex-1 overflow-y-auto p-3 grid grid-cols-2 gap-2.5 custom-scrollbar max-h-[280px]">
+          {Object.entries(unitCategory)
+            .filter(([_, cat]) => cat === selectedCategory)
+            .map(([type]) => {
+              const uType = type as UnitType;
+              const cost = ironCostPerSquad[uType];
+              const canAfford = warehouse.iron >= cost;
+              const isSelected = currentUnitType === uType;
 
-                        return (
-                            <button
-                                key={unitType}
-                                onClick={() => {
-                                    if (canAfford) {
-                                        onSelectUnit(unitType);
-                                    }
-                                }}
-                                disabled={!canAfford}
-                                className={`relative flex items-center h-12 p-2 rounded-lg border transition-all gap-2 ${isActive
-                                    ? 'bg-emerald-900/20 border-emerald-600'
-                                    : canAfford
-                                        ? 'bg-slate-800 border-slate-700 hover:border-slate-600 active:scale-[0.98]'
-                                        : 'bg-slate-900 border-slate-800 opacity-40'
-                                    }`}
-                            >
-                                <span className={`text-lg shrink-0 ${isActive ? 'text-emerald-400' : 'text-slate-400'}`}>
-                                    {unitCategory[unitType] === 'ranged_infantry' ? '🏹' : unitCategory[unitType] === 'cavalry' ? '🐴' : '⚔️'}
-                                </span>
-                                <div className="flex flex-col items-start min-w-0 overflow-hidden flex-1">
-                                    <div className="text-[9px] font-semibold text-slate-200 uppercase leading-tight truncate w-full">{unitDisplayNames[unitType]}</div>
-                                    <div className={`text-[8px] font-semibold ${isFree ? 'text-emerald-500' : canAfford ? 'text-slate-500' : 'text-red-500'}`}>
-                                        {isFree ? 'Free' : `${ironCost} Iron`}
-                                    </div>
-                                </div>
+              return (
+                <button
+                  key={uType}
+                  onClick={() => canAfford && onSelectUnit(uType)}
+                  disabled={!canAfford}
+                  className={`relative h-14 px-3 py-2 rounded-2xl border-2 transition-all flex items-center gap-3 ${
+                    isSelected
+                      ? 'bg-emerald-500/5 border-emerald-500/40 shadow-[0_0_15px_rgba(16,185,129,0.1)]'
+                      : canAfford
+                      ? 'bg-slate-800/40 border-slate-800 hover:border-slate-700 active:scale-95'
+                      : 'bg-slate-950/40 border-slate-900/50 opacity-40 grayscale'
+                  }`}
+                >
+                  <span className={`text-2xl shrink-0 ${isSelected ? 'text-emerald-400' : 'text-slate-400'}`}>
+                    {unitCategory[uType] === 'ranged_infantry' ? '🏹' : unitCategory[uType] === 'cavalry' ? '🐴' : '⚔️'}
+                  </span>
 
-                                {isActive && (
-                                    <div className="absolute top-1 right-1">
-                                        <span className="px-1 py-0.5 bg-emerald-600 text-white text-[6px] font-bold uppercase rounded tracking-tight">Active</span>
-                                    </div>
-                                )}
-                            </button>
-                        );
-                    })}
-                </div>
-            </div>
-        </>
-    );
+                  <div className="flex flex-col items-start min-w-0 overflow-hidden leading-tight">
+                    <span className="text-[10px] font-black text-white uppercase truncate w-full">
+                      {unitDisplayNames[uType]}
+                    </span>
+                    <span className={`text-[9px] font-bold ${
+                      cost === 0 ? 'text-emerald-500/60' : canAfford ? 'text-slate-500' : 'text-red-500/60'
+                    }`}>
+                      {cost === 0 ? 'FREE' : `${cost} Iron`}
+                    </span>
+                  </div>
 
-    function formatShort(num: number) {
-        if (num >= 1000) return (num / 1000).toFixed(1) + 'k';
-        return num.toString();
-    }
-}
+                  {isSelected && (
+                    <div className="absolute top-1 right-1">
+                      <span className="px-1 py-0.5 bg-emerald-500 text-white text-[6px] font-black uppercase rounded-[4px] tracking-tighter shadow-sm pulse-subtle">
+                        Active
+                      </span>
+                    </div>
+                  )}
+
+                  {!canAfford && cost > 0 && !isSelected && (
+                    <div className="absolute top-1 right-1">
+                      <div className="w-1.5 h-1.5 bg-red-500 rounded-full" />
+                    </div>
+                  )}
+                </button>
+              );
+            })}
+        </div>
+      </div>
+    </>
+  );
+};
+
+export default AnchoredUnitPicker;
