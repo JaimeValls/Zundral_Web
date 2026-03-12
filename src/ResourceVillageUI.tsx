@@ -3270,7 +3270,7 @@ export default function ResourceVillageUI() {
 
         // Check recruitment mode
         const currentActualWorkers = lumberMill.workers + quarry.workers + farm.workers;
-        const currentFreeWorkers = Math.max(0, population - currentActualWorkers);
+        const currentFreeWorkers = Math.max(0, nextPop - currentActualWorkers);
 
         const canRecruit = recruitmentMode === 'regular'
           ? currentFreeWorkers > 0  // Regular: only use free workers (keep at least 1 free)
@@ -6218,8 +6218,13 @@ Safe recruits (unassigned people): ${safeRecruits}`;
           onSetRecruitmentMode={setRecruitmentMode}
           onSetShowRecruitmentInfo={setShowRecruitmentInfo}
           onToggleBannerTraining={(bannerId, isCurrentlyTraining) => {
-            const newStatus = isCurrentlyTraining ? 'idle' : 'training';
-            setBanners(prev => prev.map(b => b.id === bannerId ? { ...b, status: newStatus } : b));
+            if (isCurrentlyTraining) {
+              // Stop training: set to idle
+              setBanners(prev => prev.map(b => b.id === bannerId ? { ...b, status: 'idle', trainingPaused: false } : b));
+            } else {
+              // Start training: use the proper function that calculates reqPop
+              startTraining(bannerId);
+            }
           }}
           onUpdateBannerNameDraft={updateBannerNameDraft}
           onCancelEditingBanner={cancelEditingBanner}
