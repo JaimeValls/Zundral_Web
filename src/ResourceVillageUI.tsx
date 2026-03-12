@@ -3832,6 +3832,14 @@ export default function ResourceVillageUI() {
     return () => clearInterval(id);
   }, [lumberRate, stoneRate, foodRate, foodConsumption, netFoodRate, lumberCap, stoneCap, foodCap, netPopulationChange, population, banners, missions, warehouse.food, warehouse.iron, farm.stored, popCap, barracks, bannerTemplates, bannerSeq, recruitmentMode, lumberMill.workers, quarry.workers, farm.workers, warehouseCap, goldIncomePerSecond, squadSeqRef]);
 
+  // === Auto-save on banner changes ===
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      saveGame();
+    }, 500); // Debounce auto-save to avoid excessive localStorage writes
+    return () => clearTimeout(timer);
+  }, [banners, warehouse, population]);
+
   // === Mission Cooldown Timer ===
   useEffect(() => {
     const missionsWithCooldown = missions.filter(m => m.cooldownEndTime && m.cooldownEndTime > Date.now());
@@ -6225,7 +6233,7 @@ Safe recruits (unassigned people): ${safeRecruits}`;
               if (banner.id !== bannerId) return banner;
               const squads = banner.squads || [];
               const existingIdx = squads.findIndex(s => s.slotIndex === slotIndex);
-              const newSquad = { id: squadId, type: unitType, slotIndex, maxSize: 10, currentSize: 10, count: 1 };
+              const newSquad = { id: squadId, type: unitType, slotIndex, maxSize: 10, currentSize: 0, count: 1 };
               const updatedSquads = existingIdx >= 0
                 ? squads.map((s, i) => i === existingIdx ? newSquad : s)
                 : [...squads, newSquad];
@@ -6234,7 +6242,7 @@ Safe recruits (unassigned people): ${safeRecruits}`;
             if (bannersDraft && bannersDraft.id === bannerId) {
               const squads = bannersDraft.squads || [];
               const existingIdx = squads.findIndex(s => s.slotIndex === slotIndex);
-              const newSquad = { id: squadId, type: unitType, slotIndex, maxSize: 10, currentSize: 10, count: 1 };
+              const newSquad = { id: squadId, type: unitType, slotIndex, maxSize: 10, currentSize: 0, count: 1 };
               const updatedSquads = existingIdx >= 0
                 ? squads.map((s, i) => i === existingIdx ? newSquad : s)
                 : [...squads, newSquad];
