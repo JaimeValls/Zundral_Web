@@ -56,6 +56,14 @@ import CouncilUI from './features/CouncilUI';
 import MissionsUI from './features/MissionsUI';
 import ArmyTab from './features/ArmyTab';
 import ExpeditionsUI from './features/ExpeditionsUI';
+// === Debug logging (silent in production builds) ===
+const __DEV__ = import.meta.env.DEV;
+const dbg = {
+  log: (...args: unknown[]) => { if (__DEV__) console.log(...args); },
+  warn: (...args: unknown[]) => { if (__DEV__) console.warn(...args); },
+  error: (...args: unknown[]) => { if (__DEV__) console.error(...args); },
+};
+
 import zundralLogo from '../imgs/Zundral-compact.png';
 import popIcon from '../imgs/pop-icon.png';
 import lumberjackImg from '../imgs/buildings/lumbjerjack.png';
@@ -415,7 +423,7 @@ export default function ResourceVillageUI() {
 
   // Debug: Log notification state changes
   useEffect(() => {
-    console.log('[STATE] bannerLossNotices changed. Count:', bannerLossNotices.length, 'Notices:', bannerLossNotices);
+    dbg.log('[STATE] bannerLossNotices changed. Count:', bannerLossNotices.length, 'Notices:', bannerLossNotices);
   }, [bannerLossNotices]);
 
   // Keep ref in sync with state
@@ -1201,7 +1209,7 @@ export default function ResourceVillageUI() {
       const now = Date.now();
       const deltaSeconds = Math.max(0, (now - saved.lastSaveUtc) / 1000);
 
-      console.log(`[PERSISTENCE] Loading save. Offline time: ${deltaSeconds.toFixed(1)} seconds`);
+      dbg.log(`[PERSISTENCE] Loading save. Offline time: ${deltaSeconds.toFixed(1)} seconds`);
 
       // Run offline simulation
       const simulated = simulateOfflineProgression(saved, deltaSeconds);
@@ -1213,12 +1221,12 @@ export default function ResourceVillageUI() {
       setTimeout(() => {
         const currentState = serializeGameState();
         persistence.saveState(currentState);
-        console.log('[PERSISTENCE] Re-saved state after offline simulation');
+        dbg.log('[PERSISTENCE] Re-saved state after offline simulation');
       }, 200);
 
-      console.log(`[PERSISTENCE] Loaded save, simulated ${deltaSeconds.toFixed(1)} seconds offline`);
+      dbg.log(`[PERSISTENCE] Loaded save, simulated ${deltaSeconds.toFixed(1)} seconds offline`);
     } else {
-      console.log('[PERSISTENCE] No save found, starting fresh');
+      dbg.log('[PERSISTENCE] No save found, starting fresh');
       // Initialize leaderboard with placeholder data on first load
       setLeaderboard(createPlaceholderLeaderboard(REAL_PLAYER_NAME, REAL_PLAYER_FACTION));
     }
@@ -1233,7 +1241,7 @@ export default function ResourceVillageUI() {
     persistence.startAutoSave(() => {
       const state = stateSerializerRef.current();
       // Console log for debugging/confirmation (optional, but requested by plan)
-      console.log('[PERSISTENCE] Auto-saving game state...');
+      dbg.log('[PERSISTENCE] Auto-saving game state...');
       return state;
     });
     return () => {
@@ -1427,7 +1435,7 @@ export default function ResourceVillageUI() {
 
     // Check if barracks exists and get max training slots
     if (!barracks || barracks.level < 1) {
-      console.warn('[TRAINING] Barracks required to train banners');
+      dbg.warn('[TRAINING] Barracks required to train banners');
       return;
     }
 
@@ -1435,7 +1443,7 @@ export default function ResourceVillageUI() {
     const currentlyTraining = banners.filter(b => b.type === 'regular' && b.status === 'training').length;
 
     if (currentlyTraining >= maxSlots) {
-      console.warn(`[TRAINING] Training slots full: ${currentlyTraining}/${maxSlots}`);
+      dbg.warn(`[TRAINING] Training slots full: ${currentlyTraining}/${maxSlots}`);
       return;
     }
 
@@ -1452,7 +1460,7 @@ export default function ResourceVillageUI() {
         const hasIncompleteSquads = displaySquads.some(s => s.currentSize < s.maxSize);
 
         if (!hasIncompleteSquads) {
-          console.warn('[TRAINING] All squads are at full strength');
+          dbg.warn('[TRAINING] All squads are at full strength');
           return b;
         }
 
@@ -1599,7 +1607,7 @@ export default function ResourceVillageUI() {
     // HARD LOCK check: Must be editing this specific banner
     if (bannerId !== editingBannerId || !bannersDraft) {
       // Just return silently as UI should be locked, or log warning
-      console.warn("Attempted to modify banner without Edit Mode active");
+      dbg.warn("Attempted to modify banner without Edit Mode active");
       return;
     }
 
@@ -2125,19 +2133,19 @@ export default function ResourceVillageUI() {
   }
 
   function applyFortressBattleCasualties(expeditionId: string, result: SiegeBattleResult): number[] {
-    console.log('[BATTLE] applyFortressBattleCasualties called', { expeditionId, result });
+    dbg.log('[BATTLE] applyFortressBattleCasualties called', { expeditionId, result });
     const expedition = expeditions.find(exp => exp.expeditionId === expeditionId);
     if (!expedition?.fortress || !expedition.fortress.garrison || expedition.fortress.garrison.length === 0) {
-      console.log('[BATTLE] No fortress or garrison found');
+      dbg.log('[BATTLE] No fortress or garrison found');
       return [];
     }
 
     const garrisonIds = expedition.fortress.garrison;
-    console.log('[BATTLE] Garrison IDs:', garrisonIds);
+    dbg.log('[BATTLE] Garrison IDs:', garrisonIds);
     const garrisonBanners = banners.filter(b => garrisonIds.includes(b.id));
-    console.log('[BATTLE] Garrison banners found:', garrisonBanners.length, garrisonBanners.map(b => ({ id: b.id, name: b.name, type: b.type })));
+    dbg.log('[BATTLE] Garrison banners found:', garrisonBanners.length, garrisonBanners.map(b => ({ id: b.id, name: b.name, type: b.type })));
     if (garrisonBanners.length === 0) {
-      console.log('[BATTLE] No garrison banners found');
+      dbg.log('[BATTLE] No garrison banners found');
       return [];
     }
 
@@ -2192,7 +2200,7 @@ export default function ResourceVillageUI() {
     const warriorLosses = Math.max(0, totalWarriors - finalWarriors);
     const archerLosses = Math.max(0, totalArchers - finalArchers);
 
-    console.log('[BATTLE] Loss calculation:', {
+    dbg.log('[BATTLE] Loss calculation:', {
       totalWarriors,
       totalArchers,
       finalWarriors,
@@ -2204,7 +2212,7 @@ export default function ResourceVillageUI() {
     });
 
     if (warriorLosses === 0 && archerLosses === 0) {
-      console.log('[BATTLE] No losses detected, returning early');
+      dbg.log('[BATTLE] No losses detected, returning early');
       return [];
     }
 
@@ -2244,15 +2252,15 @@ export default function ResourceVillageUI() {
       }
 
       const losses = lossPerBanner.get(banner.id);
-      console.log('[BATTLE] Processing banner:', { id: banner.id, name: banner.name, type: banner.type, losses });
+      dbg.log('[BATTLE] Processing banner:', { id: banner.id, name: banner.name, type: banner.type, losses });
       if (!losses || (!losses.warriors && !losses.archers)) {
-        console.log('[BATTLE] No losses for banner', banner.name);
+        dbg.log('[BATTLE] No losses for banner', banner.name);
         next.push(banner);
         return next;
       }
 
       if (!banner.squads || banner.squads.length === 0) {
-        console.log('[BATTLE] Banner has no squads', banner.name);
+        dbg.log('[BATTLE] Banner has no squads', banner.name);
         next.push(banner);
         return next;
       }
@@ -2314,7 +2322,7 @@ export default function ResourceVillageUI() {
           bannerType: bannerType,
           message: `${bannerName} was decimated in the battle.`,
         };
-        console.log('[BATTLE] Banner destroyed, creating notice:', notice);
+        dbg.log('[BATTLE] Banner destroyed, creating notice:', notice);
         noticesToAdd.push(notice);
         return next;
       }
@@ -2348,17 +2356,17 @@ export default function ResourceVillageUI() {
     }
 
     // Update notifications state
-    console.log('[BATTLE] Finished processing banners. noticesToAdd.length:', noticesToAdd.length, 'noticesToAdd:', noticesToAdd);
+    dbg.log('[BATTLE] Finished processing banners. noticesToAdd.length:', noticesToAdd.length, 'noticesToAdd:', noticesToAdd);
 
     if (noticesToAdd.length > 0) {
-      console.log('[BATTLE] Creating notifications:', noticesToAdd);
+      dbg.log('[BATTLE] Creating notifications:', noticesToAdd);
       setBannerLossNotices((prev) => {
         const updated = [...prev, ...noticesToAdd];
-        console.log('[BATTLE] Updated notification state. Previous count:', prev.length, 'New count:', updated.length, 'All notices:', updated);
+        dbg.log('[BATTLE] Updated notification state. Previous count:', prev.length, 'New count:', updated.length, 'All notices:', updated);
         return updated;
       });
     } else {
-      console.log('[BATTLE] WARNING: No notifications to add (noticesToAdd is empty)');
+      dbg.log('[BATTLE] WARNING: No notifications to add (noticesToAdd is empty)');
     }
 
     return destroyedIds;
@@ -2394,8 +2402,8 @@ export default function ResourceVillageUI() {
     const activeArchers = wallArchers.active; // Only archers that can shoot from walls in phase 1
 
     // Debug logging
-    console.log('[SIEGE] Defenders from banners:', { garrisonArchers, garrisonWarriors });
-    console.log('[SIEGE] Watch Post capacity:', wallArchers.capacity, 'Active wall archers:', activeArchers);
+    dbg.log('[SIEGE] Defenders from banners:', { garrisonArchers, garrisonWarriors });
+    dbg.log('[SIEGE] Watch Post capacity:', wallArchers.capacity, 'Active wall archers:', activeArchers);
 
     // Unit stats for siege
     const wSkirmish = stats.warrior?.skirmish_attack || 0;
@@ -2439,10 +2447,10 @@ export default function ResourceVillageUI() {
         warrior: { skirmish: wSkirmish, melee: wMelee },
         archer: { skirmish: aSkirmish, melee: aSkirmish * 0.3 }
       };
-      console.log('[SIEGE] Starting inner battle with defenders:', { garrisonWarriors, garrisonArchers });
+      dbg.log('[SIEGE] Starting inner battle with defenders:', { garrisonWarriors, garrisonArchers });
       innerTimeline = runInnerBattle(garrisonWarriors, garrisonArchers, remainingAttackers, battleStats, baseCas);
     } else if (fortHP <= 0 && remainingAttackers > 0) {
-      console.log('[SIEGE] No inner battle - no defenders from banners');
+      dbg.log('[SIEGE] No inner battle - no defenders from banners');
     }
 
     // Determine outcome
@@ -2691,7 +2699,7 @@ export default function ResourceVillageUI() {
         const parsed = JSON.parse(saved);
         return { ...getDefaultUnitStats(), ...parsed };
       } catch (e) {
-        console.warn('Failed to parse saved unit stats, using defaults');
+        dbg.warn('Failed to parse saved unit stats, using defaults');
       }
     }
     return getDefaultUnitStats();
@@ -2704,7 +2712,7 @@ export default function ResourceVillageUI() {
       try {
         return JSON.parse(saved);
       } catch (e) {
-        console.warn('Failed to parse saved battle params, using defaults');
+        dbg.warn('Failed to parse saved battle params, using defaults');
       }
     }
     return getDefaultBattleParams();
@@ -2870,7 +2878,7 @@ export default function ResourceVillageUI() {
     const currentCommanders = commanders.length;
 
     if (currentCommanders >= maxCommanders) {
-      console.warn('[COMMANDER] Cannot recruit: max commanders reached');
+      dbg.warn('[COMMANDER] Cannot recruit: max commanders reached');
       return;
     }
 
@@ -2937,33 +2945,33 @@ export default function ResourceVillageUI() {
     } : null);
   }
   function startBarracksTraining(templateId: string) {
-    console.log('[HIRE DEBUG] Starting hire for template:', templateId);
+    dbg.log('[HIRE DEBUG] Starting hire for template:', templateId);
     const template = bannerTemplates.find(t => t.id === templateId);
     if (!template) {
-      console.error('[HIRE DEBUG] Template not found:', templateId);
+      dbg.error('[HIRE DEBUG] Template not found:', templateId);
       return;
     }
 
     // Use functional updates to prevent stale state and race conditions
     setBarracks(prev => {
       if (!prev) {
-        console.warn('[HIRE DEBUG] Barracks is null');
+        dbg.warn('[HIRE DEBUG] Barracks is null');
         return prev;
       }
       if (prev.trainingQueue.length >= prev.trainingSlots) {
-        console.warn('[HIRE DEBUG] Training slots full:', prev.trainingQueue.length, '/', prev.trainingSlots);
+        dbg.warn('[HIRE DEBUG] Training slots full:', prev.trainingQueue.length, '/', prev.trainingSlots);
         return prev;
       }
 
       // Check if this template is already in the queue (prevent duplicates)
       if (prev.trainingQueue.some(job => job.templateId === templateId)) {
-        console.warn('[HIRE DEBUG] Already hiring this template');
+        dbg.warn('[HIRE DEBUG] Already hiring this template');
         return prev; // Already hiring this template
       }
 
       // Check if player has enough gold
       if (warehouse.gold < template.cost) {
-        console.warn('[HIRE DEBUG] Not enough gold. Have:', warehouse.gold, 'Need:', template.cost);
+        dbg.warn('[HIRE DEBUG] Not enough gold. Have:', warehouse.gold, 'Need:', template.cost);
         return prev;
       }
 
@@ -2981,7 +2989,7 @@ export default function ResourceVillageUI() {
         soldiersTrained: 0,
       };
 
-      console.log('[HIRE DEBUG] Job created:', newHiring);
+      dbg.log('[HIRE DEBUG] Job created:', newHiring);
       return {
         ...prev,
         trainingQueue: [...prev.trainingQueue, newHiring],
@@ -3609,7 +3617,7 @@ export default function ResourceVillageUI() {
               const newElapsed = job.elapsedTime + 1;
               if (newElapsed >= (job.arrivalTime || 0)) {
                 // Mercenary arrival complete - will create banner outside state update
-                console.log('[GAME LOOP] Mercenary job completed! ID:', job.id, 'Template:', job.templateId);
+                dbg.log('[GAME LOOP] Mercenary job completed! ID:', job.id, 'Template:', job.templateId);
                 completedMercenaryJobs.push({ templateId: job.templateId || '', jobId: job.id });
                 return null; // Remove from queue
               }
@@ -3754,9 +3762,9 @@ export default function ResourceVillageUI() {
         const completedJobs = completedMercenaryJobs;
 
         // Create banners outside of barracks state update to prevent duplicates
-        console.log('[BANNER DEBUG] Checking completedJobs:', completedJobs.length);
+        dbg.log('[BANNER DEBUG] Checking completedJobs:', completedJobs.length);
         if (completedJobs.length > 0) {
-          console.log('[BANNER DEBUG] Processing', completedJobs.length, 'completed job(s)');
+          dbg.log('[BANNER DEBUG] Processing', completedJobs.length, 'completed job(s)');
 
           // Prepare all new banners first
           const newBanners: Banner[] = [];
@@ -3766,7 +3774,7 @@ export default function ResourceVillageUI() {
             // Find template from current bannerTemplates (from dependency)
             const template = bannerTemplates.find(t => t.id === templateId);
             if (!template) {
-              console.error('[BANNER DEBUG] Template not found:', templateId, 'Available:', bannerTemplates.map(t => t.id));
+              dbg.error('[BANNER DEBUG] Template not found:', templateId, 'Available:', bannerTemplates.map(t => t.id));
               return;
             }
 
@@ -3809,7 +3817,7 @@ export default function ResourceVillageUI() {
 
           // Update states separately to ensure React processes them correctly
           if (newBanners.length > 0) {
-            console.log('[BANNER DEBUG] Creating', newBanners.length, 'banner(s):', newBanners.map(b => `${b.name} (id: ${b.id})`));
+            dbg.log('[BANNER DEBUG] Creating', newBanners.length, 'banner(s):', newBanners.map(b => `${b.name} (id: ${b.id})`));
 
             // Update bannerSeq first
             setBannerSeq(nextSeq);
@@ -3817,11 +3825,11 @@ export default function ResourceVillageUI() {
             // Then update banners state - use functional update to get latest state
             setBanners(bs => {
               const updated = [...bs, ...newBanners];
-              console.log('[BANNER DEBUG] Banner state updated. Previous:', bs.length, 'New total:', updated.length, 'Banners:', updated.map(b => b.name));
+              dbg.log('[BANNER DEBUG] Banner state updated. Previous:', bs.length, 'New total:', updated.length, 'Banners:', updated.map(b => b.name));
               return updated;
             });
           } else {
-            console.warn('[BANNER DEBUG] No banners created from', completedJobs.length, 'completed jobs');
+            dbg.warn('[BANNER DEBUG] No banners created from', completedJobs.length, 'completed jobs');
           }
         }
       }
@@ -5726,7 +5734,7 @@ Safe recruits (unassigned people): ${safeRecruits}`;
       const c2 = getWarehouseCost(2); // next level cost *1.5
       console.assert(c2.wood === 150 && c2.stone === 150, "WH L2 cost");
     } catch (e) {
-      console.warn("Self-tests failed", e);
+      dbg.warn("Self-tests failed", e);
     }
   }, []);
 
@@ -6373,7 +6381,7 @@ Safe recruits (unassigned people): ${safeRecruits}`;
                 }));
                 return { result, destroyedBanners };
               } catch (err) {
-                console.error('Siege battle error:', err);
+                dbg.error('Siege battle error:', err);
                 return null;
               }
             }}
@@ -6741,7 +6749,7 @@ Safe recruits (unassigned people): ${safeRecruits}`;
                         }));
                         setSiegeAttackModal(null);
                       } catch (error) {
-                        console.error('Siege battle error:', error);
+                        dbg.error('Siege battle error:', error);
                         alert('Error running siege battle. Please try again.');
                       }
                     }}
