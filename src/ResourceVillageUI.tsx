@@ -1429,10 +1429,9 @@ export default function ResourceVillageUI() {
     }
 
     const maxSlots = getMaxTrainingSlots(barracks.level);
-    const currentlyTraining = banners.filter(b => b.type === 'regular' && b.status === 'training').length;
 
-    if (currentlyTraining >= maxSlots) {
-      dbg.warn(`[TRAINING] Training slots full: ${currentlyTraining}/${maxSlots}`);
+    if (trainingBannerCount >= maxSlots) {
+      dbg.warn(`[TRAINING] Training slots full: ${trainingBannerCount}/${maxSlots}`);
       return;
     }
 
@@ -2992,10 +2991,16 @@ export default function ResourceVillageUI() {
     return total;
   }, [lumberMill.enabled, lumberMill.level, quarry.enabled, quarry.level, farm.enabled, farm.level, ironMine.enabled, ironMine.level]);
 
-  // Calculate actual assigned workers (not just demand)
-  const actualWorkers = useMemo(() => {
+  // Calculate actual assigned workers across all resource buildings
+  const totalAssignedWorkers = useMemo(() => {
     return lumberMill.workers + quarry.workers + farm.workers + ironMine.workers;
   }, [lumberMill.workers, quarry.workers, farm.workers, ironMine.workers]);
+
+  // Count of banners currently in training (for slot limit checks)
+  const trainingBannerCount = useMemo(() =>
+    banners.filter(b => b.type === 'regular' && b.status === 'training').length,
+    [banners]
+  );
 
   // === Population Breakdown (for visualization) ===
   // Locked workers: only 1 total (from the farm - minimum to keep it running)
@@ -3006,10 +3011,8 @@ export default function ResourceVillageUI() {
 
   // Buffer workers: all other workers assigned to buildings (beyond the 1 locked)
   const bufferWorkers = useMemo(() => {
-    // Total workers on all buildings minus the 1 locked worker
-    const totalWorkersOnBuildings = lumberMill.workers + quarry.workers + farm.workers + ironMine.workers;
-    return Math.max(0, totalWorkersOnBuildings - 1); // Subtract the 1 locked worker
-  }, [lumberMill.workers, quarry.workers, farm.workers, ironMine.workers]);
+    return Math.max(0, totalAssignedWorkers - 1); // Subtract the 1 locked worker
+  }, [totalAssignedWorkers]);
 
   // Free population: unassigned people
   const freePop = useMemo(() => {
