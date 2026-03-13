@@ -2,55 +2,46 @@ import React, { useEffect, useMemo, useState, useRef } from "react";
 import BlacksmithUI from './BlacksmithUI';
 import TechnologiesUI from './TechnologiesUI';
 import LeaderboardUI from './LeaderboardUI';
-import { persistence, simulateOfflineProgression, createDefaultGameState, GameState } from './persistence';
+import { persistence, simulateOfflineProgression, GameState } from './persistence';
 import { updateLeaderboardFromBattleResult, recalculateRanksAndTitles, createPlaceholderLeaderboard, type LeaderboardEntry, type BattleResult as LeaderboardBattleResult, type Faction } from './leaderboard';
 import { useMobileDetection } from './hooks/useMobileDetection';
 import type {
   WarehouseState, WarehouseCap,
-  UnitType, UnitCategory, Division,
-  XPLevelInfo,
+  UnitType, Division,
   Squad, Banner, BannerLossNotice, BannerTemplate,
   CommanderArchetype, Commander,
   Mission, BattleResult,
-  ExpeditionState, FactionId, FactionBranchId, FactionPerkNode, PlayerFactionState,
+  FactionId, FactionBranchId, FactionPerkNode, PlayerFactionState,
   FortressBuilding, FortressStats, SiegeRound, InnerBattleStep, SiegeBattleResult, Expedition,
-  BuildingCategory, TownHallLevel, TownHallState,
-  TrainingEntryType, TrainingEntry, BarracksState, TavernState, MilitaryAcademyState,
+  TownHallLevel, TownHallState,
+  TrainingEntry, BarracksState, TavernState, MilitaryAcademyState,
 } from './types';
 import {
-  PROGRESSION_FORMULA, WAREHOUSE_FORMULA,
-  BUILDING_COST_SEED, BUILDING_COST_FACTOR, BUILDING_COST_TABLE,
-  unitCategory, ironCostPerSquad, squadConfig, unitDisplayNames, unitDescriptions,
-  XP_GAIN_PER_ENEMY_KILL, XP_GAIN_SURVIVAL_BONUS, XP_GAIN_VICTORY_BONUS,
-  XP_LEVELS, BASE_COMMANDER_XP,
-  COMMANDER_ARCHETYPES, COMMANDER_FIRST_NAMES, COMMANDER_TITLES,
+  unitCategory, ironCostPerSquad, squadConfig, unitDisplayNames,
+  XP_LEVELS,
+  COMMANDER_ARCHETYPES,
 } from './constants';
 import {
   getResourceIcon,
   getProgression, getBuildingCost, getWarehouseCapacity, getWarehouseCost,
   getIronCostPerUnit,
-  calculateLevelFromXP, getXpSmoothingForLevel, getMinXPForLevel,
-  calculateCommanderXPToNextLevel, updateCommanderXP, getCommanderLevelBonusMultiplier,
+  calculateLevelFromXP,
+  calculateCommanderXPToNextLevel, updateCommanderXP,
   calculateBannerXPGain, updateBannerXP,
   getHouseCost, getHouseCapacity, getTownHallCost, getBarracksCost,
   getMilitaryAcademyCost, getMilitaryAcademyBuildCost, canBuildMilitaryAcademy,
   getTavernCost, getBarracksBuildCost, getTavernBuildCost,
   canBuildBarracks, canBuildTavern, getMaxTrainingSlots,
-  type SquadHealthState,
-  getSquadHealthState, getSquadColorClass,
   initializeSquadsFromUnits, distributeLossesToBanner, calculateBannerLosses,
-  distributeTypeLossesAcrossBanners, trimSquadsByType, distributeDivisionLossesToSquads,
-  getOrdinal, getBannerRole, getBannerComposition,
+  distributeTypeLossesAcrossBanners, trimSquadsByType,
   generateCommanderName, generateBannerName,
-  canUnlockPerk,
 } from './gameFormulas';
 import {
-  simulateBattle, getWarriorArcherTotals, total as divisionTotal,
+  simulateBattle,
   getDefaultUnitStats, getDefaultBattleParams,
   type UnitStats, type BattleParams,
 } from './battleSimulator';
-import { BattleChart, SiegeGraphCanvas, InnerBattleGraphCanvas } from './components/BattleChart';
-import AnchoredUnitPicker from './components/AnchoredUnitPicker';
+import { BattleChart } from './components/BattleChart';
 import FactionsUI from './features/FactionsUI';
 import CouncilUI from './features/CouncilUI';
 import MissionsUI from './features/MissionsUI';
@@ -64,8 +55,6 @@ const dbg = {
   error: (...args: unknown[]) => { if (__DEV__) console.error(...args); },
 };
 
-import zundralLogo from '../imgs/Zundral-compact.png';
-import popIcon from '../imgs/pop-icon.png';
 import lumberjackImg from '../imgs/buildings/lumbjerjack.png';
 import backgroundImg from '../imgs/background/background01.png';
 import rPopulation from '../imgs/resources/r_population.png';
@@ -899,7 +888,7 @@ export default function ResourceVillageUI() {
     return {
       version: 1,
       lastSaveUtc: Date.now(),
-      totalPlayTime: 0, // TODO: Track play time
+      totalPlayTime: 0, // NOTE: Not currently tracked, kept for save compatibility
 
       warehouse,
       warehouseLevel,
@@ -1869,9 +1858,6 @@ export default function ResourceVillageUI() {
   // === Fortress Building Config ===
   const WATCH_POST_ARCHERS_PER_LEVEL = 5; // Config: archers per Watch Post level
 
-  // === Battle Config ===
-  const BATTLE_PROGRESS_DURATION_MS = 3000; // Config: battle progress animation duration
-
   // === Mission Config ===
   const MISSION_COOLDOWN_SECONDS = 10; // Config: cooldown duration after claiming reward
 
@@ -2174,7 +2160,6 @@ export default function ResourceVillageUI() {
     let finalArchers: number;
 
     const totalInitial = totalWarriors + totalArchers;
-    const initialTotal = result.initialGarrison.warriors + result.initialGarrison.archers;
 
     if (result.finalGarrison) {
       // Use explicit finalGarrison if available
@@ -2698,7 +2683,7 @@ export default function ResourceVillageUI() {
       try {
         const parsed = JSON.parse(saved);
         return { ...getDefaultUnitStats(), ...parsed };
-      } catch (e) {
+      } catch (_e) {
         dbg.warn('Failed to parse saved unit stats, using defaults');
       }
     }
@@ -2711,7 +2696,7 @@ export default function ResourceVillageUI() {
     if (saved) {
       try {
         return JSON.parse(saved);
-      } catch (e) {
+      } catch (_e) {
         dbg.warn('Failed to parse saved battle params, using defaults');
       }
     }
@@ -2751,7 +2736,7 @@ export default function ResourceVillageUI() {
     return sum;
   }
 
-  function handleBlacksmithUpgrade(itemId: string, cost: { iron: number; gold: number }) {
+  function handleBlacksmithUpgrade(_itemId: string, cost: { iron: number; gold: number }) {
     setWarehouse((w) => ({
       ...w,
       iron: Math.max(0, w.iron - cost.iron),
@@ -2759,11 +2744,11 @@ export default function ResourceVillageUI() {
     }));
     // TODO: Update actual gear levels in your game state
   }
-  function handleStartResearch(techId: string, cost: number) {
+  function handleStartResearch(_techId: string, cost: number) {
     setSkillPoints(prev => Math.max(0, prev - cost));
     // TODO: Track research state if needed
   }
-  function handleCompleteResearch(techId: string) {
+  function handleCompleteResearch(_techId: string) {
     // TODO: Apply technology effects when implemented
   }
   function requestTownHallUpgrade(currentLevel: number) {
@@ -3012,9 +2997,6 @@ export default function ResourceVillageUI() {
     return lumberMill.workers + quarry.workers + farm.workers + ironMine.workers;
   }, [lumberMill.workers, quarry.workers, farm.workers, ironMine.workers]);
 
-  // Calculate free workers correctly: population - actual assigned workers
-  const freeWorkers = useMemo(() => population - actualWorkers, [population, actualWorkers]);
-
   // === Population Breakdown (for visualization) ===
   // Locked workers: only 1 total (from the farm - minimum to keep it running)
   const lockedWorkers = useMemo(() => {
@@ -3033,10 +3015,6 @@ export default function ResourceVillageUI() {
   const freePop = useMemo(() => {
     return Math.max(0, population - lockedWorkers - bufferWorkers);
   }, [population, lockedWorkers, bufferWorkers]);
-
-  // Safe and risky recruits (for display)
-  const safeRecruits = freePop;
-  const riskyRecruits = bufferWorkers;
 
   // Ensure breakdown doesn't exceed capacity (safety clamp) - memoized
   const clampedLocked = useMemo(() => Math.min(lockedWorkers, popCap), [lockedWorkers, popCap]);
@@ -3159,26 +3137,6 @@ export default function ResourceVillageUI() {
   // === Food consumption ===
   const foodConsumption = useMemo(() => population, [population]); // 1 food per worker per second
   const netFoodRate = useMemo(() => foodRate - foodConsumption, [foodRate, foodConsumption]);
-
-  // === Population growth rate (depends on netFoodRate and food storage) ===
-  // NOTE: This is kept for backward compatibility but netPopulationChange is the primary system
-  const popRate = useMemo(() => {
-    // Use the new netPopulationChange system, but respect food availability for positive growth
-    if (netPopulationChange > 0) {
-      const totalFood = warehouse.food + farm.stored;
-      const hasFoodStorage = totalFood > 0;
-      const hasPositiveNetRate = netFoodRate >= 1;
-
-      // Allow growth if we have food storage OR positive net rate
-      if (hasFoodStorage || hasPositiveNetRate) {
-        return population < popCap ? netPopulationChange : 0;
-      }
-      // Only block growth if food storage is zero AND net rate is insufficient
-      return 0;
-    }
-    // Negative growth (from high taxes) happens regardless of food
-    return netPopulationChange;
-  }, [netPopulationChange, population, popCap, netFoodRate, warehouse.food, farm.stored]);
 
   const lumberCap = useMemo(() => getProgression("wood", lumberMill.level, "capacity"), [lumberMill.level]);
   const stoneCap = useMemo(() => getProgression("stone", quarry.level, "capacity"), [quarry.level]);
@@ -3605,7 +3563,6 @@ export default function ResourceVillageUI() {
 
           // Count active training entries
           const activeTraining = barracks.trainingQueue.filter(e => e.status === 'training').length;
-          const activeArriving = barracks.trainingQueue.filter(e => e.status === 'arriving').length;
           const availableSlots = barracks.trainingSlots - activeTraining;
 
           // Move 'arriving' entries to 'training' if slots are available
@@ -4140,7 +4097,7 @@ export default function ResourceVillageUI() {
   function PopulationPill({
     value,
     cap,
-    rate,
+    rate: _rate,
     trend,
     trendTooltip,
     trendColor,
@@ -4163,9 +4120,6 @@ export default function ResourceVillageUI() {
     const valueColor = statusColor === 'red' ? 'text-red-500' : statusColor === 'yellow' ? 'text-yellow-500' : statusColor === 'green' ? 'text-emerald-500' : '';
 
     // Memoize bar calculations - only recalculate when INTEGER population changes
-    // Round population to integer - bar only updates when someone actually enters/leaves
-    const integerPopulation = Math.floor(value);
-
     const barCalculations = useMemo(() => {
       // Calculate percentages for the stacked bar relative to CAPACITY
       // Each segment represents its count as a percentage of total capacity
@@ -4195,18 +4149,14 @@ export default function ResourceVillageUI() {
       };
     }, [Math.floor(value), cap, lockedWorkers, bufferWorkers, freePop]); // Recalculate when integer population, capacity, or breakdown values change
 
-    const { totalFilledPct, scaledLockedPct, scaledBufferPct, scaledFreePct, emptyPct, markerPct, showMarker } = barCalculations;
-
-    // Safe and risky recruits
-    const safeRecruits = freePop;
-    const riskyRecruits = bufferWorkers;
+    const { totalFilledPct, scaledLockedPct, scaledBufferPct, scaledFreePct, emptyPct, markerPct: _markerPct, showMarker } = barCalculations;
 
     // Tooltip text with breakdown info
     const tooltipText = `Total: ${value} / ${cap}
 ${lockedWorkers === 1 ? '1 locked worker' : `${lockedWorkers} locked workers`} (keep buildings running)
 Workers: ${bufferWorkers}
 Free: ${Math.round(freePop * 10) / 10}
-Safe recruits (unassigned people): ${safeRecruits}`;
+Safe recruits (unassigned people): ${freePop}`;
 
     return (
       <div className="rounded-xl border border-slate-700 bg-slate-900 px-0.5 sm:px-1.5 py-0.5 sm:py-1 shadow-sm flex gap-0.5 sm:gap-1.5" title={tooltipText}>
@@ -4335,9 +4285,6 @@ Safe recruits (unassigned people): ${safeRecruits}`;
     const valueTextColor = isFood
       ? (rate > 0 ? 'text-emerald-500' : rate < 0 ? 'text-red-500' : 'text-slate-100')
       : 'text-slate-100';
-
-    // Hide label for Wood, Stone, Food, Iron, Gold (icon is the identifier), but keep it for Skill Points
-    const shouldHideLabel = ['Wood', 'Stone', 'Food', 'Iron', 'Gold'].includes(label);
 
     const fillPercentage = cap > 0 ? Math.min(100, (value / cap) * 100) : 0;
 
@@ -5945,7 +5892,7 @@ Safe recruits (unassigned people): ${safeRecruits}`;
                   href="/fortress_siege_simulator.html"
                   target="_blank"
                   rel="noreferrer"
-                  onClick={(e) => {
+                  onClick={(_e) => {
                     // Find the Godonis expedition fortress stats
                     const godonisExp = expeditions.find(exp => exp.expeditionId === 'godonis_mountain_expedition');
                     if (godonisExp?.fortress?.stats) {
@@ -6695,7 +6642,6 @@ Safe recruits (unassigned people): ${safeRecruits}`;
           if (!expedition?.fortress) return null;
 
           const garrison = calculateGarrisonFromBanners(expedition.fortress.garrison || []);
-          const totalGarrison = garrison.warriors + garrison.archers;
 
           return (
             <div className="fixed inset-0 bg-black/60 grid place-items-center p-4 z-50">
