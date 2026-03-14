@@ -115,25 +115,25 @@ export default function ArmyTab({
     <section className={`max-w-game mx-auto px-4 sm:px-6 ${isMobile ? 'pb-32 pt-0' : 'pb-24 pt-1'}`}>
 
       {/* Army Tab Navigation - Compact Segmented Control */}
-      <div className="mb-2">
-        <div className="flex p-0.5 bg-slate-900 rounded-lg border border-slate-700">
+      <div className="mb-3">
+        <div className="flex p-1 bg-slate-800/80 rounded-lg border border-slate-600">
           <button
             onClick={() => onSetArmyTab('mercenaries')}
-            className={`flex-1 px-3 py-1 text-xs font-semibold rounded transition-colors ${armyTab === 'mercenaries'
-              ? 'bg-slate-800 text-white'
-              : 'text-slate-400 hover:text-slate-300'
+            className={`flex-1 px-3 py-1.5 text-xs font-semibold rounded transition-colors ${armyTab === 'mercenaries'
+              ? 'bg-amber-700 text-white shadow-md'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700'
               }`}
           >
-            Mercenaries
+            ⚔️ Mercenaries
           </button>
           <button
             onClick={() => onSetArmyTab('regular')}
-            className={`flex-1 px-3 py-1 text-xs font-semibold rounded transition-colors ${armyTab === 'regular'
-              ? 'bg-slate-800 text-white'
-              : 'text-slate-400 hover:text-slate-300'
+            className={`flex-1 px-3 py-1.5 text-xs font-semibold rounded transition-colors ${armyTab === 'regular'
+              ? 'bg-amber-700 text-white shadow-md'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700'
               }`}
           >
-            Regular Army
+            🛡️ Regular Army
           </button>
         </div>
       </div>
