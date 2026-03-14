@@ -368,6 +368,8 @@ export default function ArmyTab({
                   const commander = b.commanderId ? commanders.find(c => c.id === b.commanderId) : null;
                   const isTraining = b.status === 'training';
 
+                  const hasSquads = (b.squads || []).length > 0;
+
                   const handleSlotClick = (e: React.MouseEvent, idx: number) => {
                     e.stopPropagation();
                     if (!isEditing) {
@@ -420,8 +422,11 @@ export default function ArmyTab({
                                   type="text"
                                   value={bannersDraft && bannersDraft.id === b.id ? bannersDraft.name : b.name}
                                   onChange={(e) => onUpdateBannerNameDraft(e.target.value)}
-                                  className="bg-slate-900 border border-slate-600 text-white text-sm font-semibold px-2 py-1 rounded focus:border-blue-500 focus:bg-slate-800 outline-none w-40 transition-colors shadow-inner"
-                                  autoFocus
+                                  className={`border text-sm font-semibold px-2 py-1 rounded outline-none w-40 transition-colors shadow-inner ${
+                                    hasSquads
+                                      ? 'bg-slate-900 border-slate-600 text-white focus:border-blue-500 focus:bg-slate-800'
+                                      : 'bg-slate-950/40 border-slate-700/50 text-slate-400 focus:border-slate-600 focus:bg-slate-900'
+                                  }`}
                                   placeholder="Banner Name..."
                                   onClick={(e) => e.stopPropagation()}
                                 />
@@ -518,12 +523,21 @@ export default function ArmyTab({
 
                       {/* Formation Grid - Integrated tightly */}
                       <div className="mt-2 border-t border-slate-800/50 pt-2">
+                        {/* Onboarding hint when editing an empty banner */}
+                        {isEditing && !hasSquads && (
+                          <div className="flex items-center gap-2 mb-2 px-2 py-1.5 rounded-md bg-amber-950/20 border border-amber-800/30">
+                            <span className="text-amber-400 text-sm">👇</span>
+                            <span className="text-[11px] text-amber-400/90 font-medium">Start by selecting your first unit</span>
+                          </div>
+                        )}
                         <div className="grid grid-cols-4 sm:grid-cols-8 gap-1">
                           {Array.from({ length: 8 }).map((_, idx) => {
                             let displaySquads = b.squads || [];
                             const squad = displaySquads.some(s => s.slotIndex !== undefined)
                               ? displaySquads.find(s => s.slotIndex === idx)
                               : displaySquads[idx];
+
+                            const isFirstEmptySlot = isEditing && !hasSquads && idx === 0;
 
                             return (
                               <button
@@ -533,7 +547,9 @@ export default function ArmyTab({
                                 title={squad ? unitDisplayNames[squad.type] : isEditing ? "Add Unit" : "Empty Slot"}
                                 className={`relative h-9 sm:h-10 rounded-md border flex items-center px-1.5 transition-all overflow-hidden gap-1.5 ${squad
                                   ? 'bg-slate-800/60 border-slate-700 hover:border-slate-500'
-                                  : isEditing ? 'bg-slate-900/50 border-slate-800 border-dashed hover:border-slate-600 hover:bg-slate-800/50' : 'bg-slate-950/20 border-slate-800/20 border-dashed'
+                                  : isFirstEmptySlot
+                                    ? 'bg-amber-950/20 border-amber-500/60 border-dashed hover:border-amber-400 hover:bg-amber-950/30 animate-pulse'
+                                    : isEditing ? 'bg-slate-900/50 border-slate-800 border-dashed hover:border-slate-600 hover:bg-slate-800/50' : 'bg-slate-950/20 border-slate-800/20 border-dashed'
                                   } ${!isEditing ? 'cursor-default' : 'cursor-pointer'}`}
                               >
                                 {squad ? (
@@ -563,9 +579,11 @@ export default function ArmyTab({
                                   </>
                                 ) : (
                                   isEditing && (
-                                    <div className="flex items-center gap-1.5 opacity-50 w-full">
-                                      <span className="text-slate-500 text-xs">➕</span>
-                                      <span className="text-[10px] text-slate-500 font-medium uppercase tracking-wide truncate">Select Unit</span>
+                                    <div className={`flex items-center gap-1.5 w-full ${isFirstEmptySlot ? 'opacity-90' : 'opacity-50'}`}>
+                                      <span className={`text-xs ${isFirstEmptySlot ? 'text-amber-400' : 'text-slate-500'}`}>➕</span>
+                                      <span className={`text-[10px] font-medium uppercase tracking-wide truncate ${isFirstEmptySlot ? 'text-amber-400' : 'text-slate-500'}`}>
+                                        {isFirstEmptySlot ? 'Add Unit' : 'Select Unit'}
+                                      </span>
                                     </div>
                                   )
                                 )}
