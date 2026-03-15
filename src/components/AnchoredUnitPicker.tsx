@@ -93,7 +93,7 @@ const AnchoredUnitPicker: React.FC<AnchoredUnitPickerProps> = ({
         <div className="flex flex-col gap-0.5 p-4 pb-3">
           <span className="text-[9px] font-black text-pink-500 uppercase tracking-[0.2em] leading-none">Deployment</span>
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-black text-white uppercase tracking-tight">Select Unit Class</h3>
+            <h3 className="text-sm font-black text-white uppercase tracking-tight">Select Unit Type</h3>
             <button
               onClick={onClose}
               className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-slate-400 hover:text-white transition-colors border border-slate-700/50"

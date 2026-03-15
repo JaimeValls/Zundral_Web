@@ -1678,7 +1678,7 @@ export default function ResourceVillageUI() {
 
     const newBanner: Banner = {
       id: bannerSeq,
-      name: `Banner ${bannerSeq}`,
+      name: `Army ${bannerSeq}`,
       units: [],
       squads: [],
       status: 'idle',
@@ -6567,13 +6567,13 @@ Safe recruits (unassigned people): ${freePop}`;
           return (
             <div className="fixed inset-0 bg-black/60 grid place-items-center p-4 z-50">
               <div className="w-full max-w-md rounded-2xl bg-slate-900 p-4 border border-slate-800">
-                <h4 className="text-lg font-semibold mb-2">{banner.type === 'mercenary' ? 'Dismiss Banner' : 'Delete Banner'}</h4>
+                <h4 className="text-lg font-semibold mb-2">{banner.type === 'mercenary' ? 'Dismiss Army' : 'Delete Army'}</h4>
                 <p className="text-sm mb-4">
                   Are you sure you want to {banner.type === 'mercenary' ? 'dismiss' : 'delete'} <strong>{banner.name}</strong>?
                 </p>
                 <div className="text-sm mb-4 space-y-1">
                   <div>This will:</div>
-                  <div>• Erase the banner permanently</div>
+                  <div>• Erase the army permanently</div>
                   {banner.type === 'regular' && banner.recruited > 0 && (
                     <div>• Return <strong>{banner.recruited}</strong> population to the village</div>
                   )}

@@ -82,9 +82,9 @@ export default function MissionsUI({
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         {/* Left: ready banners info panel */}
         <div className="md:col-span-1 rounded-xl border border-slate-800 bg-slate-900 p-3">
-          <div className="text-sm font-semibold mb-2">Ready Banners</div>
+          <div className="text-sm font-semibold mb-2">Ready Armies</div>
           {banners.filter(b => b.status === 'ready').length === 0 ? (
-            <div className="text-xs text-slate-500">No ready banners.</div>
+            <div className="text-xs text-slate-500">No ready armies.</div>
           ) : (
             <div className="space-y-2">
               {banners.filter(b => b.status === 'ready').map((b) => {

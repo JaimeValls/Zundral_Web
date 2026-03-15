@@ -14,7 +14,7 @@ import type {
   UnitType,
   WarehouseState,
 } from '../types';
-import { unitCategory, unitDisplayNames } from '../constants';
+import { unitCategory, unitDisplayNames, ironCostPerSquad } from '../constants';
 import { getResourceIcon } from '../gameFormulas';
 import AnchoredUnitPicker from '../components/AnchoredUnitPicker';
 
@@ -137,15 +137,6 @@ export default function ArmyTab({
             📋 Overview
           </button>
           <button
-            onClick={() => onSetArmyTab('mercenaries')}
-            className={`flex-1 px-3 py-1.5 text-xs font-semibold rounded transition-colors ${armyTab === 'mercenaries'
-              ? 'bg-amber-700 text-white shadow-md'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700'
-              }`}
-          >
-            ⚔️ Mercenaries
-          </button>
-          <button
             onClick={() => onSetArmyTab('regular')}
             className={`flex-1 px-3 py-1.5 text-xs font-semibold rounded transition-colors ${armyTab === 'regular'
               ? 'bg-amber-700 text-white shadow-md'
@@ -153,6 +144,15 @@ export default function ArmyTab({
               }`}
           >
             🛡️ Regular Army
+          </button>
+          <button
+            onClick={() => onSetArmyTab('mercenaries')}
+            className={`flex-1 px-3 py-1.5 text-xs font-semibold rounded transition-colors ${armyTab === 'mercenaries'
+              ? 'bg-amber-700 text-white shadow-md'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700'
+              }`}
+          >
+            ⚔️ Mercenaries
           </button>
         </div>
       </div>
@@ -223,7 +223,7 @@ export default function ArmyTab({
                 <span className="text-[9px] text-slate-600">({onMission.length})</span>
               </div>
               {onMission.length === 0 ? (
-                <div className="text-xs text-slate-600 italic px-2 py-3">No banners currently deployed on missions</div>
+                <div className="text-xs text-slate-600 italic px-2 py-3">No armies currently deployed on missions</div>
               ) : (
                 <div className="space-y-1.5">
                   {onMission.map(b => {
@@ -292,7 +292,7 @@ export default function ArmyTab({
                 <span className="text-[9px] text-slate-600">({stationed.length})</span>
               </div>
               {stationed.length === 0 ? (
-                <div className="text-xs text-slate-600 italic px-2 py-3">No banners stationed</div>
+                <div className="text-xs text-slate-600 italic px-2 py-3">No armies stationed</div>
               ) : (
                 <div className="space-y-1.5">
                   {stationed.map(b => (
@@ -317,29 +317,50 @@ export default function ArmyTab({
                 <span className="text-[9px] text-slate-600">({inTraining.length})</span>
               </div>
               {inTraining.length === 0 ? (
-                <div className="text-xs text-slate-600 italic px-2 py-3">No banners currently training</div>
+                <div className="text-xs text-slate-600 italic px-2 py-3">No armies currently training</div>
               ) : (
                 <div className="space-y-1.5">
                   {inTraining.map(b => {
                     const totalMax = (b.squads || []).reduce((sum, s) => sum + (s.maxSize || 0), 0);
                     const totalCur = (b.squads || []).reduce((sum, s) => sum + (s.currentSize || 0), 0);
                     const trainingPct = totalMax > 0 ? (totalCur / totalMax) * 100 : 0;
+                    const ironNeeded = (b.squads || []).reduce((sum, s) => {
+                      const remaining = Math.max(0, (s.maxSize || 0) - (s.currentSize || 0));
+                      return sum + remaining * (ironCostPerSquad[s.type as UnitType] || 0);
+                    }, 0);
+                    const lowIron = ironNeeded > 0 && warehouse.iron < ironNeeded;
+                    const isPaused = b.trainingPaused;
                     return (
-                      <div key={b.id} className="flex items-center gap-3 p-2.5 rounded-lg bg-slate-900 border border-amber-900/30">
-                        {typeBadge(b.type)}
-                        <span className="text-xs font-semibold text-slate-200 truncate min-w-[80px] max-w-[120px]">{b.name}</span>
-                        <div className="flex gap-1 flex-wrap flex-1">{compositionPills(b.squads || [])}</div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <div className="h-5 px-1.5 min-w-[20px] rounded bg-slate-800 flex items-center justify-center border border-slate-700">
-                            <span className="text-slate-400 font-bold text-[10px] tracking-tight">T{b.level || 1}</span>
-                          </div>
-                          <div className="flex flex-col items-end gap-0.5 min-w-[60px]">
-                            <span className="text-[9px] text-amber-400 font-medium">{totalCur}/{totalMax}</span>
-                            <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                              <div className="h-full bg-amber-500 rounded-full transition-all duration-500" style={{ width: `${Math.min(100, trainingPct)}%` }} />
+                      <div key={b.id} className={`rounded-lg bg-slate-900 border p-2.5 ${lowIron || isPaused ? 'border-red-800/60' : 'border-amber-900/30'}`}>
+                        <div className="flex items-center gap-3">
+                          {typeBadge(b.type)}
+                          <span className="text-xs font-semibold text-slate-200 truncate min-w-[80px] max-w-[120px]">{b.name}</span>
+                          <div className="flex gap-1 flex-wrap flex-1">{compositionPills(b.squads || [])}</div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <div className="h-5 px-1.5 min-w-[20px] rounded bg-slate-800 flex items-center justify-center border border-slate-700">
+                              <span className="text-slate-400 font-bold text-[10px] tracking-tight">T{b.level || 1}</span>
+                            </div>
+                            <div className="flex flex-col items-end gap-0.5 min-w-[60px]">
+                              <span className="text-[9px] text-amber-400 font-medium">{totalCur}/{totalMax}</span>
+                              <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                                <div className="h-full bg-amber-500 rounded-full transition-all duration-500" style={{ width: `${Math.min(100, trainingPct)}%` }} />
+                              </div>
                             </div>
                           </div>
                         </div>
+                        {/* Resource warnings */}
+                        {(lowIron || isPaused) && (
+                          <div className="flex items-center gap-2 mt-1.5 pl-8">
+                            {isPaused && (
+                              <span className="text-[9px] text-red-400 font-semibold animate-pulse">⏸ Training Paused</span>
+                            )}
+                            {lowIron && (
+                              <span className="text-[9px] text-red-400 font-semibold animate-pulse">
+                                ⚠️ Not enough Iron ({Math.floor(warehouse.iron)}/{ironNeeded})
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -351,7 +372,7 @@ export default function ArmyTab({
             {onMission.length === 0 && inTransit.length === 0 && stationed.length === 0 && inTraining.length === 0 && (
               <div className="rounded-lg border border-dashed border-slate-800 bg-slate-900 p-6 text-center">
                 <span className="text-2xl">🏴</span>
-                <p className="text-xs text-slate-500 mt-2">No military forces yet. Hire mercenaries or create banners to get started.</p>
+                <p className="text-xs text-slate-500 mt-2">No military forces yet. Hire mercenaries or create armies to get started.</p>
               </div>
             )}
           </div>
@@ -561,7 +582,7 @@ export default function ArmyTab({
             {banners.filter(b => b.type === 'regular').length === 0 ? (
               <div className="p-4 rounded-lg border border-dashed border-slate-800 bg-slate-900 flex flex-col items-center gap-2">
                 <span className="text-2xl">🏴</span>
-                <span className="text-xs font-semibold text-slate-400 uppercase">No Banners</span>
+                <span className="text-xs font-semibold text-slate-400 uppercase">No Armies</span>
               </div>
             ) : (
               <div className="space-y-3">
@@ -631,7 +652,7 @@ export default function ArmyTab({
                                       ? 'bg-slate-900 border-slate-600 text-white focus:border-blue-500 focus:bg-slate-800'
                                       : 'bg-slate-950/40 border-slate-700/50 text-slate-400 focus:border-slate-600 focus:bg-slate-900'
                                   }`}
-                                  placeholder="Banner Name..."
+                                  placeholder="Army Name..."
                                   onClick={(e) => e.stopPropagation()}
                                 />
                               )}
@@ -689,18 +710,32 @@ export default function ArmyTab({
                               {/* Train Button */}
                               {(() => {
                                 const needsTraining = b.squads ? b.squads.some(s => s.currentSize < s.maxSize) : b.recruited < b.reqPop;
+                                const trainingIronNeeded = (b.squads || []).reduce((sum, s) => {
+                                  const rem = Math.max(0, (s.maxSize || 0) - (s.currentSize || 0));
+                                  return sum + rem * (ironCostPerSquad[s.type as UnitType] || 0);
+                                }, 0);
+                                const trainingLowIron = isTraining && trainingIronNeeded > 0 && warehouse.iron < trainingIronNeeded;
 
                                 if (needsTraining || isTraining) {
                                   return (
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        onToggleBannerTraining(b.id, isTraining);
-                                      }}
-                                      className={`px-2 py-1 rounded-lg text-[10px] sm:text-xs font-semibold border ${isTraining ? 'bg-blue-900/20 text-blue-400 border-blue-800' : 'bg-amber-900/20 text-amber-500 border-amber-800'}`}
-                                    >
-                                      {isTraining ? 'Training...' : 'Train'}
-                                    </button>
+                                    <div className="flex flex-col items-end gap-0.5">
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          onToggleBannerTraining(b.id, isTraining);
+                                        }}
+                                        className={`px-2 py-1 rounded-lg text-[10px] sm:text-xs font-semibold border ${
+                                          trainingLowIron
+                                            ? 'bg-red-900/20 text-red-400 border-red-500/50 shadow-[0_0_6px_rgba(239,68,68,0.3)] animate-pulse'
+                                            : isTraining ? 'bg-blue-900/20 text-blue-400 border-blue-800' : 'bg-amber-900/20 text-amber-500 border-amber-800'
+                                        }`}
+                                      >
+                                        {isTraining ? 'Training...' : 'Train'}
+                                      </button>
+                                      {trainingLowIron && (
+                                        <span className="text-[8px] text-red-400 font-semibold">Low Iron</span>
+                                      )}
+                                    </div>
                                   );
                                 }
                                 return null;
@@ -716,7 +751,7 @@ export default function ArmyTab({
                                 onClick={(e) => { e.stopPropagation(); onDeleteBanner(b.id); }}
                                 disabled={isGlobalEditing}
                                 className="px-2 py-1 rounded-lg bg-slate-800 text-slate-400 text-[10px] sm:text-xs font-semibold border border-slate-700 hover:text-red-400 hover:border-red-900/50 hover:bg-red-950/20 disabled:opacity-50 transition-colors"
-                                title="Delete Banner"
+                                title="Delete Army"
                               >
                                 🗑️
                               </button>
@@ -786,7 +821,7 @@ export default function ArmyTab({
                                     <div className={`flex items-center gap-1.5 w-full ${isFirstEmptySlot ? 'opacity-90' : 'opacity-50'}`}>
                                       <span className={`text-xs ${isFirstEmptySlot ? 'text-amber-400' : 'text-slate-500'}`}>➕</span>
                                       <span className={`text-[10px] font-medium uppercase tracking-wide truncate ${isFirstEmptySlot ? 'text-amber-400' : 'text-slate-500'}`}>
-                                        {isFirstEmptySlot ? 'Add Unit' : 'Select Unit'}
+                                        {isFirstEmptySlot ? 'Add Unit' : 'Select Unit Type'}
                                       </span>
                                     </div>
                                   )
@@ -818,7 +853,7 @@ export default function ArmyTab({
             className="w-full p-3 rounded-lg border border-dashed border-slate-800 bg-slate-900 hover:bg-slate-800 hover:border-emerald-500/50 transition-colors flex items-center justify-center gap-2"
           >
             <span className="text-lg">+</span>
-            <span className="text-xs font-semibold text-slate-400">Form New Banner</span>
+            <span className="text-xs font-semibold text-slate-400">Form New Army</span>
           </button>
         </div>
       )}
