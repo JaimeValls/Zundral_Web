@@ -10,6 +10,7 @@ import type {
   BannerTemplate,
   BarracksState,
   Commander,
+  Mission,
   UnitType,
   WarehouseState,
 } from '../types';
@@ -28,6 +29,13 @@ function formatShort(n: number) {
   return abs.toLocaleString();
 }
 
+function formatCountdown(seconds: number): string {
+  if (seconds <= 0) return '0s';
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return m > 0 ? `${m}m ${s}s` : `${s}s`;
+}
+
 // ---------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------
@@ -37,7 +45,8 @@ export interface ArmyTabProps {
   barracks: BarracksState | null;
   bannerTemplates: BannerTemplate[];
   banners: Banner[];
-  armyTab: 'mercenaries' | 'regular';
+  missions: Mission[];
+  armyTab: 'overview' | 'mercenaries' | 'regular';
   editingBannerId: number | string | null;
   bannersDraft: Banner | null;
   commanders: Commander[];
@@ -46,7 +55,7 @@ export interface ArmyTabProps {
   bannerHint: { id: number | string; message: string } | null;
   warehouse: WarehouseState;
   // Callbacks
-  onSetArmyTab: (tab: 'mercenaries' | 'regular') => void;
+  onSetArmyTab: (tab: 'overview' | 'mercenaries' | 'regular') => void;
   onGoToProduction: () => void;
   onStartBarracksTraining: (templateId: string) => void;
   onDeleteBannerModal: (bannerId: number) => void;
@@ -73,6 +82,7 @@ export default function ArmyTab({
   barracks,
   bannerTemplates,
   banners,
+  missions,
   armyTab,
   editingBannerId,
   bannersDraft,
@@ -118,6 +128,15 @@ export default function ArmyTab({
       <div className="mb-3">
         <div className="flex p-1 bg-slate-800/80 rounded-lg border border-slate-600">
           <button
+            onClick={() => onSetArmyTab('overview')}
+            className={`flex-1 px-3 py-1.5 text-xs font-semibold rounded transition-colors ${armyTab === 'overview'
+              ? 'bg-amber-700 text-white shadow-md'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700'
+              }`}
+          >
+            📋 Overview
+          </button>
+          <button
             onClick={() => onSetArmyTab('mercenaries')}
             className={`flex-1 px-3 py-1.5 text-xs font-semibold rounded transition-colors ${armyTab === 'mercenaries'
               ? 'bg-amber-700 text-white shadow-md'
@@ -153,6 +172,191 @@ export default function ArmyTab({
           </button>
         </div>
       )}
+
+      {/* ================================================================ */}
+      {/* General Overview Tab Content                                     */}
+      {/* ================================================================ */}
+      {armyTab === 'overview' && barracks && (() => {
+        // --- Data aggregation ---
+        const onMission = banners.filter(b => b.status === 'deployed');
+        const inTransit = (barracks.trainingQueue || []).filter(job => job.status === 'arriving');
+        const stationed = banners.filter(b => b.status === 'ready');
+        const inTraining = banners.filter(b => b.status === 'training');
+
+        // Composition helper: summarise squads into readable pills
+        const compositionPills = (squads: Array<{ type: string; currentSize?: number; maxSize?: number; count?: number }>) => {
+          if (!squads || squads.length === 0) return <span className="text-[10px] text-slate-600 italic">No units</span>;
+          return squads.map((sq, i) => {
+            const icon = unitCategory[sq.type as UnitType] === 'ranged_infantry' ? '🏹' : unitCategory[sq.type as UnitType] === 'cavalry' ? '🐴' : '⚔️';
+            const sizeText = sq.currentSize !== undefined && sq.maxSize !== undefined
+              ? `${sq.currentSize}/${sq.maxSize}`
+              : sq.count !== undefined ? `${sq.count}` : '';
+            return (
+              <span key={i} className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300">
+                <span>{icon}</span>
+                <span className="font-medium">{unitDisplayNames[sq.type as UnitType] || sq.type}</span>
+                {sizeText && <span className="text-slate-500">{sizeText}</span>}
+              </span>
+            );
+          });
+        };
+
+        // Type badge
+        const typeBadge = (type: 'regular' | 'mercenary') => (
+          <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider border shrink-0 ${
+            type === 'regular'
+              ? 'text-blue-400 bg-blue-950/30 border-blue-900/50'
+              : 'text-amber-400 bg-amber-950/30 border-amber-900/50'
+          }`}>
+            {type === 'regular' ? 'REG' : 'MERC'}
+          </span>
+        );
+
+        return (
+          <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-4 mt-2">
+
+            {/* -------- SECTION 1: ON MISSION (highest priority) -------- */}
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-orange-400 text-sm">⚠️</span>
+                <span className="text-[10px] text-orange-400 font-semibold uppercase tracking-wide">On Mission</span>
+                <span className="text-[9px] text-slate-600">({onMission.length})</span>
+              </div>
+              {onMission.length === 0 ? (
+                <div className="text-xs text-slate-600 italic px-2 py-3">No banners currently deployed on missions</div>
+              ) : (
+                <div className="space-y-1.5">
+                  {onMission.map(b => {
+                    const mission = missions.find(m => m.deployed?.includes(b.id) && m.status === 'running');
+                    const remaining = mission ? Math.max(0, mission.duration - mission.elapsed) : 0;
+                    const progress = mission && mission.duration > 0 ? (mission.elapsed / mission.duration) * 100 : 0;
+                    return (
+                      <div key={b.id} className="flex items-center gap-3 p-2.5 rounded-lg bg-slate-900 border border-orange-900/40">
+                        {typeBadge(b.type)}
+                        <span className="text-xs font-semibold text-slate-200 truncate min-w-[80px] max-w-[120px]">{b.name}</span>
+                        <div className="flex gap-1 flex-wrap flex-1">{compositionPills(b.squads || [])}</div>
+                        <div className="flex flex-col items-end gap-1 shrink-0 min-w-[90px]">
+                          {mission && <span className="text-[9px] text-orange-300 font-medium truncate max-w-[90px]">{mission.name}</span>}
+                          <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                            <div className="h-full bg-orange-500 rounded-full transition-all duration-500" style={{ width: `${Math.min(100, progress)}%` }} />
+                          </div>
+                          <span className="text-[9px] text-orange-400 font-medium">{formatCountdown(remaining)}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* -------- SECTION 2: IN TRANSIT -------- */}
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-blue-400 text-sm">🚢</span>
+                <span className="text-[10px] text-blue-400 font-semibold uppercase tracking-wide">In Transit</span>
+                <span className="text-[9px] text-slate-600">({inTransit.length})</span>
+              </div>
+              {inTransit.length === 0 ? (
+                <div className="text-xs text-slate-600 italic px-2 py-3">No mercenary contracts arriving</div>
+              ) : (
+                <div className="space-y-1.5">
+                  {inTransit.map(job => {
+                    const template = bannerTemplates.find(t => t.id === job.templateId);
+                    const remaining = Math.max(0, (job.arrivalTime || 0) - job.elapsedTime);
+                    const progress = job.arrivalTime && job.arrivalTime > 0 ? (job.elapsedTime / job.arrivalTime) * 100 : 0;
+                    const templateSquads = template?.squads || [];
+                    return (
+                      <div key={job.id} className="flex items-center gap-3 p-2.5 rounded-lg bg-slate-900 border border-blue-900/40">
+                        {typeBadge('mercenary')}
+                        <span className="text-xs font-semibold text-slate-200 truncate min-w-[80px] max-w-[120px]">{template?.name || 'Mercenary Contract'}</span>
+                        <div className="flex gap-1 flex-wrap flex-1">{compositionPills(templateSquads)}</div>
+                        <div className="flex flex-col items-end gap-1 shrink-0 min-w-[70px]">
+                          <span className="text-[9px] text-blue-300 font-medium">Arriving</span>
+                          <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                            <div className="h-full bg-blue-500 rounded-full transition-all duration-500" style={{ width: `${Math.min(100, progress)}%` }} />
+                          </div>
+                          <span className="text-[9px] text-blue-400 font-medium">{formatCountdown(remaining)}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* -------- SECTION 3: STATIONED -------- */}
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-emerald-400 text-sm">🏰</span>
+                <span className="text-[10px] text-emerald-400 font-semibold uppercase tracking-wide">Stationed</span>
+                <span className="text-[9px] text-slate-600">({stationed.length})</span>
+              </div>
+              {stationed.length === 0 ? (
+                <div className="text-xs text-slate-600 italic px-2 py-3">No banners stationed</div>
+              ) : (
+                <div className="space-y-1.5">
+                  {stationed.map(b => (
+                    <div key={b.id} className="flex items-center gap-3 p-2.5 rounded-lg bg-slate-900 border border-slate-800">
+                      {typeBadge(b.type)}
+                      <span className="text-xs font-semibold text-slate-200 truncate min-w-[80px] max-w-[120px]">{b.name}</span>
+                      <div className="flex gap-1 flex-wrap flex-1">{compositionPills(b.squads || [])}</div>
+                      <span className="text-[10px] px-2 py-0.5 rounded border text-emerald-400 bg-emerald-950/30 border-emerald-900/50 font-semibold shrink-0">
+                        Stationed
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* -------- SECTION 4: IN TRAINING -------- */}
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-amber-400 text-sm">🔨</span>
+                <span className="text-[10px] text-amber-400 font-semibold uppercase tracking-wide">In Training</span>
+                <span className="text-[9px] text-slate-600">({inTraining.length})</span>
+              </div>
+              {inTraining.length === 0 ? (
+                <div className="text-xs text-slate-600 italic px-2 py-3">No banners currently training</div>
+              ) : (
+                <div className="space-y-1.5">
+                  {inTraining.map(b => {
+                    const totalMax = (b.squads || []).reduce((sum, s) => sum + (s.maxSize || 0), 0);
+                    const totalCur = (b.squads || []).reduce((sum, s) => sum + (s.currentSize || 0), 0);
+                    const trainingPct = totalMax > 0 ? (totalCur / totalMax) * 100 : 0;
+                    return (
+                      <div key={b.id} className="flex items-center gap-3 p-2.5 rounded-lg bg-slate-900 border border-amber-900/30">
+                        {typeBadge(b.type)}
+                        <span className="text-xs font-semibold text-slate-200 truncate min-w-[80px] max-w-[120px]">{b.name}</span>
+                        <div className="flex gap-1 flex-wrap flex-1">{compositionPills(b.squads || [])}</div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <div className="h-5 px-1.5 min-w-[20px] rounded bg-slate-800 flex items-center justify-center border border-slate-700">
+                            <span className="text-slate-400 font-bold text-[10px] tracking-tight">T{b.level || 1}</span>
+                          </div>
+                          <div className="flex flex-col items-end gap-0.5 min-w-[60px]">
+                            <span className="text-[9px] text-amber-400 font-medium">{totalCur}/{totalMax}</span>
+                            <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                              <div className="h-full bg-amber-500 rounded-full transition-all duration-500" style={{ width: `${Math.min(100, trainingPct)}%` }} />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Summary footer */}
+            {onMission.length === 0 && inTransit.length === 0 && stationed.length === 0 && inTraining.length === 0 && (
+              <div className="rounded-lg border border-dashed border-slate-800 bg-slate-900 p-6 text-center">
+                <span className="text-2xl">🏴</span>
+                <p className="text-xs text-slate-500 mt-2">No military forces yet. Hire mercenaries or create banners to get started.</p>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Mercenaries Tab Content */}
       {armyTab === 'mercenaries' && barracks && (

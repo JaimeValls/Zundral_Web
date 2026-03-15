@@ -408,7 +408,7 @@ export default function ResourceVillageUI() {
   const [squadSeq, setSquadSeq] = useState(1); // Global squad ID counter
   const squadSeqRef = useRef(1); // Ref to track current squadSeq for closures
   const [bannerLossNotices, setBannerLossNotices] = useState<BannerLossNotice[]>([]);
-  const [armyTab, setArmyTab] = useState<'mercenaries' | 'regular'>('regular'); // New tab state for split views
+  const [armyTab, setArmyTab] = useState<'overview' | 'mercenaries' | 'regular'>('overview'); // New tab state for split views
 
   // Debug: Log notification state changes
   useEffect(() => {
@@ -1129,7 +1129,8 @@ export default function ResourceVillageUI() {
     }));
 
     setMainTab(state.mainTab as any);
-    setArmyTab(state.armyTab === 'banners' ? 'regular' : state.armyTab as any);
+    const loadedArmyTab = state.armyTab === 'banners' ? 'regular' : state.armyTab;
+    setArmyTab(['overview', 'mercenaries', 'regular'].includes(loadedArmyTab) ? loadedArmyTab as 'overview' | 'mercenaries' | 'regular' : 'overview');
 
     // Load leaderboard, ensuring real player entry exists
     if (state.leaderboard && state.leaderboard.length > 0) {
@@ -6159,6 +6160,7 @@ Safe recruits (unassigned people): ${freePop}`;
           barracks={barracks}
           bannerTemplates={bannerTemplates}
           banners={banners}
+          missions={missions}
           armyTab={armyTab}
           editingBannerId={editingBannerId}
           bannersDraft={bannersDraft}
