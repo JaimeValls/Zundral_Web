@@ -2366,8 +2366,8 @@ export default function ResourceVillageUI() {
       throw new Error('Fortress not found');
     }
 
-    const stats = getUnitStats();
-    const p = getBattleParams();
+    const stats = unitStats;
+    const p = battleParams;
     const baseCas = p.base_casualty_rate || 0.7;
     const maxRounds = 30;
 
@@ -2439,6 +2439,22 @@ export default function ResourceVillageUI() {
     }
 
     // Determine outcome
+    if (siegeTimeline.length === 0) {
+      // No rounds executed — fortress HP or attackers was 0
+      return {
+        outcome: 'stalemate' as const,
+        siegeRounds: 0,
+        finalFortHP: fortHPmax,
+        finalAttackers: attackers,
+        finalDefenders: garrisonWarriors + garrisonArchers,
+        siegeTimeline: [],
+        innerTimeline: [],
+        initialFortHP: fortHPmax,
+        initialAttackers: attackers,
+        initialGarrison: { warriors: garrisonWarriors, archers: garrisonArchers },
+        finalGarrison: { warriors: garrisonWarriors, archers: garrisonArchers },
+      };
+    }
     const lastSiege = siegeTimeline[siegeTimeline.length - 1];
     let outcome: SiegeBattleResult['outcome'];
     let finalAttackers = lastSiege.attackers;
