@@ -6,8 +6,9 @@
 // ============================================================================
 
 import React, { useState } from 'react';
-import type { Expedition, Banner, WarehouseState, SiegeBattleResult } from '../types';
+import type { Expedition, Banner, WarehouseState, SiegeBattleResult, UnitType } from '../types';
 import { SiegeGraphCanvas, InnerBattleGraphCanvas } from '../components/BattleChart';
+import { unitCategory, unitDisplayNames } from '../constants';
 
 // ---------------------------------------------------------------------------
 // Local helpers
@@ -239,8 +240,8 @@ export default function ExpeditionsUI({
                                   </div>
                                 </div>
                                 {building.id === 'watch_post' && (
-                                  <div className="text-[10px] text-slate-500 mt-1" title="Watch Post: Allows up to X archers from the defending banners to fire from the walls during the first phase of the siege.">
-                                    Allows up to {currentEffect.archerSlots || 0} archers from defending banners to fire from walls during phase 1.
+                                  <div className="text-[10px] text-slate-500 mt-1" title="Watch Post: Allows up to X archers from the defending armies to fire from the walls during the first phase of the siege.">
+                                    Allows up to {currentEffect.archerSlots || 0} archers from defending armies to fire from walls during phase 1.
                                   </div>
                                 )}
                                 {canUpgrade && nextEffect && (
@@ -283,27 +284,40 @@ export default function ExpeditionsUI({
                       {/* Currently Stationed Banners */}
                       {(exp.fortress.garrison?.length ?? 0) > 0 && (
                         <div className="mb-3">
-                          <div className="text-xs text-slate-400 mb-1.5">Stationed Banners:</div>
+                          <div className="text-xs text-slate-400 mb-1.5">Stationed Armies:</div>
                           <div className="space-y-1.5">
                             {(exp.fortress.garrison || []).map((bannerId) => {
                               const banner = banners.find(b => b.id === bannerId);
                               if (!banner) return null;
                               const totalTroops = banner.squads?.reduce((sum, squad) => sum + squad.currentSize, 0) || 0;
                               return (
-                                <div key={bannerId} className="flex items-center justify-between rounded-lg border border-slate-700 bg-slate-800 p-1.5">
-                                  <div className="flex items-center gap-2">
+                                <div key={bannerId} className="rounded-lg border border-slate-700 bg-slate-800 p-2">
+                                  <div className="flex items-center justify-between mb-1">
                                     <div className="text-xs font-semibold">{banner.name}</div>
-                                    <div className="text-[10px] text-slate-400">
-                                      {totalTroops} troops
-                                    </div>
+                                    <button
+                                      onClick={() => onRemoveBannerFromFortress(exp.expeditionId, bannerId)}
+                                      className="px-2 py-0.5 rounded text-[10px] bg-red-900 hover:bg-red-800 text-red-200"
+                                      title="Remove from fortress"
+                                    >
+                                      Remove
+                                    </button>
                                   </div>
-                                  <button
-                                    onClick={() => onRemoveBannerFromFortress(exp.expeditionId, bannerId)}
-                                    className="px-2 py-0.5 rounded text-[10px] bg-red-900 hover:bg-red-800 text-red-200"
-                                    title="Remove from fortress"
-                                  >
-                                    Remove
-                                  </button>
+                                  <div className="flex gap-1 flex-wrap items-center">
+                                    {(banner.squads || []).length === 0
+                                      ? <span className="text-[10px] text-slate-600 italic">No units</span>
+                                      : (banner.squads || []).map((sq, i) => {
+                                          const icon = unitCategory[sq.type as UnitType] === 'ranged_infantry' ? '🏹' : unitCategory[sq.type as UnitType] === 'cavalry' ? '🐴' : '⚔️';
+                                          return (
+                                            <span key={i} className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded bg-slate-900 border border-slate-700 text-slate-300">
+                                              <span>{icon}</span>
+                                              <span className="font-medium">{unitDisplayNames[sq.type as UnitType] || sq.type}</span>
+                                              <span className="text-slate-500">{sq.currentSize}/{sq.maxSize}</span>
+                                            </span>
+                                          );
+                                        })
+                                    }
+                                    <span className="text-[10px] text-slate-500 ml-1">{totalTroops} total</span>
+                                  </div>
                                 </div>
                               );
                             })}
@@ -322,7 +336,7 @@ export default function ExpeditionsUI({
                         if (readyBanners.length === 0 && garrison.length === 0) {
                           return (
                             <div className="text-xs text-slate-500">
-                              No ready banners available. Train banners in the Army section to assign them to the fortress.
+                              No ready armies available. Train armies in the Army section to assign them to the fortress.
                             </div>
                           );
                         }
@@ -333,25 +347,38 @@ export default function ExpeditionsUI({
 
                         return (
                           <div>
-                            <div className="text-xs text-slate-400 mb-1.5">Available Banners:</div>
+                            <div className="text-xs text-slate-400 mb-1.5">Available Armies:</div>
                             <div className="space-y-1.5">
                               {readyBanners.map((banner) => {
                                 const totalTroops = banner.squads?.reduce((sum, squad) => sum + squad.currentSize, 0) || 0;
                                 return (
-                                  <div key={banner.id} className="flex items-center justify-between rounded-lg border border-slate-700 bg-slate-800 p-1.5">
-                                    <div className="flex items-center gap-2">
+                                  <div key={banner.id} className="rounded-lg border border-slate-700 bg-slate-800 p-2">
+                                    <div className="flex items-center justify-between mb-1">
                                       <div className="text-xs font-semibold">{banner.name}</div>
-                                      <div className="text-[10px] text-slate-400">
-                                        {totalTroops} troops
-                                      </div>
+                                      <button
+                                        onClick={() => onAssignBannerToFortress(exp.expeditionId, banner.id)}
+                                        className="px-2 py-0.5 rounded text-[10px] bg-emerald-700 hover:bg-emerald-600 text-white"
+                                        title="Assign to fortress"
+                                      >
+                                        Assign
+                                      </button>
                                     </div>
-                                    <button
-                                      onClick={() => onAssignBannerToFortress(exp.expeditionId, banner.id)}
-                                      className="px-2 py-0.5 rounded text-[10px] bg-emerald-700 hover:bg-emerald-600 text-white"
-                                      title="Assign to fortress"
-                                    >
-                                      Assign
-                                    </button>
+                                    <div className="flex gap-1 flex-wrap items-center">
+                                      {(banner.squads || []).length === 0
+                                        ? <span className="text-[10px] text-slate-600 italic">No units</span>
+                                        : (banner.squads || []).map((sq, i) => {
+                                            const icon = unitCategory[sq.type as UnitType] === 'ranged_infantry' ? '🏹' : unitCategory[sq.type as UnitType] === 'cavalry' ? '🐴' : '⚔️';
+                                            return (
+                                              <span key={i} className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded bg-slate-900 border border-slate-700 text-slate-300">
+                                                <span>{icon}</span>
+                                                <span className="font-medium">{unitDisplayNames[sq.type as UnitType] || sq.type}</span>
+                                                <span className="text-slate-500">{sq.currentSize}/{sq.maxSize}</span>
+                                              </span>
+                                            );
+                                          })
+                                      }
+                                      <span className="text-[10px] text-slate-500 ml-1">{totalTroops} total</span>
+                                    </div>
                                   </div>
                                 );
                               })}
