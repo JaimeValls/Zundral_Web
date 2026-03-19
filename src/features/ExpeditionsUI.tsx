@@ -9,6 +9,7 @@ import React, { useState } from 'react';
 import type { Expedition, Banner, WarehouseState, SiegeBattleResult, UnitType } from '../types';
 import { SiegeGraphCanvas, InnerBattleGraphCanvas } from '../components/BattleChart';
 import { unitCategory, unitDisplayNames } from '../constants';
+import { ExpeditionMap } from './map/ExpeditionMap';
 
 // ---------------------------------------------------------------------------
 // Local helpers
@@ -58,6 +59,7 @@ export default function ExpeditionsUI({
 }: ExpeditionsUIProps) {
   const [battleLoading, setBattleLoading] = useState<{ expeditionId: string; progress: number } | null>(null);
   const [battleError, setBattleError] = useState<{ expeditionId: string; message: string } | null>(null);
+  const [mapViewExpeditionId, setMapViewExpeditionId] = useState<string | null>(null);
 
   return (
     <section className="max-w-game mx-auto px-2 sm:px-4 md:px-6 space-y-3 sm:space-y-4">
@@ -190,6 +192,15 @@ export default function ExpeditionsUI({
                     The expedition was successful. A frontier fortress has been established in the mountains of Godonis.
                   </div>
 
+                  {/* Map View Toggle */}
+                  <button
+                    onClick={() => setMapViewExpeditionId(exp.expeditionId)}
+                    className="flex items-center gap-2 px-3 py-1.5 bg-amber-700/30 hover:bg-amber-700/50 border border-amber-600/50 rounded-lg text-amber-300 text-sm font-semibold transition-colors"
+                  >
+                    <span>🗺️</span>
+                    <span>Open Map View</span>
+                  </button>
+
                   {/* Frontier Fortress Section */}
                   <div className="mt-4 pt-4 border-t border-slate-700">
                     <div className="text-sm font-semibold mb-3">Frontier Fortress of Godonis</div>
@@ -279,36 +290,56 @@ export default function ExpeditionsUI({
 
                     {/* Fortress Garrison Section */}
                     <div className="mt-4 pt-4 border-t border-slate-700">
-                      <div className="text-sm font-semibold mb-2">Fortress Garrison</div>
+                      {(() => {
+                        const garrisonIds = exp.fortress.garrison || [];
+                        const garrisonArmies = garrisonIds.map(id => banners.find(b => b.id === id)).filter(Boolean);
+                        const totalGarrison = garrisonArmies.reduce((sum, a) => sum + (a?.squads?.reduce((s, sq) => s + sq.currentSize, 0) || 0), 0);
+                        const maxGarrison = garrisonArmies.reduce((sum, a) => sum + (a?.squads?.reduce((s, sq) => s + (sq.maxSize || 0), 0) || 0), 0);
+                        return (
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="text-sm font-semibold">Fortress Garrison</div>
+                            {garrisonIds.length > 0 && (
+                              <div className="flex items-center gap-2">
+                                <span className="text-[10px] text-slate-400">{garrisonIds.length} {garrisonIds.length === 1 ? 'army' : 'armies'}</span>
+                                <span className="text-[10px] font-medium text-emerald-400">{totalGarrison}/{maxGarrison} troops</span>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
 
-                      {/* Currently Stationed Banners */}
+                      {/* Currently Stationed Armies */}
                       {(exp.fortress.garrison?.length ?? 0) > 0 && (
                         <div className="mb-3">
-                          <div className="text-xs text-slate-400 mb-1.5">Stationed Armies:</div>
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="text-emerald-400 text-sm">🏰</span>
+                            <span className="text-[10px] text-emerald-400 font-semibold uppercase tracking-wide">Stationed</span>
+                            <span className="text-[9px] text-slate-600">({exp.fortress.garrison?.length || 0})</span>
+                          </div>
                           <div className="space-y-1.5">
                             {(exp.fortress.garrison || []).map((bannerId) => {
-                              const banner = banners.find(b => b.id === bannerId);
-                              if (!banner) return null;
-                              const totalTroops = banner.squads?.reduce((sum, squad) => sum + squad.currentSize, 0) || 0;
+                              const army = banners.find(b => b.id === bannerId);
+                              if (!army) return null;
+                              const totalTroops = army.squads?.reduce((sum, squad) => sum + squad.currentSize, 0) || 0;
+                              const maxTroops = army.squads?.reduce((sum, squad) => sum + (squad.maxSize || 0), 0) || 0;
+                              const readiness = maxTroops > 0 ? Math.round((totalTroops / maxTroops) * 100) : 0;
                               return (
-                                <div key={bannerId} className="rounded-lg border border-slate-700 bg-slate-800 p-2">
-                                  <div className="flex items-center justify-between mb-1">
-                                    <div className="text-xs font-semibold">{banner.name}</div>
-                                    <button
-                                      onClick={() => onRemoveBannerFromFortress(exp.expeditionId, bannerId)}
-                                      className="px-2 py-0.5 rounded text-[10px] bg-red-900 hover:bg-red-800 text-red-200"
-                                      title="Remove from fortress"
-                                    >
-                                      Remove
-                                    </button>
-                                  </div>
-                                  <div className="flex gap-1 flex-wrap items-center">
-                                    {(banner.squads || []).length === 0
+                                <div key={bannerId} className="flex items-center gap-3 p-2.5 rounded-lg bg-slate-900 border border-emerald-900/40">
+                                  <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider border shrink-0 ${
+                                    army.type === 'regular'
+                                      ? 'text-blue-400 bg-blue-950/30 border-blue-900/50'
+                                      : 'text-amber-400 bg-amber-950/30 border-amber-900/50'
+                                  }`}>
+                                    {army.type === 'regular' ? 'REG' : 'MERC'}
+                                  </span>
+                                  <span className="text-xs font-semibold text-slate-200 truncate min-w-[80px] max-w-[120px]">{army.name}</span>
+                                  <div className="flex gap-1 flex-wrap flex-1">
+                                    {(army.squads || []).length === 0
                                       ? <span className="text-[10px] text-slate-600 italic">No units</span>
-                                      : (banner.squads || []).map((sq, i) => {
+                                      : (army.squads || []).map((sq, i) => {
                                           const icon = unitCategory[sq.type as UnitType] === 'ranged_infantry' ? '🏹' : unitCategory[sq.type as UnitType] === 'cavalry' ? '🐴' : '⚔️';
                                           return (
-                                            <span key={i} className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded bg-slate-900 border border-slate-700 text-slate-300">
+                                            <span key={i} className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300">
                                               <span>{icon}</span>
                                               <span className="font-medium">{unitDisplayNames[sq.type as UnitType] || sq.type}</span>
                                               <span className="text-slate-500">{sq.currentSize}/{sq.maxSize}</span>
@@ -316,7 +347,18 @@ export default function ExpeditionsUI({
                                           );
                                         })
                                     }
-                                    <span className="text-[10px] text-slate-500 ml-1">{totalTroops} total</span>
+                                  </div>
+                                  <div className="flex flex-col items-end gap-1 shrink-0 min-w-[70px]">
+                                    <span className={`text-[9px] font-medium ${readiness >= 80 ? 'text-emerald-400' : readiness >= 50 ? 'text-amber-400' : 'text-red-400'}`}>
+                                      {totalTroops} troops ({readiness}%)
+                                    </span>
+                                    <button
+                                      onClick={() => onRemoveBannerFromFortress(exp.expeditionId, bannerId)}
+                                      className="px-2 py-0.5 rounded text-[10px] bg-red-900/60 hover:bg-red-800 text-red-300 border border-red-900/50"
+                                      title="Remove from fortress"
+                                    >
+                                      Remove
+                                    </button>
                                   </div>
                                 </div>
                               );
@@ -325,51 +367,55 @@ export default function ExpeditionsUI({
                         </div>
                       )}
 
-                      {/* Available Ready Banners */}
+                      {/* Available Ready Armies */}
                       {(() => {
                         const garrison = exp.fortress.garrison || [];
-                        const readyBanners = banners.filter(b =>
+                        const readyArmies = banners.filter(b =>
                           b.status === 'ready' &&
                           !garrison.includes(b.id)
                         );
 
-                        if (readyBanners.length === 0 && garrison.length === 0) {
+                        if (readyArmies.length === 0 && garrison.length === 0) {
                           return (
-                            <div className="text-xs text-slate-500">
+                            <div className="text-xs text-slate-500 italic py-3 px-2">
                               No ready armies available. Train armies in the Army section to assign them to the fortress.
                             </div>
                           );
                         }
 
-                        if (readyBanners.length === 0) {
+                        if (readyArmies.length === 0) {
                           return null;
                         }
 
                         return (
                           <div>
-                            <div className="text-xs text-slate-400 mb-1.5">Available Armies:</div>
+                            <div className="flex items-center gap-2 mb-2">
+                              <span className="text-blue-400 text-sm">⚔️</span>
+                              <span className="text-[10px] text-blue-400 font-semibold uppercase tracking-wide">Available to Deploy</span>
+                              <span className="text-[9px] text-slate-600">({readyArmies.length})</span>
+                            </div>
                             <div className="space-y-1.5">
-                              {readyBanners.map((banner) => {
-                                const totalTroops = banner.squads?.reduce((sum, squad) => sum + squad.currentSize, 0) || 0;
+                              {readyArmies.map((army) => {
+                                const totalTroops = army.squads?.reduce((sum, squad) => sum + squad.currentSize, 0) || 0;
+                                const maxTroops = army.squads?.reduce((sum, squad) => sum + (squad.maxSize || 0), 0) || 0;
+                                const readiness = maxTroops > 0 ? Math.round((totalTroops / maxTroops) * 100) : 0;
                                 return (
-                                  <div key={banner.id} className="rounded-lg border border-slate-700 bg-slate-800 p-2">
-                                    <div className="flex items-center justify-between mb-1">
-                                      <div className="text-xs font-semibold">{banner.name}</div>
-                                      <button
-                                        onClick={() => onAssignBannerToFortress(exp.expeditionId, banner.id)}
-                                        className="px-2 py-0.5 rounded text-[10px] bg-emerald-700 hover:bg-emerald-600 text-white"
-                                        title="Assign to fortress"
-                                      >
-                                        Assign
-                                      </button>
-                                    </div>
-                                    <div className="flex gap-1 flex-wrap items-center">
-                                      {(banner.squads || []).length === 0
+                                  <div key={army.id} className="flex items-center gap-3 p-2.5 rounded-lg bg-slate-900 border border-slate-700">
+                                    <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider border shrink-0 ${
+                                      army.type === 'regular'
+                                        ? 'text-blue-400 bg-blue-950/30 border-blue-900/50'
+                                        : 'text-amber-400 bg-amber-950/30 border-amber-900/50'
+                                    }`}>
+                                      {army.type === 'regular' ? 'REG' : 'MERC'}
+                                    </span>
+                                    <span className="text-xs font-semibold text-slate-200 truncate min-w-[80px] max-w-[120px]">{army.name}</span>
+                                    <div className="flex gap-1 flex-wrap flex-1">
+                                      {(army.squads || []).length === 0
                                         ? <span className="text-[10px] text-slate-600 italic">No units</span>
-                                        : (banner.squads || []).map((sq, i) => {
+                                        : (army.squads || []).map((sq, i) => {
                                             const icon = unitCategory[sq.type as UnitType] === 'ranged_infantry' ? '🏹' : unitCategory[sq.type as UnitType] === 'cavalry' ? '🐴' : '⚔️';
                                             return (
-                                              <span key={i} className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded bg-slate-900 border border-slate-700 text-slate-300">
+                                              <span key={i} className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300">
                                                 <span>{icon}</span>
                                                 <span className="font-medium">{unitDisplayNames[sq.type as UnitType] || sq.type}</span>
                                                 <span className="text-slate-500">{sq.currentSize}/{sq.maxSize}</span>
@@ -377,7 +423,18 @@ export default function ExpeditionsUI({
                                             );
                                           })
                                       }
-                                      <span className="text-[10px] text-slate-500 ml-1">{totalTroops} total</span>
+                                    </div>
+                                    <div className="flex flex-col items-end gap-1 shrink-0 min-w-[70px]">
+                                      <span className={`text-[9px] font-medium ${readiness >= 80 ? 'text-emerald-400' : readiness >= 50 ? 'text-amber-400' : 'text-red-400'}`}>
+                                        {totalTroops} troops ({readiness}%)
+                                      </span>
+                                      <button
+                                        onClick={() => onAssignBannerToFortress(exp.expeditionId, army.id)}
+                                        className="px-2 py-0.5 rounded text-[10px] bg-emerald-700 hover:bg-emerald-600 text-white"
+                                        title="Assign to fortress"
+                                      >
+                                        Assign
+                                      </button>
                                     </div>
                                   </div>
                                 );
@@ -756,6 +813,21 @@ export default function ExpeditionsUI({
           );
         })}
       </div>
+
+      {/* Fullscreen Map Overlay */}
+      {mapViewExpeditionId && (() => {
+        const exp = expeditions.find(e => e.expeditionId === mapViewExpeditionId);
+        if (!exp || exp.state !== 'completed') return null;
+        return (
+          <div className="fixed inset-0 z-50 bg-slate-950">
+            <ExpeditionMap
+              expedition={exp}
+              banners={banners}
+              onClose={() => setMapViewExpeditionId(null)}
+            />
+          </div>
+        );
+      })()}
     </section>
   );
 }

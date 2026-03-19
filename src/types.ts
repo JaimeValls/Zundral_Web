@@ -342,4 +342,38 @@ export type Expedition = {
     garrison: number[];             // Banner IDs stationed in the fortress
     lastBattle?: SiegeBattleResult;
   };
+  mapState?: ExpeditionMapState;
 };
+
+// ----------------------------------------------------------------------------
+// Expedition Map
+// ----------------------------------------------------------------------------
+
+export type TerrainType = 'plains' | 'forest' | 'mountain' | 'hills' | 'volcanic' | 'swamp' | 'coast' | 'building' | 'river';
+
+export interface ProvinceData {
+  id: string;
+  color: [number, number, number];
+  center: [number, number];
+  bbox: { x: number; y: number; w: number; h: number };
+  terrain: TerrainType;
+  elevation: number;
+  isLand: boolean;
+  adjacentProvinces: string[];
+  pixelCount: number;
+}
+
+export interface MapData {
+  mapWidth: number;
+  mapHeight: number;
+  quantizationStep: number;
+  provinces: ProvinceData[];
+  colorToProvinceId: Record<string, string>;
+}
+
+export interface ExpeditionMapState {
+  fortressProvinceId: string;
+  armyPositions: Record<number, string>;   // bannerId → provinceId
+  revealedProvinces: string[];
+  provinceControl: Record<string, string>; // provinceId → faction/player
+}
