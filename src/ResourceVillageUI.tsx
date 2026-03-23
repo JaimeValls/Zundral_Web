@@ -12,10 +12,13 @@ import type {
   CommanderArchetype, Commander,
   Mission, BattleResult,
   FactionId, FactionBranchId, FactionPerkNode, PlayerFactionState,
-  FortressBuilding, FortressStats, SiegeRound, InnerBattleStep, SiegeBattleResult, Expedition,
+  FortressBuilding, FortressStats, SiegeRound, InnerBattleStep, SiegeBattleResult, BattleSquadEntry, FieldBattleResult, Expedition, EnemyArmy,
   TownHallLevel, TownHallState,
   TrainingEntry, BarracksState, TavernState, MilitaryAcademyState,
+  ArmyOrder,
 } from './types';
+import type { ProvinceData } from './types';
+import { findPath } from './features/map/mapUtils';
 import {
   unitCategory, ironCostPerSquad, squadConfig, unitDisplayNames,
   XP_LEVELS,
@@ -62,6 +65,16 @@ import rTaxes from '../imgs/resources/r_taxes.png';
 
 
 export default function ResourceVillageUI() {
+  // === Province data (cached for fortress placement) ===
+  const provinceDataRef = useRef<any>(null);
+  const [provinceDataReady, setProvinceDataReady] = useState(false);
+  useEffect(() => {
+    fetch('/godonis/v2/province_data.json')
+      .then(r => r.json())
+      .then(data => { provinceDataRef.current = data; setProvinceDataReady(true); })
+      .catch(() => { /* Non-critical — only needed for map */ });
+  }, []);
+
   // === Warehouse (resources + level) ===
   const [warehouse, setWarehouse] = useState<WarehouseState>({ wood: 0, stone: 0, food: 0, iron: 0, gold: 0 });
   const [warehouseLevel, setWarehouseLevel] = useState(1);
@@ -131,6 +144,17 @@ export default function ResourceVillageUI() {
       if (toastTimeoutRef.current !== null) clearTimeout(toastTimeoutRef.current);
     };
   }, [toastMessage]);
+
+  // Helper: show "Not enough X, Y" toast for missing resources
+  const showMissingResourceToast = (checks: { wood?: boolean; stone?: boolean; gold?: boolean; iron?: boolean; food?: boolean }) => {
+    const missing: string[] = [];
+    if (checks.wood === false) missing.push('Wood');
+    if (checks.stone === false) missing.push('Stone');
+    if (checks.gold === false) missing.push('Gold');
+    if (checks.iron === false) missing.push('Iron');
+    if (checks.food === false) missing.push('Food');
+    if (missing.length > 0) setToastMessage(`Not enough ${missing.join(', ')}`);
+  };
 
   // Clear rate display after 3 seconds or when clicking elsewhere
   useEffect(() => {
@@ -660,153 +684,215 @@ export default function ResourceVillageUI() {
     return perks;
   }
 
-  // === Master Mission Pool (20 missions) ===
-  const MASTER_MISSION_POOL: Omit<Mission, 'status' | 'staged' | 'deployed' | 'elapsed' | 'battleResult' | 'rewards' | 'rewardTier' | 'cooldownEndTime' | 'isNew'>[] = [
+  // === Mission Pools — separated by gameplay context ===
+  // Each pool is self-contained. Future expeditions get their own pool.
+
+  type MissionTemplate = Omit<Mission, 'status' | 'staged' | 'deployed' | 'elapsed' | 'battleResult' | 'rewards' | 'rewardTier' | 'cooldownEndTime' | 'isNew'>;
+
+  // ── Base Mission Pool (completed from mission tab) ──
+  const BASE_MISSION_POOL: MissionTemplate[] = [
     {
-      id: 1,
+      id: 1, missionType: 'list',
       name: 'Scout the Forest',
+      terrain: 'forest',
       description: 'Your task is to explore the outskirts of the village and chart any nearby landmarks or threats. Expect light resistance. Current estimates suggest you may encounter one hostile squad. Proceed carefully, avoid unnecessary engagement, and return with a clear report of the terrain and enemy presence.',
       duration: 3,
       enemyComposition: { warrior: 15, archer: 5 }
     },
     {
-      id: 2,
+      id: 2, missionType: 'list',
       name: 'Secure the Quarry Road',
+      terrain: 'hills',
       description: 'Your forces must secure the old road leading to the quarry. Enemy scouts have been sighted nearby, and resistance is expected to be significant. Intelligence indicates three warrior squads supported by one archer squad. Advance with caution, break their formation, and ensure the road is safe for future transport.',
       duration: 3,
       enemyComposition: { warrior: 90, archer: 30 }
     },
     {
-      id: 3,
+      id: 3, missionType: 'list',
       name: 'Sweep the Northern Ridge',
+      terrain: 'hills',
       description: 'A fortified enemy group has settled along the northern ridge. This will be a demanding operation. Expect to face five warrior squads and one archer squad. Push through their defensive line, neutralise all threats, and reclaim control of the ridge for the village.',
       duration: 3,
       enemyComposition: { warrior: 300, archer: 50 }
     },
     {
-      id: 4,
+      id: 4, missionType: 'list',
       name: 'Ambush the River Raiders',
+      terrain: 'forest',
       description: 'Your task is to clear the raiders operating along the riverbank. Scouts report small, fast-moving bands conducting ambushes on travellers. Expect light resistance composed of one warrior squad and a small archer detachment. Engage swiftly and secure the water route for the village.',
       duration: 3,
       enemyComposition: { warrior: 20, archer: 10 }
     },
     {
-      id: 5,
+      id: 5, missionType: 'list',
       name: 'Purge the Old Mine',
+      terrain: 'hills',
       description: 'You must investigate the abandoned mine and eliminate any hostile presence within. Recent reports mention strange movements underground, likely from lurking creatures or desperate bandits. Expect two loosely organised squads with limited coordination. Push through the tunnels and restore safety to the area.',
       duration: 3,
       enemyComposition: { warrior: 35, archer: 15 }
     },
     {
-      id: 6,
-      name: 'Break the Southern Blockade',
-      description: 'Enemy forces have erected a blockade on the southern path, disrupting trade and movement. Scouts confirm two warrior squads supported by one shielded unit holding the chokepoint. Expect a firm defensive stance. Break their line, dismantle the barricades, and reopen the route.',
-      duration: 3,
-      enemyComposition: { warrior: 130, archer: 30 }
-    },
-    {
-      id: 7,
-      name: 'Destroy the War Camp at Red Valley',
-      description: 'A medium-sized war camp has been established in Red Valley, preparing forces for future assaults. Intelligence indicates three warrior squads, one archer squad, and an elite champion overseeing training. Expect organised resistance. Disrupt their preparations and cripple their ability to expand.',
-      duration: 3,
-      enemyComposition: { warrior: 360, archer: 90 }
-    },
-    {
-      id: 8,
+      id: 8, missionType: 'list',
       name: 'Hunt the Plains Marauders',
+      terrain: 'plains',
       description: 'Marauders have been raiding farms across the plains, striking quickly before retreating. Scouts estimate one fast-moving warrior squad with two small archer groups in support. Expect unpredictable movement. Track them down, break their momentum, and restore security to the farmlands.',
       duration: 3,
       enemyComposition: { warrior: 50, archer: 30 }
     },
     {
-      id: 9,
+      id: 9, missionType: 'list',
       name: 'Crush the Hilltop Outpost',
+      terrain: 'hills',
       description: 'A fortified outpost atop the northern hill is coordinating enemy patrols. Reports suggest two warrior squads and one archer squad defending the structure. Expect elevated positions and defensive tactics. Overwhelm their lines and reclaim the high ground.',
       duration: 3,
       enemyComposition: { warrior: 150, archer: 50 }
     },
     {
-      id: 10,
-      name: 'Cleanse the Bandit Warrens',
-      description: 'A network of caves has become the base of a growing bandit force. Intelligence confirms three disorganised squads with mixed weaponry. Expect cramped fighting conditions and opportunistic strikes. Push through the warrens and eliminate their leadership.',
-      duration: 3,
-      enemyComposition: { warrior: 240, archer: 60 }
-    },
-    {
-      id: 11,
-      name: 'Eliminate the Elite Vanguard',
-      description: 'Enemy commanders have deployed an elite vanguard to probe your defences. Scouts report one elite squad accompanied by two disciplined warrior units. Expect coordinated attacks and higher combat proficiency. Disrupt their advance and send a clear message.',
-      duration: 3,
-      enemyComposition: { warrior: 380, archer: 120 }
-    },
-    {
-      id: 12,
+      id: 12, missionType: 'list',
       name: 'Retake the Fallen Watchtower',
+      terrain: 'building',
       description: 'The old watchtower to the east has fallen to enemy hands. Reports indicate one warrior squad and one archer squad occupying the structure. Expect defenders to use elevation. Retake the tower and restore control of the eastern perimeter.',
       duration: 3,
       enemyComposition: { warrior: 60, archer: 40 }
     },
     {
-      id: 13,
-      name: 'Assault the Siege Workshop',
-      description: 'A hidden workshop is producing siege equipment for future assaults. Intelligence estimates two warrior squads, one engineer squad, and a small archer detachment guarding the site. Expect traps and defensive constructs. Destroy the facility before production escalates.',
-      duration: 3,
-      enemyComposition: { warrior: 480, archer: 120 }
-    },
-    {
-      id: 14,
+      id: 14, missionType: 'list',
       name: 'Clean the Marsh Ruins',
+      terrain: 'building',
       description: 'Ancient ruins in the marshlands have become infested with hostile creatures. Scouts confirm two creature packs behaving like irregular squads with unpredictable patterns. Expect sudden engagements in difficult terrain. Purge the ruins and secure the wetlands.',
       duration: 3,
       enemyComposition: { warrior: 50, archer: 20 }
     },
     {
-      id: 15,
-      name: 'Intercept the Supply Caravan',
-      description: 'A heavily guarded caravan is transporting weapons and armour to frontline forces. Intelligence indicates two warrior squads escorting multiple supply wagons. Expect disciplined defence and a mobile formation. Halt the caravan and seize the supplies.',
-      duration: 3,
-      enemyComposition: { warrior: 160, archer: 60 }
-    },
-    {
-      id: 16,
-      name: 'Break the Ironclad Phalanx',
-      description: 'A highly trained phalanx is blocking a strategic mountain pass. Scouts report one phalanx unit supported by two elite warriors. Expect a strong frontal defence. Flank their formation, break their discipline, and reopen the pass.',
-      duration: 3,
-      enemyComposition: { warrior: 700, archer: 200 }
-    },
-    {
-      id: 17,
-      name: 'Storm the Fortress of Grey Ridge',
-      description: 'A reinforced enemy fortress dominates Grey Ridge and controls several valleys. Intelligence confirms four warrior squads, two archer squads, and a veteran commander. Expect prolonged resistance. Breach their defences and reclaim the stronghold.',
-      duration: 3,
-      enemyComposition: { warrior: 2000, archer: 500 }
-    },
-    {
-      id: 18,
-      name: 'Defeat the Beastlord\'s Horde',
-      description: 'A monstrous warlord has assembled a large horde of beasts and fanatics. Scouts estimate three beast packs supported by two frenzied warrior squads. Expect erratic and aggressive assaults. Hold formation and cut through the enemy swarm.',
-      duration: 3,
-      enemyComposition: { warrior: 2400, archer: 800 }
-    },
-    {
-      id: 19,
-      name: 'Burn the Great Encampment',
-      description: 'A sprawling encampment is hosting large numbers of enemy troops and resources. Intelligence identifies five warrior squads, two archer units, and multiple auxiliary detachments. Expect widespread resistance across several positions. Torch the encampment and disrupt their supply network.',
-      duration: 3,
-      enemyComposition: { warrior: 4000, archer: 1000 }
-    },
-    {
-      id: 20,
+      id: 20, missionType: 'list',
       name: 'Final Push: The Army of Ten Thousand',
+      terrain: 'plains',
       description: 'A massive enemy host is advancing toward the region. Scouts report an overwhelming formation comprising dozens of warrior squads, numerous archer regiments, and elite detachments. Expect extreme resistance. Strike decisively and prevent the enemy from overrunning the land.',
       duration: 3,
       enemyComposition: { warrior: 7500, archer: 2500 }
     },
   ];
 
-  // Helper function to randomly select N missions from the pool, excluding current active mission IDs
-  function selectRandomMissions(count: number, excludeIds: number[] = []): Mission[] {
-    const available = MASTER_MISSION_POOL.filter(m => !excludeIds.includes(m.id));
+  // ── Expedition 1 Mission Pool (auto-complete on expedition map) ──
+  const EXPEDITION_1_MISSION_POOL: MissionTemplate[] = [
+    {
+      id: 6, missionType: 'expedition',
+      name: 'Break the Southern Blockade',
+      terrain: 'plains',
+      description: 'Enemy forces have erected a blockade on the southern path, disrupting trade and movement. Scouts confirm two warrior squads supported by one shielded unit holding the chokepoint. Expect a firm defensive stance. Break their line, dismantle the barricades, and reopen the route.',
+      duration: 3,
+      enemyComposition: { warrior: 130, archer: 30 }
+    },
+    {
+      id: 7, missionType: 'expedition',
+      name: 'Destroy the War Camp at Red Valley',
+      terrain: 'plains',
+      description: 'A medium-sized war camp has been established in Red Valley, preparing forces for future assaults. Intelligence indicates three warrior squads, one archer squad, and an elite champion overseeing training. Expect organised resistance. Disrupt their preparations and cripple their ability to expand.',
+      duration: 3,
+      enemyComposition: { warrior: 360, archer: 90 }
+    },
+    {
+      id: 10, missionType: 'expedition',
+      name: 'Cleanse the Bandit Warrens',
+      terrain: 'hills',
+      description: 'A network of caves has become the base of a growing bandit force. Intelligence confirms three disorganised squads with mixed weaponry. Expect cramped fighting conditions and opportunistic strikes. Push through the warrens and eliminate their leadership.',
+      duration: 3,
+      enemyComposition: { warrior: 240, archer: 60 }
+    },
+    {
+      id: 11, missionType: 'expedition',
+      name: 'Eliminate the Elite Vanguard',
+      terrain: 'plains',
+      description: 'Enemy commanders have deployed an elite vanguard to probe your defences. Scouts report one elite squad accompanied by two disciplined warrior units. Expect coordinated attacks and higher combat proficiency. Disrupt their advance and send a clear message.',
+      duration: 3,
+      enemyComposition: { warrior: 380, archer: 120 }
+    },
+    {
+      id: 13, missionType: 'expedition',
+      name: 'Assault the Siege Workshop',
+      terrain: 'building',
+      description: 'A hidden workshop is producing siege equipment for future assaults. Intelligence estimates two warrior squads, one engineer squad, and a small archer detachment guarding the site. Expect traps and defensive constructs. Destroy the facility before production escalates.',
+      duration: 3,
+      enemyComposition: { warrior: 480, archer: 120 }
+    },
+    {
+      id: 15, missionType: 'expedition',
+      name: 'Intercept the Supply Caravan',
+      terrain: 'plains',
+      description: 'A heavily guarded caravan is transporting weapons and armour to frontline forces. Intelligence indicates two warrior squads escorting multiple supply wagons. Expect disciplined defence and a mobile formation. Halt the caravan and seize the supplies.',
+      duration: 3,
+      enemyComposition: { warrior: 160, archer: 60 }
+    },
+    {
+      id: 16, missionType: 'expedition',
+      name: 'Break the Ironclad Phalanx',
+      terrain: 'hills',
+      description: 'A highly trained phalanx is blocking a strategic mountain pass. Scouts report one phalanx unit supported by two elite warriors. Expect a strong frontal defence. Flank their formation, break their discipline, and reopen the pass.',
+      duration: 3,
+      enemyComposition: { warrior: 700, archer: 200 }
+    },
+    {
+      id: 17, missionType: 'expedition',
+      name: 'Storm the Fortress of Grey Ridge',
+      terrain: 'hills',
+      description: 'A reinforced enemy fortress dominates Grey Ridge and controls several valleys. Intelligence confirms four warrior squads, two archer squads, and a veteran commander. Expect prolonged resistance. Breach their defences and reclaim the stronghold.',
+      duration: 3,
+      enemyComposition: { warrior: 2000, archer: 500 }
+    },
+    {
+      id: 18, missionType: 'expedition',
+      name: 'Defeat the Beastlord\'s Horde',
+      terrain: 'forest',
+      description: 'A monstrous warlord has assembled a large horde of beasts and fanatics. Scouts estimate three beast packs supported by two frenzied warrior squads. Expect erratic and aggressive assaults. Hold formation and cut through the enemy swarm.',
+      duration: 3,
+      enemyComposition: { warrior: 2400, archer: 800 }
+    },
+    {
+      id: 19, missionType: 'expedition',
+      name: 'Burn the Great Encampment',
+      terrain: 'plains',
+      description: 'A sprawling encampment is hosting large numbers of enemy troops and resources. Intelligence identifies five warrior squads, two archer units, and multiple auxiliary detachments. Expect widespread resistance across several positions. Torch the encampment and disrupt their supply network.',
+      duration: 3,
+      enemyComposition: { warrior: 4000, archer: 1000 }
+    },
+    {
+      id: 21, missionType: 'expedition',
+      name: 'Clear the Ruined Barracks',
+      terrain: 'building',
+      description: 'An abandoned barracks complex has been reoccupied by hostile troops and is now being used as a forward staging point. Scouts report two warrior squads supported by one ranged detachment holding the inner yard. Expect layered resistance through narrow approaches. Clear the complex and deny the enemy a foothold.',
+      duration: 3,
+      enemyComposition: { warrior: 280, archer: 70 }
+    },
+    {
+      id: 22, missionType: 'expedition',
+      name: 'Seize the Broken Gatehouse',
+      terrain: 'building',
+      description: 'A shattered gatehouse on the old frontier road has been fortified again to control local movement. Intelligence confirms three warrior squads and one archer unit entrenched across the upper levels and entry choke points. Expect a disciplined defence from protected positions. Seize the gatehouse and reopen the route.',
+      duration: 3,
+      enemyComposition: { warrior: 420, archer: 80 }
+    },
+    {
+      id: 23, missionType: 'expedition',
+      name: 'Purge the Desecrated Chapel',
+      terrain: 'building',
+      description: 'A once-sacred chapel has been converted into an enemy strongpoint and rally site. Scouts identify three warrior squads, one archer detachment, and a veteran guard unit holding the main hall. Expect stubborn resistance in confined spaces. Purge the chapel and break the enemy hold over the area.',
+      duration: 3,
+      enemyComposition: { warrior: 520, archer: 130 }
+    },
+    {
+      id: 24, missionType: 'expedition',
+      name: 'Break the Hall of Chains',
+      terrain: 'building',
+      description: 'A fortified prison hall is being used to hold captives and stockpile weapons for enemy operations. Intelligence reports four warrior squads supported by one archer unit guarding the central corridors and cell blocks. Expect heavy resistance across multiple interior positions. Break their control and secure the structure.',
+      duration: 3,
+      enemyComposition: { warrior: 760, archer: 140 }
+    },
+  ];
+
+  // Helper: randomly select N missions from a specific pool, excluding given IDs
+  // The missionType is inherited from the template (already set in each pool)
+  function selectRandomMissions(count: number, pool: MissionTemplate[], excludeIds: number[] = []): Mission[] {
+    const available = pool.filter(m => !excludeIds.includes(m.id));
     const shuffled = [...available].sort(() => Math.random() - 0.5);
     const selected = shuffled.slice(0, Math.min(count, available.length));
 
@@ -820,12 +906,51 @@ export default function ResourceVillageUI() {
       rewards: undefined,
       rewardTier: undefined,
       cooldownEndTime: undefined,
-      isNew: true // Mark as new when first generated
+      isNew: true
     }));
   }
 
-  // Initialize with 3 random missions
-  const [missions, setMissions] = useState<Mission[]>(() => selectRandomMissions(3));
+  // Initialize with 3 random base missions
+  const [missions, setMissions] = useState<Mission[]>(() => selectRandomMissions(3, BASE_MISSION_POOL));
+
+  // Stable key that changes when expedition missions exist (triggers sync without infinite loop)
+  const expMissionKey = expeditions.map(e =>
+    (e.mapState?.expeditionMissions || []).map(m => m.id).join(',')
+  ).join('|');
+
+  // Sync mission positions on the map: assign provinces for available/running missions,
+  // remove positions for completed/gone list missions.
+  // Expedition missions keep their positions even when completed (visible as cleared markers).
+  useEffect(() => {
+    const pd = provinceDataRef.current;
+    setExpeditions(exps => exps.map(exp => {
+      if (!exp.mapState || !pd?.provinces) return exp;
+      const pos = { ...(exp.mapState.missionPositions || {}) };
+      let changed = false;
+
+      // Expedition missions only: assign positions once, keep them forever (even completed)
+      const fortressId = exp.mapState.fortressProvinceId;
+      for (const m of (exp.mapState.expeditionMissions || [])) {
+        if (!pos[m.id]) {
+          const terrain = m.terrain || 'plains';
+          const usedProvIds = new Set(Object.values(pos));
+          const matching = pd.provinces.filter((p: any) => p.terrain === terrain && p.isLand && p.id !== fortressId && !usedProvIds.has(p.id));
+          if (matching.length > 0) {
+            const chosen = matching[Math.floor(Math.random() * matching.length)];
+            pos[m.id] = chosen.id;
+            changed = true;
+            if (import.meta.env.DEV) {
+              console.log(`[MissionSync] Expedition mission ${m.id} "${m.name}" → ${chosen.id} (${terrain})`);
+            }
+          }
+        }
+      }
+
+      if (!changed) return exp;
+      return { ...exp, mapState: { ...exp.mapState, missionPositions: pos } };
+    }));
+  }, [provinceDataReady, expMissionKey]);
+
   const [missionBannerSelector, setMissionBannerSelector] = useState<number | null>(null); // Mission ID showing banner selector
   const [missionLoading, setMissionLoading] = useState<number | null>(null); // Mission ID currently loading
   const [rewardModal, setRewardModal] = useState<null | { missionId: number }>(null);
@@ -949,6 +1074,7 @@ export default function ResourceVillageUI() {
         state: exp.state,
         requirements: exp.requirements,
         travelProgress: exp.travelProgress,
+        mapState: exp.mapState,
         fortress: exp.fortress ? {
           buildings: exp.fortress.buildings.map(b => ({
             id: b.id,
@@ -1058,6 +1184,8 @@ export default function ResourceVillageUI() {
         }
         return {
           ...m,
+          terrain: m.terrain as Mission['terrain'],
+          missionType: (m.missionType || 'list') as Mission['missionType'],
           status: status as Mission['status'],
           description: m.description || '',
           enemyComposition: m.enemyComposition || { warrior: 0, archer: 0 },
@@ -1069,7 +1197,7 @@ export default function ResourceVillageUI() {
       // If we have fewer than 3 missions, fill up to 3 with random ones
       if (loadedMissions.length < 3) {
         const currentIds = loadedMissions.map(m => m.id);
-        const additionalMissions = selectRandomMissions(3 - loadedMissions.length, currentIds);
+        const additionalMissions = selectRandomMissions(3 - loadedMissions.length, BASE_MISSION_POOL, currentIds);
         setMissions([...loadedMissions, ...additionalMissions]);
       } else if (loadedMissions.length > 3) {
         // If we have more than 3, keep only the first 3
@@ -1078,8 +1206,8 @@ export default function ResourceVillageUI() {
         setMissions(loadedMissions);
       }
     } else {
-      // No saved missions, initialize with 3 random
-      setMissions(selectRandomMissions(3));
+      // No saved missions, initialize with 3 random list missions
+      setMissions(selectRandomMissions(3, BASE_MISSION_POOL));
     }
 
     setExpeditions(state.expeditions.map(exp => {
@@ -1106,7 +1234,7 @@ export default function ResourceVillageUI() {
             // Reconstruct effect based on building type
             if (savedBuilding.id === 'palisade_wall') return { fortHP: 400 * level };
             if (savedBuilding.id === 'watch_post') return { archerSlots: WATCH_POST_ARCHERS_PER_LEVEL * level };
-            if (savedBuilding.id === 'garrison_hut') return { garrisonWarriors: 5 * level, garrisonArchers: 5 * level };
+            if (savedBuilding.id === 'garrison_hut') return { garrisonCapacity: level };
             return {};
           },
           getUpgradeCost: (level: number) => {
@@ -1118,13 +1246,34 @@ export default function ResourceVillageUI() {
         };
       });
 
+      // Migrate mapState: add turnNumber/pendingOrders/expeditionMissions for old saves
+      const rawMapState = (exp as any).mapState;
+      const migratedMapState = rawMapState ? {
+        ...rawMapState,
+        turnNumber: rawMapState.turnNumber ?? 1,
+        pendingOrders: rawMapState.pendingOrders ?? {},
+        expeditionMissions: rawMapState.expeditionMissions ?? [],
+        completedExpeditionMissionIds: rawMapState.completedExpeditionMissionIds ?? [],
+      } : rawMapState;
+
+      // Recalculate stats from reconstructed buildings (handles migrations like garrisonCapacity)
+      const recalculatedStats = calculateFortressStats(reconstructedBuildings);
+
+      // Migrate: if mapState.expeditionFailed is true but state still says 'completed', fix it
+      const migratedExpState = (migratedMapState?.expeditionFailed && exp.state === 'completed')
+        ? 'failed' as const
+        : exp.state;
+
       return {
         ...exp,
+        state: migratedExpState,
         fortress: {
           ...exp.fortress,
           buildings: reconstructedBuildings,
+          stats: recalculatedStats,
           garrison: exp.fortress.garrison || [],
         },
+        mapState: migratedMapState,
       };
     }));
 
@@ -1207,12 +1356,9 @@ export default function ResourceVillageUI() {
       // Load into component
       loadGameState(simulated);
 
-      // Save after state has been updated (use setTimeout to ensure state is set)
-      setTimeout(() => {
-        const currentState = serializeGameState();
-        persistence.saveState(currentState);
-        dbg.log('[PERSISTENCE] Re-saved state after offline simulation');
-      }, 200);
+      // NOTE: removed stale-closure 200ms re-save — serializeGameState captured here
+      // references the pre-setState closure, overwriting loaded state with defaults.
+      // The regular autosave interval handles persistence once React state has settled.
 
       dbg.log(`[PERSISTENCE] Loaded save, simulated ${deltaSeconds.toFixed(1)} seconds offline`);
     } else {
@@ -1252,24 +1398,24 @@ export default function ResourceVillageUI() {
       "This will:\n" +
       "• Delete all resources, buildings, and units\n" +
       "• Reset your Commander and XP\n" +
+      "• Delete all expeditions, fortress, and armies\n" +
       "• Restart the game from the tutorial\n\n" +
       "This action CANNOT be undone.\n\n" +
       "Are you absolutely sure?"
     );
 
     if (confirmation) {
-      // Stop auto-save to prevent interference
+      // Stop auto-save and remove beforeunload handler to prevent
+      // stale in-memory state from being re-saved before/during reload
       persistence.stopAutoSave();
 
-      // Reset state - this will clear localStorage and save default state
-      const defaultState = persistence.resetState();
+      // Clear localStorage and save fresh default state
+      persistence.resetState();
 
-      // Ensure the save is written before reloading
-      // Use a small delay to ensure localStorage write completes
-      setTimeout(() => {
-        // Reload page - it will load the fresh default state from localStorage
-        window.location.reload();
-      }, 100);
+      // Reload immediately — localStorage writes are synchronous,
+      // no delay needed. A delay here causes a race condition where
+      // the mount-time resave timeout can overwrite the clean state.
+      window.location.reload();
     }
   }
 
@@ -1437,7 +1583,7 @@ export default function ResourceVillageUI() {
     }
 
     setBanners((bs) => bs.map((b) => {
-      if (b.id === id && (b.status === 'idle' || b.status === 'ready')) {
+      if (b.id === id && (b.status === 'idle' || b.status === 'ready' || b.status === 'deployed')) {
         // Ensure squads are initialized
         let displaySquads = b.squads;
         if (!displaySquads || displaySquads.length === 0) {
@@ -1461,7 +1607,7 @@ export default function ResourceVillageUI() {
           const resetSquads = displaySquads.map(s => ({ ...s, currentSize: 0 }));
           return { ...b, status: 'training', squads: resetSquads, recruited: 0, reqPop: totalNeeded, trainingPaused: false };
         } else {
-          // Continuing training on a 'ready' banner: keep current squad sizes, train only what's missing
+          // Continuing training on a 'ready' or 'deployed' banner: keep current squad sizes, train only what's missing
           return { ...b, status: 'training', squads: displaySquads, recruited: 0, reqPop: totalNeeded, trainingPaused: false };
         }
       }
@@ -1887,8 +2033,8 @@ export default function ResourceVillageUI() {
         name: 'Garrison Hut',
         level: 1,
         maxLevel: 5,
-        description: '+5 Garrison capacity',
-        getEffect: (level) => ({ garrisonWarriors: 5 * level, garrisonArchers: 5 * level }),
+        description: 'Army garrison capacity',
+        getEffect: (level) => ({ garrisonCapacity: level }),
         getUpgradeCost: (level) => ({ wood: 120 * level, stone: 60 * level }),
       },
     ];
@@ -1898,8 +2044,7 @@ export default function ResourceVillageUI() {
     const stats: FortressStats = {
       fortHP: 0,
       archerSlots: 0,
-      garrisonWarriors: 0,
-      garrisonArchers: 0,
+      garrisonCapacity: 0,
       storedSquads: 1, // Base value
     };
 
@@ -1907,8 +2052,7 @@ export default function ResourceVillageUI() {
       const effect = building.getEffect(building.level);
       if (effect.fortHP) stats.fortHP += effect.fortHP;
       if (effect.archerSlots) stats.archerSlots += effect.archerSlots;
-      if (effect.garrisonWarriors) stats.garrisonWarriors += effect.garrisonWarriors;
-      if (effect.garrisonArchers) stats.garrisonArchers += effect.garrisonArchers;
+      if (effect.garrisonCapacity) stats.garrisonCapacity += effect.garrisonCapacity;
       if (effect.storedSquads) stats.storedSquads += effect.storedSquads;
     });
 
@@ -1984,11 +2128,57 @@ export default function ResourceVillageUI() {
           if (exp.expeditionId !== expeditionId) return exp;
           const buildings = createInitialFortressBuildings();
           const stats = calculateFortressStats(buildings);
+
+          // Pick a random plains province for fortress placement
+          let mapState: any = undefined;
+          const pd = provinceDataRef.current;
+          if (pd?.provinces) {
+            const plainsProvs = pd.provinces.filter(
+              (p: any) => p.terrain === 'plains' && p.isLand
+            );
+            if (plainsProvs.length > 0) {
+              const chosen = plainsProvs[Math.floor(Math.random() * plainsProvs.length)];
+              // Fog disabled for testing — reveal all provinces
+              const revealed = pd.provinces.map((p: any) => p.id);
+              // Seed expedition missions for the map and pre-assign province positions
+              const expMissions = selectRandomMissions(3, EXPEDITION_1_MISSION_POOL);
+              const missionPositions: Record<string, string> = {};
+              for (const m of expMissions) {
+                const terrain = m.terrain || 'plains';
+                const usedProvIds = new Set(Object.values(missionPositions));
+                const matching = pd.provinces.filter(
+                  (p: any) => p.terrain === terrain && p.isLand && p.id !== chosen.id && !usedProvIds.has(p.id)
+                );
+                if (matching.length > 0) {
+                  const pick = matching[Math.floor(Math.random() * matching.length)];
+                  missionPositions[m.id] = pick.id;
+                  if (import.meta.env.DEV) {
+                    console.log(`[Expedition] Mission ${m.id} "${m.name}" placed at ${pick.id} (${terrain})`);
+                  }
+                }
+              }
+              mapState = {
+                fortressProvinceId: chosen.id,
+                armyPositions: {},
+                missionPositions,
+                revealedProvinces: revealed,
+                provinceControl: {},
+                turnNumber: 1,
+                pendingOrders: {},
+                expeditionMissions: expMissions,
+              };
+              if (import.meta.env.DEV) {
+                console.log(`[Expedition] Fortress placed at ${chosen.id} (${chosen.terrain}), center: ${chosen.center}, revealed: ${revealed.length} provinces`);
+              }
+            }
+          }
+
           return {
             ...exp,
             state: 'completed',
             travelProgress: 100,
-            fortress: { buildings, stats, garrison: [] }
+            fortress: { buildings, stats, garrison: [] },
+            mapState,
           };
         }));
       } else {
@@ -1997,6 +2187,43 @@ export default function ResourceVillageUI() {
         ));
       }
     }, 100);
+  }
+
+  function restartExpedition(expeditionId: string) {
+    const expedition = expeditions.find(exp => exp.expeditionId === expeditionId);
+    if (!expedition || expedition.state !== 'failed') return;
+
+    // Collect all banner IDs involved in this expedition
+    const garrisonIds = expedition.fortress?.garrison || [];
+    const mapIds = expedition.mapState
+      ? Object.keys(expedition.mapState.armyPositions).map(Number)
+      : [];
+    const allIds = new Set([...garrisonIds, ...mapIds]);
+
+    // Return surviving banners to 'ready' status
+    setBanners(bs => bs.map(b => {
+      if (!allIds.has(b.id)) return b;
+      if (b.status === 'destroyed') return b; // dead banners stay dead
+      return { ...b, status: 'ready' as const };
+    }));
+
+    // Reset expedition to 'available' — fresh start
+    setExpeditions(exps => exps.map(exp => {
+      if (exp.expeditionId !== expeditionId) return exp;
+      return {
+        ...exp,
+        state: 'available' as const,
+        requirements: {
+          wood: { required: 500, current: 0 },
+          stone: { required: 250, current: 0 },
+          food: { required: 1000, current: 0 },
+          population: { required: 5, current: 0 },
+        },
+        travelProgress: 0,
+        fortress: undefined,
+        mapState: undefined,
+      };
+    }));
   }
 
   function upgradeFortressBuilding(expeditionId: string, buildingId: string) {
@@ -2051,6 +2278,11 @@ export default function ResourceVillageUI() {
     // Check if banner is already in garrison
     if ((expedition.fortress.garrison || []).includes(bannerId)) return;
 
+    // Enforce garrison capacity (Level N = N armies max)
+    const currentCount = (expedition.fortress.garrison || []).length;
+    const maxCapacity = expedition.fortress.stats?.garrisonCapacity || 1;
+    if (currentCount >= maxCapacity) return;
+
     // Add banner to garrison
     setExpeditions((exps) => exps.map((exp) => {
       if (exp.expeditionId !== expeditionId || !exp.fortress) return exp;
@@ -2069,24 +2301,36 @@ export default function ResourceVillageUI() {
     ));
   }
 
-  function calculateGarrisonFromBanners(garrisonBannerIds: number[]): { warriors: number; archers: number } {
+  function calculateGarrisonFromBanners(garrisonBannerIds: number[]): {
+    warriors: number;
+    archers: number;
+    squads: Array<{ type: string; count: number }>;
+  } {
     let warriors = 0;
     let archers = 0;
+    const squadMap = new Map<string, number>();
 
     garrisonBannerIds.forEach(bannerId => {
       const banner = banners.find(b => b.id === bannerId);
       if (!banner || !banner.squads) return;
 
       banner.squads.forEach(squad => {
-        if (squad.type === 'warrior') {
-          warriors += squad.currentSize;
-        } else if (squad.type === 'archer') {
+        const category = unitCategory[squad.type] || 'infantry';
+        if (category === 'ranged_infantry') {
           archers += squad.currentSize;
+        } else {
+          // infantry + cavalry all count as melee defenders
+          warriors += squad.currentSize;
         }
+        squadMap.set(squad.type, (squadMap.get(squad.type) || 0) + squad.currentSize);
       });
     });
 
-    return { warriors, archers };
+    return {
+      warriors,
+      archers,
+      squads: Array.from(squadMap.entries()).map(([type, count]) => ({ type, count }))
+    };
   }
 
   // Calculate active wall archers (limited by Watch Post capacity)
@@ -2357,9 +2601,551 @@ export default function ResourceVillageUI() {
     return destroyedIds;
   }
 
+  // ── Shared battle helper ───────────────────────────────────────
+
+  function buildSquadEntry(type: string, count: number): BattleSquadEntry {
+    const cat = unitCategory[type as UnitType] || 'infantry';
+    return {
+      type,
+      displayName: unitDisplayNames[type as UnitType] || type,
+      role: cat === 'ranged_infantry' ? 'ranged' : 'melee',
+      initial: count,
+      final: count,
+      lost: 0,
+    };
+  }
+
+  // ── Field Battle helpers ──────────────────────────────────────
+
+  type ProvinceConflict = {
+    provinceId: string;
+    playerBannerIds: number[];   // ALL player armies arriving here
+    enemyIds: number[];          // ALL enemy armies arriving here
+  };
+
+  function computeEnemyDestinations(
+    enemies: EnemyArmy[],
+    fortressId: string,
+    provinceData: { provinces: ProvinceData[] }
+  ): Map<number, string> {
+    const provinceById = new Map<string, ProvinceData>();
+    for (const p of provinceData.provinces) provinceById.set(p.id, p);
+    const destinations = new Map<number, string>();
+    for (const enemy of enemies) {
+      if (enemy.status !== 'marching') continue;
+      if (enemy.provinceId === fortressId) {
+        destinations.set(enemy.id, fortressId);
+        continue;
+      }
+      const pathResult = findPath(enemy.provinceId, fortressId, provinceById);
+      if (pathResult && pathResult.path.length > 1) {
+        destinations.set(enemy.id, pathResult.path[1]);
+      } else {
+        destinations.set(enemy.id, enemy.provinceId);
+      }
+    }
+    return destinations;
+  }
+
+  function computePlayerDestinations(
+    positions: Record<number, string>,
+    orders: Record<number, ArmyOrder>
+  ): Record<number, string> {
+    const dests: Record<number, string> = {};
+    for (const [bidStr, pos] of Object.entries(positions)) {
+      const bid = Number(bidStr);
+      const order = orders[bid];
+      if (order?.type === 'move' && order.targetProvinceId) {
+        dests[bid] = order.targetProvinceId;
+      } else {
+        dests[bid] = pos;
+      }
+    }
+    return dests;
+  }
+
+  function detectProvinceConflicts(
+    playerPositions: Record<number, string>,
+    playerDests: Record<number, string>,
+    enemies: EnemyArmy[],
+    enemyDests: Map<number, string>
+  ): ProvinceConflict[] {
+    // Build province → armies map from destinations (co-location)
+    const provinceMap = new Map<string, { players: Set<number>; enemies: Set<number> }>();
+
+    for (const [bidStr, dest] of Object.entries(playerDests)) {
+      const entry = provinceMap.get(dest) || { players: new Set(), enemies: new Set() };
+      entry.players.add(Number(bidStr));
+      provinceMap.set(dest, entry);
+    }
+
+    for (const enemy of enemies) {
+      if (enemy.status !== 'marching') continue;
+      const dest = enemyDests.get(enemy.id);
+      if (!dest) continue;
+      const entry = provinceMap.get(dest) || { players: new Set(), enemies: new Set() };
+      entry.enemies.add(enemy.id);
+      provinceMap.set(dest, entry);
+    }
+
+    // Also check swap: player A→B while enemy B→A → battle at B
+    for (const [bidStr, pDest] of Object.entries(playerDests)) {
+      const bid = Number(bidStr);
+      const pCurrent = playerPositions[bid];
+      if (!pCurrent || pDest === pCurrent) continue; // not moving
+
+      for (const enemy of enemies) {
+        if (enemy.status !== 'marching') continue;
+        const eDest = enemyDests.get(enemy.id);
+        // Player going to enemy's position, enemy going to player's position
+        if (pDest === enemy.provinceId && eDest === pCurrent) {
+          const entry = provinceMap.get(pDest) || { players: new Set(), enemies: new Set() };
+          entry.players.add(bid);
+          entry.enemies.add(enemy.id);
+          provinceMap.set(pDest, entry);
+        }
+      }
+    }
+
+    // Return only provinces where BOTH sides are present
+    return Array.from(provinceMap.entries())
+      .filter(([_, v]) => v.players.size > 0 && v.enemies.size > 0)
+      .map(([provinceId, v]) => ({
+        provinceId,
+        playerBannerIds: Array.from(v.players),
+        enemyIds: Array.from(v.enemies),
+      }));
+  }
+
+  function runFieldBattle(
+    banner: Banner,
+    enemy: EnemyArmy,
+    provinceId: string,
+    turnNumber: number,
+    battleIndex: number
+  ): FieldBattleResult {
+    const stats = unitStats;
+    const p = battleParams;
+    const baseCas = p.base_casualty_rate || 0.7;
+
+    // Classify player troops
+    let playerWarriors = 0;
+    let playerArchers = 0;
+    const playerComp: BattleSquadEntry[] = [];
+    for (const sq of banner.squads || []) {
+      const entry = buildSquadEntry(sq.type, sq.currentSize);
+      playerComp.push(entry);
+      const cat = unitCategory[sq.type as UnitType] || 'infantry';
+      if (cat === 'ranged_infantry') {
+        playerArchers += sq.currentSize;
+      } else {
+        playerWarriors += sq.currentSize;
+      }
+    }
+
+    // Classify enemy troops
+    let enemyWarriors = 0;
+    let enemyArchers = 0;
+    const enemyComp: BattleSquadEntry[] = [];
+    for (const sq of enemy.squads || []) {
+      const troopCount = sq.count * 10;
+      const entry = buildSquadEntry(sq.type, troopCount);
+      enemyComp.push(entry);
+      const cat = unitCategory[sq.type as UnitType] || 'infantry';
+      if (cat === 'ranged_infantry') {
+        enemyArchers += troopCount;
+      } else {
+        enemyWarriors += troopCount;
+      }
+    }
+
+    const playerTotal = playerWarriors + playerArchers;
+    const enemyTotal = enemyWarriors + enemyArchers;
+
+    // Battle stats
+    const battleStats = {
+      warrior: {
+        skirmish: stats.warrior?.skirmish_attack || 0,
+        melee: stats.warrior?.melee_attack || 15,
+      },
+      archer: {
+        skirmish: stats.archer?.skirmish_attack || 15,
+        melee: stats.archer?.melee_attack || 0,
+      },
+    };
+
+    // Run the battle — player is "defender" (warriors/archers split), enemy is "attacker"
+    const timeline = runInnerBattle(playerWarriors, playerArchers, enemyTotal, battleStats, baseCas);
+
+    // Read final state
+    const lastStep = timeline.length > 0 ? timeline[timeline.length - 1] : null;
+    const finalPlayerTroops = lastStep ? lastStep.defenders : playerTotal;
+    const finalEnemyTroops = lastStep ? lastStep.attackers : enemyTotal;
+
+    // Determine outcome
+    let outcome: FieldBattleResult['outcome'];
+    if (finalPlayerTroops > 0 && finalEnemyTroops <= 0) {
+      outcome = 'player_wins';
+    } else if (finalPlayerTroops <= 0 && finalEnemyTroops > 0) {
+      outcome = 'enemy_wins';
+    } else {
+      outcome = 'draw';
+    }
+
+    // Distribute casualties proportionally across squads of the same role
+    function distributeCasualties(
+      comp: BattleSquadEntry[],
+      totalLost: number,
+      warriors: number,
+      archers: number,
+      total: number
+    ) {
+      const meleeLost = warriors > 0 ? Math.round(totalLost * (warriors / total)) : 0;
+      const rangedLost = totalLost - meleeLost;
+      for (const entry of comp) {
+        const roleLost = entry.role === 'melee' ? meleeLost : rangedLost;
+        const roleTotal = entry.role === 'melee' ? warriors : archers;
+        if (roleLost <= 0 || roleTotal <= 0) continue;
+        const proportion = entry.initial / roleTotal;
+        const loss = Math.min(entry.initial, Math.round(roleLost * proportion));
+        entry.lost = loss;
+        entry.final = entry.initial - loss;
+      }
+    }
+
+    const playerLost = playerTotal - Math.max(0, finalPlayerTroops);
+    distributeCasualties(playerComp, playerLost, playerWarriors, playerArchers, playerTotal);
+
+    const enemyLost = enemyTotal - Math.max(0, finalEnemyTroops);
+    distributeCasualties(enemyComp, enemyLost, enemyWarriors, enemyArchers, enemyTotal);
+
+    // Generate takeaway
+    let battleTakeaway = '';
+    if (outcome === 'player_wins') {
+      if (playerLost === 0) battleTakeaway = `${banner.name} crushed the enemy without losses.`;
+      else battleTakeaway = `${banner.name} defeated ${enemy.name}, losing ${Math.round(playerLost)} troops in the process.`;
+    } else if (outcome === 'enemy_wins') {
+      battleTakeaway = `${enemy.name} overwhelmed ${banner.name}. The army was destroyed.`;
+    } else {
+      battleTakeaway = `Both armies fought to a standstill. Neither side could gain a decisive advantage.`;
+    }
+
+    return {
+      id: `fb_${turnNumber}_${battleIndex}`,
+      turn: turnNumber,
+      provinceId,
+      outcome,
+      playerArmy: {
+        bannerId: banner.id,
+        bannerName: banner.name,
+        initialTroops: playerTotal,
+        finalTroops: Math.round(Math.max(0, finalPlayerTroops)),
+        composition: playerComp,
+      },
+      enemyArmy: {
+        enemyId: enemy.id,
+        enemyName: enemy.name,
+        initialTroops: enemyTotal,
+        finalTroops: Math.round(Math.max(0, finalEnemyTroops)),
+        composition: enemyComp,
+      },
+      timeline,
+      battleTakeaway,
+    };
+  }
+
+  /**
+   * runMergedBattle — Resolves a battle where multiple armies (player and/or enemy) meet in one province.
+   * All player squads pool into one "defender" side, all enemy squads into one "attacker" side.
+   * After the battle, casualties are distributed back proportionally to each original army.
+   */
+  function runMergedBattle(
+    playerBanners: Banner[],
+    enemyForces: EnemyArmy[],
+    provinceId: string,
+    turnNumber: number,
+    battleIndex: number
+  ): FieldBattleResult {
+    const stats = unitStats;
+    const p = battleParams;
+    const baseCas = p.base_casualty_rate || 0.7;
+
+    // Pool all player squads
+    let totalPlayerWarriors = 0;
+    let totalPlayerArchers = 0;
+    const perBanner: Array<{ banner: Banner; warriors: number; archers: number; total: number; comp: BattleSquadEntry[] }> = [];
+
+    for (const banner of playerBanners) {
+      let bWarr = 0, bArch = 0;
+      const bComp: BattleSquadEntry[] = [];
+      for (const sq of banner.squads || []) {
+        const entry = buildSquadEntry(sq.type, sq.currentSize);
+        bComp.push(entry);
+        if ((unitCategory[sq.type as UnitType] || 'infantry') === 'ranged_infantry') {
+          bArch += sq.currentSize;
+        } else {
+          bWarr += sq.currentSize;
+        }
+      }
+      totalPlayerWarriors += bWarr;
+      totalPlayerArchers += bArch;
+      perBanner.push({ banner, warriors: bWarr, archers: bArch, total: bWarr + bArch, comp: bComp });
+    }
+
+    // Pool all enemy squads
+    let totalEnemyWarriors = 0;
+    let totalEnemyArchers = 0;
+    const perEnemy: Array<{ enemy: EnemyArmy; warriors: number; archers: number; total: number; comp: BattleSquadEntry[] }> = [];
+
+    for (const enemy of enemyForces) {
+      let eWarr = 0, eArch = 0;
+      const eComp: BattleSquadEntry[] = [];
+      for (const sq of enemy.squads || []) {
+        const troopCount = sq.count * 10;
+        const entry = buildSquadEntry(sq.type, troopCount);
+        eComp.push(entry);
+        if ((unitCategory[sq.type as UnitType] || 'infantry') === 'ranged_infantry') {
+          eArch += troopCount;
+        } else {
+          eWarr += troopCount;
+        }
+      }
+      totalEnemyWarriors += eWarr;
+      totalEnemyArchers += eArch;
+      perEnemy.push({ enemy, warriors: eWarr, archers: eArch, total: eWarr + eArch, comp: eComp });
+    }
+
+    const totalPlayer = totalPlayerWarriors + totalPlayerArchers;
+    const totalEnemy = totalEnemyWarriors + totalEnemyArchers;
+
+    const battleStats = {
+      warrior: { skirmish: stats.warrior?.skirmish_attack || 0, melee: stats.warrior?.melee_attack || 15 },
+      archer: { skirmish: stats.archer?.skirmish_attack || 15, melee: stats.archer?.melee_attack || 0 },
+    };
+
+    // Run combined battle
+    const timeline = runInnerBattle(totalPlayerWarriors, totalPlayerArchers, totalEnemy, battleStats, baseCas);
+
+    const lastStep = timeline.length > 0 ? timeline[timeline.length - 1] : null;
+    const finalPlayerTroops = lastStep ? lastStep.defenders : totalPlayer;
+    const finalEnemyTroops = lastStep ? lastStep.attackers : totalEnemy;
+
+    let outcome: FieldBattleResult['outcome'];
+    if (finalPlayerTroops > 0 && finalEnemyTroops <= 0) outcome = 'player_wins';
+    else if (finalPlayerTroops <= 0 && finalEnemyTroops > 0) outcome = 'enemy_wins';
+    else outcome = 'draw';
+
+    // Distribute casualties proportionally within a composition
+    function distributeCasualties(comp: BattleSquadEntry[], totalLost: number, warriors: number, archers: number, total: number) {
+      if (totalLost <= 0 || total <= 0) return;
+      const meleeLost = warriors > 0 ? Math.round(totalLost * (warriors / total)) : 0;
+      const rangedLost = totalLost - meleeLost;
+      for (const entry of comp) {
+        const roleLost = entry.role === 'melee' ? meleeLost : rangedLost;
+        const roleTotal = entry.role === 'melee' ? warriors : archers;
+        if (roleLost <= 0 || roleTotal <= 0) continue;
+        const proportion = entry.initial / roleTotal;
+        const loss = Math.min(entry.initial, Math.round(roleLost * proportion));
+        entry.lost = loss;
+        entry.final = entry.initial - loss;
+      }
+    }
+
+    // Distribute player losses back to each banner proportionally
+    const totalPlayerLost = totalPlayer - Math.max(0, finalPlayerTroops);
+    const playerArmies: FieldBattleResult['playerArmies'] = [];
+    for (const pb of perBanner) {
+      const share = totalPlayer > 0 ? pb.total / totalPlayer : 0;
+      const bannerLost = Math.round(totalPlayerLost * share);
+      distributeCasualties(pb.comp, bannerLost, pb.warriors, pb.archers, pb.total);
+      const bannerFinal = Math.max(0, pb.total - bannerLost);
+      playerArmies.push({
+        bannerId: pb.banner.id,
+        bannerName: pb.banner.name,
+        initialTroops: pb.total,
+        finalTroops: Math.round(bannerFinal),
+        composition: pb.comp,
+      });
+    }
+
+    // Distribute enemy losses back to each enemy proportionally
+    const totalEnemyLost = totalEnemy - Math.max(0, finalEnemyTroops);
+    const enemyArmies: FieldBattleResult['enemyArmies'] = [];
+    for (const pe of perEnemy) {
+      const share = totalEnemy > 0 ? pe.total / totalEnemy : 0;
+      const eLost = Math.round(totalEnemyLost * share);
+      distributeCasualties(pe.comp, eLost, pe.warriors, pe.archers, pe.total);
+      const eFinal = Math.max(0, pe.total - eLost);
+      enemyArmies.push({
+        enemyId: pe.enemy.id,
+        enemyName: pe.enemy.name,
+        initialTroops: pe.total,
+        finalTroops: Math.round(eFinal),
+        composition: pe.comp,
+      });
+    }
+
+    // Primary army = largest player banner
+    const primaryPlayer = playerArmies.reduce((a, b) => a.initialTroops >= b.initialTroops ? a : b, playerArmies[0]);
+    const primaryEnemy = enemyArmies.reduce((a, b) => a.initialTroops >= b.initialTroops ? a : b, enemyArmies[0]);
+
+    // Takeaway
+    const playerNames = playerBanners.map(b => b.name).join(' + ');
+    const enemyNames = enemyForces.map(e => e.name).join(' + ');
+    let battleTakeaway = '';
+    if (outcome === 'player_wins') {
+      if (totalPlayerLost === 0) battleTakeaway = `${playerNames} crushed the enemy without losses.`;
+      else battleTakeaway = `${playerNames} defeated ${enemyNames}, losing ${Math.round(totalPlayerLost)} troops in the process.`;
+    } else if (outcome === 'enemy_wins') {
+      battleTakeaway = `${enemyNames} overwhelmed ${playerNames}. The defenders were destroyed.`;
+    } else {
+      battleTakeaway = `Both sides fought to a standstill at ${provinceId.replace('prov_', 'Province ')}.`;
+    }
+
+    return {
+      id: `fb_${turnNumber}_${battleIndex}`,
+      turn: turnNumber,
+      provinceId,
+      outcome,
+      playerArmy: primaryPlayer,
+      enemyArmy: primaryEnemy,
+      playerArmies,
+      enemyArmies,
+      timeline,
+      battleTakeaway,
+    };
+  }
+
+  function applyFieldBattleCasualties(
+    result: FieldBattleResult,
+    turnNumber: number,
+    provinceId: string
+  ): { destroyedBannerIds: number[]; destroyedEnemyIds: number[] } {
+    const destroyedBannerIds: number[] = [];
+    const destroyedEnemyIds: number[] = [];
+
+    // Apply player losses — loop through all participating armies
+    const armies = result.playerArmies && result.playerArmies.length > 0
+      ? result.playerArmies
+      : [result.playerArmy];
+
+    for (const army of armies) {
+      const armyLost = army.initialTroops - army.finalTroops;
+      if (armyLost <= 0) continue;
+      setBanners(prev => prev.map(b => {
+        if (b.id !== army.bannerId) return b;
+        const updatedSquads = b.squads.map((sq, idx) => {
+          const compEntry = idx < army.composition.length ? army.composition[idx] : null;
+          if (!compEntry || compEntry.lost <= 0) return sq;
+          const thisLoss = Math.min(sq.currentSize, Math.round(compEntry.lost));
+          return { ...sq, currentSize: Math.max(0, sq.currentSize - thisLoss) };
+        });
+        const remaining = updatedSquads.reduce((s, sq) => s + sq.currentSize, 0);
+        const isDestroyed = remaining <= 0;
+        if (isDestroyed) destroyedBannerIds.push(b.id);
+        const enemyNames = (result.enemyArmies || [result.enemyArmy]).map(e => e.enemyName).join(' + ');
+        return {
+          ...b,
+          squads: updatedSquads,
+          status: isDestroyed ? 'destroyed' as const : b.status,
+          destroyedTurn: isDestroyed ? turnNumber : b.destroyedTurn,
+          destroyedInProvince: isDestroyed ? provinceId : b.destroyedInProvince,
+          destroyedByEnemy: isDestroyed ? enemyNames : b.destroyedByEnemy,
+          fieldBattleId: isDestroyed ? result.id : b.fieldBattleId,
+        };
+      }));
+    }
+
+    // Check enemy destruction — loop through all participating enemies
+    const enemyResults = result.enemyArmies && result.enemyArmies.length > 0
+      ? result.enemyArmies
+      : [result.enemyArmy];
+
+    for (const ea of enemyResults) {
+      if (ea.finalTroops <= 0) {
+        destroyedEnemyIds.push(ea.enemyId);
+      }
+    }
+
+    return { destroyedBannerIds, destroyedEnemyIds };
+  }
+
+  // ── NPC Enemy Army helpers ──────────────────────────────────────
+
+  function spawnEnemyArmy(
+    mapState: NonNullable<Expedition['mapState']>,
+    provinceData: { provinces: ProvinceData[] }
+  ): EnemyArmy | null {
+    const fortId = mapState.fortressProvinceId;
+    const provinceById = new Map<string, ProvinceData>();
+    for (const p of provinceData.provinces) provinceById.set(p.id, p);
+
+    // Find all land provinces with BFS distance >= 6 from fortress
+    const occupiedProvinces = new Set<string>([
+      fortId,
+      ...Object.values(mapState.armyPositions),
+      ...(mapState.enemyArmies || []).filter(e => e.status === 'marching').map(e => e.provinceId),
+    ]);
+
+    const candidates: string[] = [];
+    for (const p of provinceData.provinces) {
+      if (!p.isLand || occupiedProvinces.has(p.id)) continue;
+      const pathResult = findPath(p.id, fortId, provinceById);
+      if (pathResult && pathResult.distance >= 4) {
+        candidates.push(p.id);
+      }
+    }
+
+    if (candidates.length === 0) return null;
+
+    // Pick random spawn province
+    const spawnProvId = candidates[Math.floor(Math.random() * candidates.length)];
+
+    // Pick random mercenary template
+    const templates = bannerTemplates;
+    const template = templates[Math.floor(Math.random() * templates.length)];
+
+    const totalTroops = template.squads.reduce((sum, sq) => sum + sq.count * 10, 0);
+    const nextId = (mapState.nextEnemyId ?? 1);
+
+    return {
+      id: nextId,
+      templateId: template.id,
+      name: `${template.name} Warband`,
+      squads: template.squads.map(s => ({ type: s.type, count: s.count })),
+      provinceId: spawnProvId,
+      totalTroops,
+      spawnTurn: mapState.turnNumber,
+      status: 'marching',
+    };
+  }
+
+  function moveEnemyArmies(
+    enemies: EnemyArmy[],
+    fortressId: string,
+    provinceData: { provinces: ProvinceData[] }
+  ): EnemyArmy[] {
+    const provinceById = new Map<string, ProvinceData>();
+    for (const p of provinceData.provinces) provinceById.set(p.id, p);
+
+    return enemies.map(enemy => {
+      if (enemy.status !== 'marching') return enemy;
+      if (enemy.provinceId === fortressId) return enemy; // already at fortress
+
+      const pathResult = findPath(enemy.provinceId, fortressId, provinceById);
+      if (!pathResult || pathResult.path.length <= 1) return enemy; // no path or already there
+
+      return {
+        ...enemy,
+        provinceId: pathResult.path[1], // move one step closer
+      };
+    });
+  }
+
   function runSiegeBattle(
     expeditionId: string,
-    attackers: number
+    attackers: number,
+    attackerSquads?: Array<{ type: string; count: number }>
   ): SiegeBattleResult {
     const expedition = expeditions.find(exp => exp.expeditionId === expeditionId);
     if (!expedition?.fortress) {
@@ -2374,13 +3160,20 @@ export default function ResourceVillageUI() {
     const fortHPmax = expedition.fortress.stats.fortHP;
 
     // Calculate actual garrison from stationed banners (real units only)
-    // IMPORTANT: Never use stats.garrisonArchers/Warriors as actual units - those are capacity limits only
+    // IMPORTANT: Garrison stats are army-count capacity only — always use calculateGarrisonFromBanners for actual troops
     const garrisonBannerIds = expedition.fortress.garrison || [];
     const actualGarrison = calculateGarrisonFromBanners(garrisonBannerIds);
 
     // Use ONLY actual units from banners - if no banners assigned, defenders = 0
     const garrisonArchers = actualGarrison.archers || 0;
     const garrisonWarriors = actualGarrison.warriors || 0;
+
+    // Build composition arrays for the report (uses shared buildSquadEntry helper)
+
+    const defenderComp: BattleSquadEntry[] = actualGarrison.squads.map(s => buildSquadEntry(s.type, s.count));
+    const attackerComp: BattleSquadEntry[] = attackerSquads
+      ? attackerSquads.map(s => buildSquadEntry(s.type, s.count))
+      : [buildSquadEntry('warrior', attackers)];
 
     // Calculate active wall archers (limited by Watch Post capacity) for Phase 1 only
     const wallArchers = calculateActiveWallArchers(expeditionId);
@@ -2453,6 +3246,9 @@ export default function ResourceVillageUI() {
         initialAttackers: attackers,
         initialGarrison: { warriors: garrisonWarriors, archers: garrisonArchers },
         finalGarrison: { warriors: garrisonWarriors, archers: garrisonArchers },
+        attackerComposition: attackerComp,
+        defenderComposition: defenderComp,
+        battleTakeaway: 'No battle occurred.',
       };
     }
     const lastSiege = siegeTimeline[siegeTimeline.length - 1];
@@ -2482,6 +3278,55 @@ export default function ResourceVillageUI() {
       outcome = 'stalemate';
     }
 
+    // Distribute casualties proportionally across squads
+    const totalDefLost = (garrisonWarriors + garrisonArchers) - finalDefenders;
+    const totalAtkLost = attackers - finalAttackers;
+
+    // Defender casualties: split by melee/ranged losses from finalGarrison
+    const meleeLost = garrisonWarriors - finalGarrison.warriors;
+    const rangedLost = garrisonArchers - finalGarrison.archers;
+    const defMeleeSquads = defenderComp.filter(s => s.role === 'melee');
+    const defRangedSquads = defenderComp.filter(s => s.role === 'ranged');
+    const totalDefMelee = defMeleeSquads.reduce((sum, s) => sum + s.initial, 0);
+    const totalDefRanged = defRangedSquads.reduce((sum, s) => sum + s.initial, 0);
+
+    defMeleeSquads.forEach(s => {
+      const proportion = totalDefMelee > 0 ? s.initial / totalDefMelee : 0;
+      s.lost = Math.round(meleeLost * proportion);
+      s.final = Math.max(0, s.initial - s.lost);
+    });
+    defRangedSquads.forEach(s => {
+      const proportion = totalDefRanged > 0 ? s.initial / totalDefRanged : 0;
+      s.lost = Math.round(rangedLost * proportion);
+      s.final = Math.max(0, s.initial - s.lost);
+    });
+
+    // Attacker casualties: distribute proportionally across all squads
+    const totalAtkInitial = attackerComp.reduce((sum, s) => sum + s.initial, 0);
+    attackerComp.forEach(s => {
+      const proportion = totalAtkInitial > 0 ? s.initial / totalAtkInitial : 0;
+      s.lost = Math.round(totalAtkLost * proportion);
+      s.final = Math.max(0, s.initial - s.lost);
+    });
+
+    // Generate battle takeaway
+    let battleTakeaway: string;
+    if (outcome === 'fortress_holds_walls') {
+      battleTakeaway = 'Strong wall defenses repelled the attackers before they could breach.';
+    } else if (outcome === 'fortress_holds_inner') {
+      battleTakeaway = 'Though the walls fell, the garrison fought off the remaining attackers inside the fortress.';
+    } else if (outcome === 'fortress_falls') {
+      if (totalDefLost === 0 && finalDefenders === 0 && (garrisonWarriors + garrisonArchers) === 0) {
+        battleTakeaway = 'With no garrison stationed, the fortress was taken without resistance after the walls fell.';
+      } else if (attackers > (garrisonWarriors + garrisonArchers) * 2) {
+        battleTakeaway = 'The garrison fought bravely but was overwhelmed by superior numbers.';
+      } else {
+        battleTakeaway = 'The fortress defenses crumbled and the garrison could not hold the inner keep.';
+      }
+    } else {
+      battleTakeaway = 'Both sides exhausted themselves without a decisive outcome.';
+    }
+
     return {
       outcome,
       siegeRounds: rounds,
@@ -2494,6 +3339,9 @@ export default function ResourceVillageUI() {
       initialAttackers: attackers,
       initialGarrison: { warriors: garrisonWarriors, archers: garrisonArchers },
       finalGarrison,
+      attackerComposition: attackerComp,
+      defenderComposition: defenderComp,
+      battleTakeaway,
     };
   }
 
@@ -2829,7 +3677,7 @@ export default function ResourceVillageUI() {
     setBarracks({
       level: 1,
       trainingSlots: getMaxTrainingSlots(1),
-      maxTemplates: 2,
+      maxTemplates: 3,
       trainingQueue: [],
     });
   }
@@ -3569,7 +4417,10 @@ export default function ResourceVillageUI() {
         missionsChanged = true;
         return { ...m, elapsed };
       });
-      if (missionsChanged) setMissions(nextMissions as Mission[]);
+      if (missionsChanged) {
+        setMissions(nextMissions as Mission[]);
+        // Mission map positions are synced by the useEffect watching `missions`
+      }
 
       // Unified training queue processing (mercenaries + reinforcements)
       // Use the same nextPop that was already modified by banner training
@@ -3838,7 +4689,7 @@ export default function ResourceVillageUI() {
             // Cooldown expired - replace with new random mission from pool
             // Exclude all currently active mission IDs to avoid duplicates
             const currentMissionIds = ms.map(m => m.id);
-            const newMissions = selectRandomMissions(1, currentMissionIds);
+            const newMissions = selectRandomMissions(1, BASE_MISSION_POOL, currentMissionIds);
             return newMissions[0] || m; // Fallback to current if no replacement found
           }
           return m;
@@ -4710,8 +5561,10 @@ Safe recruits (unassigned people): ${freePop}`;
                       ? `bg-emerald-600 active:bg-emerald-700 hover:bg-emerald-700 text-white shadow-sm shadow-emerald-600/50 shimmer-gold`
                       : 'bg-slate-700 active:bg-slate-600 hover:bg-slate-600 text-slate-300 disabled:opacity-50'
                       } disabled:cursor-not-allowed`}
-                    onClick={() => requestUpgrade(res, level)}
-                    disabled={!affordable}
+                    onClick={() => {
+                      if (!affordable) { showMissingResourceToast({ wood: enoughWood, stone: enoughStone }); return; }
+                      requestUpgrade(res, level);
+                    }}
                     title={!affordable ? `Need more Wood/Stone in warehouse` : `Level up to Lvl ${nextLevel}`}
                   >
                     <svg
@@ -4820,8 +5673,7 @@ Safe recruits (unassigned people): ${freePop}`;
                     ? 'bg-emerald-600 active:bg-emerald-700 hover:bg-emerald-700 text-white shadow-sm shadow-emerald-600/50 shimmer-gold'
                     : 'bg-slate-700 active:bg-slate-600 hover:bg-slate-600 text-slate-300 disabled:opacity-50'
                     } disabled:cursor-not-allowed`}
-                  onClick={() => requestUpgrade("house", house)}
-                  disabled={!affordable}
+                  onClick={() => { if (!affordable) { showMissingResourceToast({ wood: enoughWood, stone: enoughStone }); return; } requestUpgrade("house", house); }}
                   title={!affordable ? `Need more Wood/Stone in warehouse` : `Level up to Lvl ${nextLevel} (+5 capacity)`}
                 >
                   <svg
@@ -4917,8 +5769,7 @@ Safe recruits (unassigned people): ${freePop}`;
                       ? 'bg-emerald-600 active:bg-emerald-700 hover:bg-emerald-700 text-white shadow-sm shadow-emerald-600/50 shimmer-gold'
                       : 'bg-slate-700 active:bg-slate-600 hover:bg-slate-600 text-slate-300 disabled:opacity-50'
                       } disabled:cursor-not-allowed`}
-                    onClick={() => requestTownHallUpgrade(townHall.level)}
-                    disabled={!affordable}
+                    onClick={() => { if (!affordable) { showMissingResourceToast({ wood: enoughWood, stone: enoughStone }); return; } requestTownHallUpgrade(townHall.level); }}
                     title={!affordable ? `Need more Wood/Stone in warehouse` : `Level up to Lvl ${nextLevel}`}
                   >
                     <svg
@@ -5096,8 +5947,7 @@ Safe recruits (unassigned people): ${freePop}`;
                       ? 'bg-emerald-600 active:bg-emerald-700 hover:bg-emerald-700 text-white shadow-sm shadow-emerald-600/50 shimmer-gold'
                       : 'bg-slate-700 active:bg-slate-600 hover:bg-slate-600 text-slate-300 disabled:opacity-50'
                       } disabled:cursor-not-allowed`}
-                    onClick={() => requestBarracksUpgrade(barracks.level)}
-                    disabled={!affordable}
+                    onClick={() => { if (!affordable) { showMissingResourceToast({ wood: enoughWood, stone: enoughStone }); return; } requestBarracksUpgrade(barracks.level); }}
                     title={!affordable ? `Need more Wood/Stone in warehouse` : `Level up to Lvl ${nextLevel}`}
                   >
                     <svg
@@ -5186,8 +6036,7 @@ Safe recruits (unassigned people): ${freePop}`;
                         ? 'bg-emerald-600 active:bg-emerald-700 hover:bg-emerald-700 text-white shadow-sm shadow-emerald-600/50 shimmer-gold'
                         : 'bg-slate-700 active:bg-slate-600 hover:bg-slate-600 text-slate-300 disabled:opacity-50'
                         } disabled:cursor-not-allowed`}
-                      onClick={buildMilitaryAcademy}
-                      disabled={!affordable}
+                      onClick={() => { if (!affordable) { showMissingResourceToast({ wood: enoughWood, stone: enoughStone }); return; } buildMilitaryAcademy(); }}
                       title={!affordable ? `Need more Wood/Stone in warehouse` : `Build Military Academy`}
                     >
                       <svg
@@ -5271,8 +6120,7 @@ Safe recruits (unassigned people): ${freePop}`;
                       ? 'bg-emerald-600 active:bg-emerald-700 hover:bg-emerald-700 text-white shadow-sm shadow-emerald-600/50 shimmer-gold'
                       : 'bg-slate-700 active:bg-slate-600 hover:bg-slate-600 text-slate-300 disabled:opacity-50'
                       } disabled:cursor-not-allowed`}
-                    onClick={() => requestMilitaryAcademyUpgrade(militaryAcademy.level)}
-                    disabled={!affordable}
+                    onClick={() => { if (!affordable) { showMissingResourceToast({ wood: enoughWood, stone: enoughStone }); return; } requestMilitaryAcademyUpgrade(militaryAcademy.level); }}
                     title={!affordable ? `Need more Wood/Stone in warehouse` : `Level up to Lvl ${nextLevel}`}
                   >
                     <svg
@@ -5469,8 +6317,7 @@ Safe recruits (unassigned people): ${freePop}`;
                       ? 'bg-emerald-600 active:bg-emerald-700 hover:bg-emerald-700 text-white shadow-sm shadow-emerald-600/50 shimmer-gold'
                       : 'bg-slate-700 active:bg-slate-600 hover:bg-slate-600 text-slate-300 disabled:opacity-50'
                       } disabled:cursor-not-allowed`}
-                    onClick={() => requestTavernUpgrade(tavern.level)}
-                    disabled={!affordable}
+                    onClick={() => { if (!affordable) { showMissingResourceToast({ wood: enoughWood, stone: enoughStone }); return; } requestTavernUpgrade(tavern.level); }}
                     title={!affordable ? `Need more Wood/Stone in warehouse` : `Level up to Lvl ${nextLevel}`}
                   >
                     <svg
@@ -5601,8 +6448,7 @@ Safe recruits (unassigned people): ${freePop}`;
                       ? 'bg-emerald-600 active:bg-emerald-700 hover:bg-emerald-700 text-white shadow-sm shadow-emerald-600/50 shimmer-gold'
                       : 'bg-slate-700 active:bg-slate-600 hover:bg-slate-600 text-slate-300 disabled:opacity-50'
                       } disabled:cursor-not-allowed`}
-                    onClick={() => requestUpgrade("warehouse", warehouseLevel)}
-                    disabled={!affordable}
+                    onClick={() => { if (!affordable) { showMissingResourceToast({ wood: enoughWood, stone: enoughStone }); return; } requestUpgrade("warehouse", warehouseLevel); }}
                     title={!affordable ? `Need more Wood/Stone in warehouse` : `Level up to Lvl ${nextLevel}`}
                   >
                     <svg
@@ -5882,7 +6728,7 @@ Safe recruits (unassigned people): ${freePop}`;
               <button
                 onClick={() => {
                   // Shuffle missions: replace current 3 with 3 new random ones
-                  const newMissions = selectRandomMissions(3);
+                  const newMissions = selectRandomMissions(3, BASE_MISSION_POOL);
                   setMissions(newMissions);
                   setMissionBannerSelector(null); // Close any open selectors
                 }}
@@ -5925,8 +6771,8 @@ Safe recruits (unassigned people): ${freePop}`;
                       localStorage.setItem('fortressSimulatorStats', JSON.stringify({
                         fortHP: stats.fortHP,
                         fortArcherSlots: wallArchers.capacity, // Wall archer capacity from Watch Post
-                        garrisonArchers: actualGarrison.archers || stats.garrisonArchers,
-                        garrisonWarriors: actualGarrison.warriors || stats.garrisonWarriors,
+                        garrisonArchers: actualGarrison.archers || 0,
+                        garrisonWarriors: actualGarrison.warriors || 0,
                       }));
                     }
                   }}
@@ -6177,6 +7023,7 @@ Safe recruits (unassigned people): ${freePop}`;
           bannerTemplates={bannerTemplates}
           banners={banners}
           missions={missions}
+          expeditions={expeditions}
           armyTab={armyTab}
           editingBannerId={editingBannerId}
           bannersDraft={bannersDraft}
@@ -6208,6 +7055,8 @@ Safe recruits (unassigned people): ${freePop}`;
           onStartEditingBanner={startEditingBanner}
           onDeleteBanner={deleteBanner}
           onCreateNewBanner={createNewBanner}
+          onShowResourceError={(msg: string) => setToastMessage(msg)}
+          onRequestReinforcement={(bannerId) => requestReinforcement(bannerId)}
           onSelectUnit={(unitType, bannerId, slotIndex) => {
             const squadId = Date.now();
             setBanners(prev => prev.map(banner => {
@@ -6249,6 +7098,8 @@ Safe recruits (unassigned people): ${freePop}`;
             commanders={commanders}
             townHall={townHall}
             banners={banners}
+            warehouse={{ wood: warehouse.wood, stone: warehouse.stone, gold: warehouse.gold }}
+            onShowResourceError={(msg) => setToastMessage(msg)}
             commanderRecruitModal={commanderRecruitModal}
             candidateNames={candidateNames}
             onBuildMilitaryAcademy={buildMilitaryAcademy}
@@ -6279,6 +7130,9 @@ Safe recruits (unassigned people): ${freePop}`;
         mainTab === 'missions' && (
           <MissionsUI
             missions={missions}
+            expeditionMissions={expeditions
+              .filter(e => e.state === 'completed' && e.mapState?.expeditionMissions)
+              .flatMap(e => e.mapState!.expeditionMissions!)}
             banners={banners}
             missionBannerSelector={missionBannerSelector}
             missionLoading={missionLoading}
@@ -6293,7 +7147,7 @@ Safe recruits (unassigned people): ${freePop}`;
             }
             onCloseMission={(missionId) => {
               const currentIds = missions.map(m => m.id);
-              const newMissions = selectRandomMissions(1, currentIds);
+              const newMissions = selectRandomMissions(1, BASE_MISSION_POOL, currentIds);
               if (newMissions.length > 0) {
                 setMissions((ms) => ms.map((m) =>
                   m.id === missionId ? newMissions[0] : m
@@ -6310,6 +7164,7 @@ Safe recruits (unassigned people): ${freePop}`;
           <ExpeditionsUI
             expeditions={expeditions}
             banners={banners}
+            missions={missions}
             population={population}
             warehouse={warehouse}
             onAcceptExpedition={acceptExpedition}
@@ -6319,6 +7174,432 @@ Safe recruits (unassigned people): ${freePop}`;
             onUpgradeFortressBuilding={upgradeFortressBuilding}
             onRemoveBannerFromFortress={removeBannerFromFortress}
             onAssignBannerToFortress={assignBannerToFortress}
+            onRestartExpedition={restartExpedition}
+            onDeployArmyToProvince={(expeditionId, bannerId, provinceId) => {
+              setExpeditions(prev => prev.map(exp => {
+                if (exp.expeditionId !== expeditionId || !exp.mapState) return exp;
+                const pd = provinceDataRef.current;
+                const prov = pd?.provinces?.find((p: any) => p.id === provinceId);
+                return {
+                  ...exp,
+                  fortress: {
+                    ...exp.fortress!,
+                    garrison: exp.fortress!.garrison.filter(id => id !== bannerId),
+                  },
+                  mapState: {
+                    ...exp.mapState,
+                    armyPositions: { ...exp.mapState.armyPositions, [bannerId]: provinceId },
+                    revealedProvinces: [
+                      ...new Set([
+                        ...exp.mapState.revealedProvinces,
+                        provinceId,
+                        ...(prov?.adjacentProvinces || []),
+                      ]),
+                    ],
+                  },
+                };
+              }));
+            }}
+            onSetArmyOrder={(expeditionId, bannerId, order) => {
+              setExpeditions(prev => prev.map(exp => {
+                if (exp.expeditionId !== expeditionId || !exp.mapState) return exp;
+                return {
+                  ...exp,
+                  mapState: {
+                    ...exp.mapState,
+                    pendingOrders: { ...exp.mapState.pendingOrders, [bannerId]: order },
+                  },
+                };
+              }));
+            }}
+            onClearArmyOrder={(expeditionId, bannerId) => {
+              setExpeditions(prev => prev.map(exp => {
+                if (exp.expeditionId !== expeditionId || !exp.mapState) return exp;
+                const { [bannerId]: _, ...rest } = exp.mapState.pendingOrders;
+                return {
+                  ...exp,
+                  mapState: {
+                    ...exp.mapState,
+                    pendingOrders: rest,
+                  },
+                };
+              }));
+            }}
+            onExecuteTurn={(expeditionId) => {
+              setExpeditions(prev => prev.map(exp => {
+                if (exp.expeditionId !== expeditionId || !exp.mapState) return exp;
+                if (exp.mapState.expeditionFailed) return exp;
+                const pd = provinceDataRef.current;
+                const newTurnNumber = exp.mapState.turnNumber + 1;
+                const fortId = exp.mapState.fortressProvinceId;
+                const currentPositions = { ...exp.mapState.armyPositions };
+                const currentEnemies = exp.mapState.enemyArmies || [];
+                let newRevealed = new Set(exp.mapState.revealedProvinces);
+
+                // ── Phase 0: Compute all destinations (no movement yet) ──
+                const playerDests = computePlayerDestinations(currentPositions, exp.mapState.pendingOrders);
+                const enemyDests = computeEnemyDestinations(currentEnemies, fortId, pd || { provinces: [] });
+
+                // ── Phase 1: Detect province conflicts (multi-army) ──
+                const provinceConflicts = detectProvinceConflicts(currentPositions, playerDests, currentEnemies, enemyDests);
+                const battlePlayerIds = new Set(provinceConflicts.flatMap(c => c.playerBannerIds));
+                const battleEnemyIds = new Set(provinceConflicts.flatMap(c => c.enemyIds));
+
+                // ── Event log accumulator ──
+                const newLogEntries: import('./types').ExpeditionLogEntry[] = [];
+                let logIdx = 0;
+
+                // ── Phase 2: Resolve province battles (stack & merge) ──
+                const newFieldBattles: FieldBattleResult[] = [];
+                const battleProvs: string[] = [];
+                let updatedEnemies = [...currentEnemies];
+                const destroyedPlayerIds = new Set<number>();
+
+                for (let bi = 0; bi < provinceConflicts.length; bi++) {
+                  const conflict = provinceConflicts[bi];
+                  const playerBanners = conflict.playerBannerIds.map(id => banners.find(b => b.id === id)).filter((b): b is Banner => !!b);
+                  const enemyForces = conflict.enemyIds.map(id => updatedEnemies.find(e => e.id === id && e.status === 'marching')).filter((e): e is EnemyArmy => !!e);
+
+                  if (playerBanners.length === 0 || enemyForces.length === 0) continue;
+
+                  const playerNames = playerBanners.map(b => b.name).join(' + ');
+                  const enemyNames = enemyForces.map(e => e.name).join(' + ');
+                  dbg.log(`[FIELD] Battle at ${conflict.provinceId}: [${playerNames}] vs [${enemyNames}]`);
+
+                  try {
+                    const result = runMergedBattle(playerBanners, enemyForces, conflict.provinceId, newTurnNumber, bi);
+                    newFieldBattles.push(result);
+                    battleProvs.push(conflict.provinceId);
+
+                    // Log: battle resolved
+                    const outcomeLabel = result.outcome === 'player_wins' ? 'Victory' : result.outcome === 'enemy_wins' ? 'Defeat' : 'Draw';
+                    newLogEntries.push({
+                      id: `log_${newTurnNumber}_${logIdx++}`,
+                      turn: newTurnNumber,
+                      type: 'battle_resolved',
+                      text: `Battle at ${conflict.provinceId.replace('prov_', 'P')} — ${outcomeLabel}`,
+                      provinceId: conflict.provinceId,
+                      battleResultId: result.id,
+                    });
+
+                    const casualties = applyFieldBattleCasualties(result, newTurnNumber, conflict.provinceId);
+
+                    // Update enemies in local array
+                    const allEnemyResults = result.enemyArmies || [result.enemyArmy];
+                    for (const eResult of allEnemyResults) {
+                      updatedEnemies = updatedEnemies.map(e => {
+                        if (e.id !== eResult.enemyId) return e;
+                        if (casualties.destroyedEnemyIds.includes(e.id)) {
+                          return {
+                            ...e,
+                            status: 'destroyed' as const,
+                            totalTroops: 0,
+                            destroyedTurn: newTurnNumber,
+                            destroyedByBannerId: playerBanners[0]?.id,
+                            destroyedByBannerName: playerNames,
+                            fieldBattleId: result.id,
+                          };
+                        }
+                        // Survived: scale troops by ratio
+                        const origEnemy = enemyForces.find(ef => ef.id === e.id);
+                        if (!origEnemy) return e;
+                        const ratio = origEnemy.totalTroops > 0 ? eResult.finalTroops / origEnemy.totalTroops : 0;
+                        return {
+                          ...e,
+                          totalTroops: Math.round(eResult.finalTroops),
+                          squads: e.squads.map(sq => ({ ...sq, count: Math.max(0, Math.round(sq.count * ratio)) })),
+                          provinceId: conflict.provinceId,
+                        };
+                      });
+                    }
+
+                    // Log destroyed armies
+                    for (const bid of casualties.destroyedBannerIds) {
+                      destroyedPlayerIds.add(bid);
+                      const bName = banners.find(b => b.id === bid)?.name || 'Army';
+                      newLogEntries.push({
+                        id: `log_${newTurnNumber}_${logIdx++}`,
+                        turn: newTurnNumber, type: 'army_destroyed',
+                        text: `${bName} destroyed`,
+                        provinceId: conflict.provinceId,
+                      });
+                    }
+                    for (const eid of casualties.destroyedEnemyIds) {
+                      const eName = enemyForces.find(e => e.id === eid)?.name || 'Enemy';
+                      newLogEntries.push({
+                        id: `log_${newTurnNumber}_${logIdx++}`,
+                        turn: newTurnNumber, type: 'army_destroyed',
+                        text: `${eName} destroyed`,
+                        provinceId: conflict.provinceId,
+                      });
+                    }
+
+                    // Leaderboard update
+                    const totalEnemyKilled = allEnemyResults.reduce((sum, e) => sum + (e.initialTroops - e.finalTroops), 0);
+                    if (totalEnemyKilled > 0) {
+                      setLeaderboard(lprev => updateLeaderboardFromBattleResult(lprev, {
+                        enemyUnitsKilled: totalEnemyKilled,
+                        isVictory: result.outcome === 'player_wins',
+                        playerId: REAL_PLAYER_ID,
+                        playerName: REAL_PLAYER_NAME,
+                        faction: REAL_PLAYER_FACTION,
+                      }));
+                    }
+                  } catch (err) {
+                    dbg.error('[FIELD] Battle error:', err);
+                  }
+                }
+
+                // ── Phase 3: Apply movement for non-combatants ──
+                const newPositions: Record<number, string> = {};
+                for (const [bidStr, pos] of Object.entries(currentPositions)) {
+                  const bid = Number(bidStr);
+                  if (destroyedPlayerIds.has(bid)) continue; // destroyed, remove from map
+
+                  if (battlePlayerIds.has(bid)) {
+                    // Fought a battle — stay at battle province
+                    const conflict = provinceConflicts.find(c => c.playerBannerIds.includes(bid));
+                    newPositions[bid] = conflict?.provinceId || pos;
+                  } else {
+                    // Normal movement
+                    const dest = playerDests[bid];
+                    newPositions[bid] = dest;
+                  }
+
+                  // Expand fog of war for player army destination
+                  const destId = newPositions[bid];
+                  newRevealed.add(destId);
+                  const prov = pd?.provinces?.find((p: any) => p.id === destId);
+                  if (prov?.adjacentProvinces) {
+                    for (const adj of prov.adjacentProvinces) newRevealed.add(adj);
+                  }
+                }
+
+                // Move non-combatant enemies
+                updatedEnemies = updatedEnemies.map(e => {
+                  if (e.status !== 'marching') return e;
+                  if (battleEnemyIds.has(e.id)) return e; // already positioned by battle logic
+                  const dest = enemyDests.get(e.id);
+                  return dest ? { ...e, provinceId: dest } : e;
+                });
+
+                // ── Phase 3.5: Check expedition mission completions ──
+                const missionPos = exp.mapState.missionPositions || {};
+                const completedExpMissionIds: number[] = [];
+                const armyProvinceSet = new Set(Object.values(newPositions));
+                const updatedExpMissions = (exp.mapState.expeditionMissions || []).map(m => {
+                  if (m.status !== 'available') return m;
+                  const mProvId = (missionPos as Record<string, string>)[m.id] || (missionPos as Record<string, string>)[String(m.id)];
+                  if (!mProvId) return m;
+
+                  // Check if any player army arrived at this province
+                  if (!armyProvinceSet.has(mProvId)) return m;
+
+                  // Auto-complete: compute rewards using existing generateMissionRewards()
+                  const enemyTotal = ((m.enemyComposition as any)?.warrior || 0) + ((m.enemyComposition as any)?.archer || 0);
+                  const { tier, rewards } = generateMissionRewards(enemyTotal);
+                  completedExpMissionIds.push(m.id);
+                  newLogEntries.push({
+                    id: `log_${newTurnNumber}_${logIdx++}`,
+                    turn: newTurnNumber, type: 'mission_completed',
+                    text: `Mission complete: ${m.name}`,
+                    provinceId: mProvId,
+                  });
+                  dbg.log(`[EXPEDITION-MISSION] "${m.name}" auto-completed at ${mProvId} (tier: ${tier})`);
+
+                  return {
+                    ...m,
+                    status: 'completedRewardsPending' as const,
+                    rewards,
+                    rewardTier: tier,
+                  };
+                });
+
+                // ── Phase 4: Check fortress arrivals — trigger siege battles ──
+                let expeditionFailed = false;
+                let updatedFortress = exp.fortress;
+                for (let i = 0; i < updatedEnemies.length; i++) {
+                  const enemy = updatedEnemies[i];
+                  if (enemy.status !== 'marching' || enemy.provinceId !== fortId) continue;
+
+                  dbg.log(`[NPC] Enemy "${enemy.name}" (${enemy.totalTroops} troops) reached fortress! Triggering siege...`);
+                  newLogEntries.push({
+                    id: `log_${newTurnNumber}_${logIdx++}`,
+                    turn: newTurnNumber, type: 'fortress_attacked',
+                    text: `Fortress under attack by ${enemy.name}!`,
+                    provinceId: fortId,
+                  });
+                  try {
+                    const result = runSiegeBattle(expeditionId, enemy.totalTroops, enemy.squads.map(s => ({ type: s.type, count: s.count * 10 })));
+                    const destroyedBanners = applyFortressBattleCasualties(expeditionId, result);
+
+                    if (updatedFortress) {
+                      const updatedGarrison = destroyedBanners.length > 0
+                        ? (updatedFortress.garrison || []).filter(id => !destroyedBanners.includes(id))
+                        : updatedFortress.garrison;
+                      updatedFortress = {
+                        ...updatedFortress,
+                        garrison: updatedGarrison,
+                        lastBattle: result,
+                      };
+                    }
+
+                    updatedEnemies = updatedEnemies.map((e, idx) =>
+                      idx === i ? { ...e, status: 'destroyed' as const } : e
+                    );
+
+                    const isVictory = result.outcome === 'fortress_holds_walls' || result.outcome === 'fortress_holds_inner';
+                    if (!isVictory && result.outcome === 'fortress_falls') {
+                      dbg.log('[NPC] Fortress has fallen! Expedition failed.');
+                      expeditionFailed = true;
+                      newLogEntries.push({
+                        id: `log_${newTurnNumber}_${logIdx++}`,
+                        turn: newTurnNumber, type: 'fortress_damaged',
+                        text: 'Fortress has fallen — expedition lost',
+                        provinceId: fortId,
+                      });
+                    } else {
+                      newLogEntries.push({
+                        id: `log_${newTurnNumber}_${logIdx++}`,
+                        turn: newTurnNumber, type: 'fortress_attacked',
+                        text: `Fortress assault repelled — ${enemy.name} destroyed`,
+                        provinceId: fortId,
+                      });
+                    }
+
+                    const lastRound = result.siegeTimeline[result.siegeTimeline.length - 1];
+                    if (lastRound) {
+                      const enemyUnitsKilled = result.initialAttackers - lastRound.attackers;
+                      setLeaderboard(lprev => updateLeaderboardFromBattleResult(lprev, {
+                        enemyUnitsKilled,
+                        isVictory,
+                        playerId: REAL_PLAYER_ID,
+                        playerName: REAL_PLAYER_NAME,
+                        faction: REAL_PLAYER_FACTION,
+                      }));
+                    }
+                  } catch (err) {
+                    dbg.error('[NPC] Siege battle error:', err);
+                  }
+                }
+
+                // ── Phase 5: Spawn new enemies ──
+                let nextEnemyId = exp.mapState.nextEnemyId ?? 1;
+                if (pd && newTurnNumber >= 5 && ((newTurnNumber - 5) % 4 === 0)) {
+                  const newEnemy = spawnEnemyArmy(
+                    { ...exp.mapState, turnNumber: newTurnNumber, enemyArmies: updatedEnemies, nextEnemyId },
+                    pd
+                  );
+                  if (newEnemy) {
+                    dbg.log(`[NPC] Spawned enemy "${newEnemy.name}" at ${newEnemy.provinceId} (turn ${newTurnNumber})`);
+                    updatedEnemies = [...updatedEnemies, newEnemy];
+                    nextEnemyId = newEnemy.id + 1;
+                    newLogEntries.push({
+                      id: `log_${newTurnNumber}_${logIdx++}`,
+                      turn: newTurnNumber, type: 'hostile_detected',
+                      text: `Hostile army detected: ${newEnemy.name}`,
+                      provinceId: newEnemy.provinceId,
+                    });
+                  }
+                }
+
+                // ── Phase 6: Cleanup + state update ──
+                updatedEnemies = updatedEnemies.filter(e =>
+                  e.status === 'marching' || (newTurnNumber - (e.destroyedTurn || e.spawnTurn)) < 20
+                );
+
+                const existingFieldBattles = exp.mapState.fieldBattleResults || [];
+
+                // Battle aftermath: decay existing, add new
+                const aftermath: Record<string, number> = {};
+                for (const [provId, turns] of Object.entries(exp.mapState.battleAftermath || {})) {
+                  if (turns > 1) aftermath[provId] = turns - 1;
+                }
+                for (const provId of battleProvs) {
+                  aftermath[provId] = 3;
+                }
+                // Also mark fortress if siege happened
+                if (battleProvs.length === 0 && newLogEntries.some(e => e.type === 'fortress_attacked')) {
+                  aftermath[fortId] = 3;
+                }
+
+                // Merge log: new entries first, then existing
+                const existingLog = exp.mapState.expeditionLog || [];
+                const mergedLog = [...newLogEntries, ...existingLog].slice(0, 50); // cap at 50
+
+                const isFailed = expeditionFailed || exp.mapState.expeditionFailed || false;
+
+                // Auto-return banners to 'ready' when expedition fails
+                if (isFailed && !exp.mapState.expeditionFailed) {
+                  // Only run on the turn the expedition actually fails (not on subsequent turns)
+                  const garrisonIds = new Set((updatedFortress?.garrison || []) as number[]);
+                  const mapBannerIds = new Set(Object.keys(newPositions).map(Number));
+                  const allExpBannerIds = new Set([...garrisonIds, ...mapBannerIds]);
+
+                  setBanners(bs => bs.map(b => {
+                    if (!allExpBannerIds.has(b.id)) return b;
+                    if (b.status === 'destroyed') return b;
+                    return { ...b, status: 'ready' as const };
+                  }));
+
+                  dbg.log(`[NPC] Expedition failed — returned ${allExpBannerIds.size} banner(s) to 'ready' status.`);
+                }
+
+                return {
+                  ...exp,
+                  state: isFailed ? 'failed' as const : exp.state,
+                  fortress: updatedFortress,
+                  mapState: {
+                    ...exp.mapState,
+                    armyPositions: newPositions,
+                    revealedProvinces: [...newRevealed],
+                    turnNumber: newTurnNumber,
+                    pendingOrders: {},
+                    enemyArmies: updatedEnemies,
+                    nextEnemyId,
+                    expeditionFailed: isFailed,
+                    fieldBattleResults: [...existingFieldBattles, ...newFieldBattles],
+                    battleProvinces: battleProvs,
+                    expeditionMissions: updatedExpMissions,
+                    completedExpeditionMissionIds: completedExpMissionIds,
+                    expeditionLog: mergedLog,
+                    battleAftermath: aftermath,
+                  },
+                };
+              }));
+            }}
+            onClaimExpeditionReward={(expeditionId, missionId) => {
+              // Add rewards to warehouse
+              setExpeditions(prev => prev.map(exp => {
+                if (exp.expeditionId !== expeditionId || !exp.mapState) return exp;
+                const mission = (exp.mapState.expeditionMissions || []).find(m => m.id === missionId);
+                if (!mission || !mission.rewards) return exp;
+
+                // Credit rewards
+                const r = mission.rewards;
+                setWarehouse(w => ({
+                  ...w,
+                  gold: w.gold + (r.gold || 0),
+                  wood: w.wood + (r.wood || 0),
+                  stone: w.stone + (r.stone || 0),
+                  food: w.food + (r.food || 0),
+                  iron: w.iron + (r.iron || 0),
+                }));
+
+                // Update mission status and clear completedExpeditionMissionIds
+                return {
+                  ...exp,
+                  mapState: {
+                    ...exp.mapState,
+                    expeditionMissions: (exp.mapState.expeditionMissions || []).map(m =>
+                      m.id === missionId ? { ...m, status: 'completedRewardsClaimed' as const } : m
+                    ),
+                    completedExpeditionMissionIds: (exp.mapState.completedExpeditionMissionIds || []).filter(id => id !== missionId),
+                  },
+                };
+              }));
+            }}
+            onShowResourceError={(msg) => setToastMessage(msg)}
             onRunBattle={(expeditionId) => {
               try {
                 const result = runSiegeBattle(expeditionId, 100);

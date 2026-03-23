@@ -1,0 +1,7379 @@
+{
+  "mapWidth": 2048,
+  "mapHeight": 1024,
+  "quantizationStep": 16,
+  "provinces": [
+    {
+      "id": "prov_0",
+      "color": [
+        16,
+        16,
+        16
+      ],
+      "center": [
+        1951,
+        48
+      ],
+      "bbox": {
+        "x": 1944,
+        "y": 0,
+        "w": 19,
+        "h": 114
+      },
+      "terrain": "coast",
+      "elevation": 1,
+      "isLand": false,
+      "adjacentProvinces": [
+        "prov_1",
+        "prov_2",
+        "prov_4",
+        "prov_5"
+      ],
+      "pixelCount": 1211
+    },
+    {
+      "id": "prov_1",
+      "color": [
+        80,
+        80,
+        80
+      ],
+      "center": [
+        2021,
+        10
+      ],
+      "bbox": {
+        "x": 1962,
+        "y": 0,
+        "w": 86,
+        "h": 19
+      },
+      "terrain": "coast",
+      "elevation": 1,
+      "isLand": false,
+      "adjacentProvinces": [
+        "prov_0",
+        "prov_2"
+      ],
+      "pixelCount": 930
+    },
+    {
+      "id": "prov_2",
+      "color": [
+        80,
+        80,
+        80
+      ],
+      "center": [
+        2004,
+        29
+      ],
+      "bbox": {
+        "x": 1961,
+        "y": 19,
+        "w": 87,
+        "h": 22
+      },
+      "terrain": "coast",
+      "elevation": 1,
+      "isLand": false,
+      "adjacentProvinces": [
+        "prov_0",
+        "prov_1",
+        "prov_4"
+      ],
+      "pixelCount": 1802
+    },
+    {
+      "id": "prov_3",
+      "color": [
+        16,
+        16,
+        16
+      ],
+      "center": [
+        23,
+        76
+      ],
+      "bbox": {
+        "x": 0,
+        "y": 35,
+        "w": 56,
+        "h": 79
+      },
+      "terrain": "coast",
+      "elevation": 0,
+      "isLand": false,
+      "adjacentProvinces": [],
+      "pixelCount": 1644
+    },
+    {
+      "id": "prov_4",
+      "color": [
+        64,
+        64,
+        64
+      ],
+      "center": [
+        2022,
+        47
+      ],
+      "bbox": {
+        "x": 1962,
+        "y": 39,
+        "w": 86,
+        "h": 22
+      },
+      "terrain": "coast",
+      "elevation": 1,
+      "isLand": false,
+      "adjacentProvinces": [
+        "prov_2",
+        "prov_0",
+        "prov_5",
+        "prov_6"
+      ],
+      "pixelCount": 536
+    },
+    {
+      "id": "prov_5",
+      "color": [
+        80,
+        80,
+        80
+      ],
+      "center": [
+        1996,
+        71
+      ],
+      "bbox": {
+        "x": 1959,
+        "y": 42,
+        "w": 89,
+        "h": 121
+      },
+      "terrain": "coast",
+      "elevation": 1,
+      "isLand": false,
+      "adjacentProvinces": [
+        "prov_4",
+        "prov_0",
+        "prov_6",
+        "prov_10",
+        "prov_11"
+      ],
+      "pixelCount": 3268
+    },
+    {
+      "id": "prov_6",
+      "color": [
+        80,
+        80,
+        80
+      ],
+      "center": [
+        2021,
+        54
+      ],
+      "bbox": {
+        "x": 1996,
+        "y": 43,
+        "w": 52,
+        "h": 22
+      },
+      "terrain": "coast",
+      "elevation": 1,
+      "isLand": false,
+      "adjacentProvinces": [
+        "prov_5",
+        "prov_4"
+      ],
+      "pixelCount": 637
+    },
+    {
+      "id": "prov_7",
+      "color": [
+        64,
+        80,
+        160
+      ],
+      "center": [
+        616,
+        133
+      ],
+      "bbox": {
+        "x": 483,
+        "y": 61,
+        "w": 275,
+        "h": 172
+      },
+      "terrain": "forest",
+      "elevation": 160,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_31",
+        "prov_32",
+        "prov_35",
+        "prov_48",
+        "prov_55"
+      ],
+      "pixelCount": 19795
+    },
+    {
+      "id": "prov_8",
+      "color": [
+        80,
+        112,
+        64
+      ],
+      "center": [
+        1003,
+        123
+      ],
+      "bbox": {
+        "x": 960,
+        "y": 82,
+        "w": 82,
+        "h": 88
+      },
+      "terrain": "forest",
+      "elevation": 189,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_9",
+        "prov_14",
+        "prov_18",
+        "prov_22"
+      ],
+      "pixelCount": 4644
+    },
+    {
+      "id": "prov_9",
+      "color": [
+        208,
+        144,
+        96
+      ],
+      "center": [
+        1068,
+        123
+      ],
+      "bbox": {
+        "x": 1021,
+        "y": 82,
+        "w": 113,
+        "h": 98
+      },
+      "terrain": "forest",
+      "elevation": 170,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_8",
+        "prov_12",
+        "prov_17",
+        "prov_22"
+      ],
+      "pixelCount": 5096
+    },
+    {
+      "id": "prov_10",
+      "color": [
+        80,
+        80,
+        80
+      ],
+      "center": [
+        2000,
+        154
+      ],
+      "bbox": {
+        "x": 1960,
+        "y": 90,
+        "w": 88,
+        "h": 76
+      },
+      "terrain": "coast",
+      "elevation": 1,
+      "isLand": false,
+      "adjacentProvinces": [
+        "prov_5",
+        "prov_11",
+        "prov_25"
+      ],
+      "pixelCount": 1495
+    },
+    {
+      "id": "prov_11",
+      "color": [
+        64,
+        64,
+        64
+      ],
+      "center": [
+        2005,
+        119
+      ],
+      "bbox": {
+        "x": 1963,
+        "y": 90,
+        "w": 85,
+        "h": 60
+      },
+      "terrain": "coast",
+      "elevation": 1,
+      "isLand": false,
+      "adjacentProvinces": [
+        "prov_10",
+        "prov_5"
+      ],
+      "pixelCount": 5033
+    },
+    {
+      "id": "prov_12",
+      "color": [
+        144,
+        32,
+        96
+      ],
+      "center": [
+        1165,
+        163
+      ],
+      "bbox": {
+        "x": 1097,
+        "y": 104,
+        "w": 165,
+        "h": 139
+      },
+      "terrain": "hills",
+      "elevation": 194,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_9",
+        "prov_16",
+        "prov_19",
+        "prov_17",
+        "prov_41",
+        "prov_42",
+        "prov_33",
+        "prov_50",
+        "prov_37",
+        "prov_51",
+        "prov_57"
+      ],
+      "pixelCount": 9695
+    },
+    {
+      "id": "prov_13",
+      "color": [
+        208,
+        80,
+        80
+      ],
+      "center": [
+        1303,
+        137
+      ],
+      "bbox": {
+        "x": 1255,
+        "y": 104,
+        "w": 106,
+        "h": 63
+      },
+      "terrain": "hills",
+      "elevation": 166,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_15",
+        "prov_20",
+        "prov_21"
+      ],
+      "pixelCount": 4596
+    },
+    {
+      "id": "prov_14",
+      "color": [
+        144,
+        224,
+        64
+      ],
+      "center": [
+        938,
+        139
+      ],
+      "bbox": {
+        "x": 889,
+        "y": 105,
+        "w": 103,
+        "h": 70
+      },
+      "terrain": "forest",
+      "elevation": 185,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_8",
+        "prov_18",
+        "prov_27",
+        "prov_26"
+      ],
+      "pixelCount": 4320
+    },
+    {
+      "id": "prov_15",
+      "color": [
+        64,
+        176,
+        80
+      ],
+      "center": [
+        1249,
+        143
+      ],
+      "bbox": {
+        "x": 1217,
+        "y": 116,
+        "w": 93,
+        "h": 61
+      },
+      "terrain": "hills",
+      "elevation": 199,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_13",
+        "prov_16",
+        "prov_21",
+        "prov_20"
+      ],
+      "pixelCount": 2132
+    },
+    {
+      "id": "prov_16",
+      "color": [
+        64,
+        192,
+        80
+      ],
+      "center": [
+        1226,
+        167
+      ],
+      "bbox": {
+        "x": 1196,
+        "y": 130,
+        "w": 108,
+        "h": 69
+      },
+      "terrain": "hills",
+      "elevation": 220,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_15",
+        "prov_12",
+        "prov_19",
+        "prov_20",
+        "prov_33"
+      ],
+      "pixelCount": 2077
+    },
+    {
+      "id": "prov_17",
+      "color": [
+        80,
+        64,
+        96
+      ],
+      "center": [
+        1095,
+        180
+      ],
+      "bbox": {
+        "x": 1054,
+        "y": 135,
+        "w": 89,
+        "h": 87
+      },
+      "terrain": "hills",
+      "elevation": 228,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_9",
+        "prov_12",
+        "prov_22",
+        "prov_41",
+        "prov_40",
+        "prov_51"
+      ],
+      "pixelCount": 3005
+    },
+    {
+      "id": "prov_18",
+      "color": [
+        112,
+        80,
+        144
+      ],
+      "center": [
+        984,
+        168
+      ],
+      "bbox": {
+        "x": 965,
+        "y": 144,
+        "w": 50,
+        "h": 38
+      },
+      "terrain": "forest",
+      "elevation": 222,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_14",
+        "prov_8",
+        "prov_22",
+        "prov_29",
+        "prov_26"
+      ],
+      "pixelCount": 875
+    },
+    {
+      "id": "prov_19",
+      "color": [
+        80,
+        96,
+        192
+      ],
+      "center": [
+        1186,
+        168
+      ],
+      "bbox": {
+        "x": 1165,
+        "y": 151,
+        "w": 58,
+        "h": 35
+      },
+      "terrain": "mountain",
+      "elevation": 224,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_12",
+        "prov_16"
+      ],
+      "pixelCount": 791
+    },
+    {
+      "id": "prov_20",
+      "color": [
+        64,
+        48,
+        80
+      ],
+      "center": [
+        1327,
+        177
+      ],
+      "bbox": {
+        "x": 1259,
+        "y": 155,
+        "w": 113,
+        "h": 39
+      },
+      "terrain": "mountain",
+      "elevation": 171,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_13",
+        "prov_21",
+        "prov_15",
+        "prov_16",
+        "prov_33",
+        "prov_36"
+      ],
+      "pixelCount": 1732
+    },
+    {
+      "id": "prov_21",
+      "color": [
+        64,
+        48,
+        96
+      ],
+      "center": [
+        1327,
+        172
+      ],
+      "bbox": {
+        "x": 1303,
+        "y": 157,
+        "w": 44,
+        "h": 29
+      },
+      "terrain": "hills",
+      "elevation": 190,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_13",
+        "prov_20",
+        "prov_15"
+      ],
+      "pixelCount": 526
+    },
+    {
+      "id": "prov_22",
+      "color": [
+        128,
+        160,
+        128
+      ],
+      "center": [
+        1051,
+        182
+      ],
+      "bbox": {
+        "x": 1013,
+        "y": 160,
+        "w": 78,
+        "h": 45
+      },
+      "terrain": "forest",
+      "elevation": 216,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_9",
+        "prov_8",
+        "prov_18",
+        "prov_29",
+        "prov_17",
+        "prov_40"
+      ],
+      "pixelCount": 1176
+    },
+    {
+      "id": "prov_23",
+      "color": [
+        176,
+        64,
+        176
+      ],
+      "center": [
+        349,
+        259
+      ],
+      "bbox": {
+        "x": 268,
+        "y": 157,
+        "w": 202,
+        "h": 210
+      },
+      "terrain": "forest",
+      "elevation": 179,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_24",
+        "prov_59",
+        "prov_39",
+        "prov_61",
+        "prov_60",
+        "prov_76"
+      ],
+      "pixelCount": 14487
+    },
+    {
+      "id": "prov_24",
+      "color": [
+        80,
+        128,
+        80
+      ],
+      "center": [
+        298,
+        217
+      ],
+      "bbox": {
+        "x": 246,
+        "y": 148,
+        "w": 105,
+        "h": 118
+      },
+      "terrain": "forest",
+      "elevation": 169,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_23",
+        "prov_60"
+      ],
+      "pixelCount": 6191
+    },
+    {
+      "id": "prov_25",
+      "color": [
+        80,
+        80,
+        80
+      ],
+      "center": [
+        1985,
+        188
+      ],
+      "bbox": {
+        "x": 1960,
+        "y": 165,
+        "w": 88,
+        "h": 140
+      },
+      "terrain": "coast",
+      "elevation": 0,
+      "isLand": false,
+      "adjacentProvinces": [
+        "prov_10",
+        "prov_28",
+        "prov_38",
+        "prov_45"
+      ],
+      "pixelCount": 2054
+    },
+    {
+      "id": "prov_26",
+      "color": [
+        144,
+        128,
+        48
+      ],
+      "center": [
+        969,
+        198
+      ],
+      "bbox": {
+        "x": 902,
+        "y": 168,
+        "w": 165,
+        "h": 64
+      },
+      "terrain": "hills",
+      "elevation": 220,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_14",
+        "prov_27",
+        "prov_18",
+        "prov_29",
+        "prov_47",
+        "prov_44",
+        "prov_49",
+        "prov_51"
+      ],
+      "pixelCount": 3617
+    },
+    {
+      "id": "prov_27",
+      "color": [
+        144,
+        128,
+        64
+      ],
+      "center": [
+        901,
+        175
+      ],
+      "bbox": {
+        "x": 870,
+        "y": 159,
+        "w": 69,
+        "h": 43
+      },
+      "terrain": "forest",
+      "elevation": 182,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_14",
+        "prov_26",
+        "prov_30",
+        "prov_44"
+      ],
+      "pixelCount": 1391
+    },
+    {
+      "id": "prov_28",
+      "color": [
+        64,
+        64,
+        64
+      ],
+      "center": [
+        2023,
+        182
+      ],
+      "bbox": {
+        "x": 1989,
+        "y": 172,
+        "w": 59,
+        "h": 24
+      },
+      "terrain": "coast",
+      "elevation": 1,
+      "isLand": false,
+      "adjacentProvinces": [
+        "prov_25",
+        "prov_38"
+      ],
+      "pixelCount": 1034
+    },
+    {
+      "id": "prov_29",
+      "color": [
+        128,
+        160,
+        144
+      ],
+      "center": [
+        1026,
+        200
+      ],
+      "bbox": {
+        "x": 994,
+        "y": 173,
+        "w": 82,
+        "h": 51
+      },
+      "terrain": "hills",
+      "elevation": 229,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_18",
+        "prov_22",
+        "prov_26",
+        "prov_40",
+        "prov_51"
+      ],
+      "pixelCount": 1664
+    },
+    {
+      "id": "prov_30",
+      "color": [
+        144,
+        64,
+        64
+      ],
+      "center": [
+        862,
+        193
+      ],
+      "bbox": {
+        "x": 824,
+        "y": 175,
+        "w": 80,
+        "h": 45
+      },
+      "terrain": "hills",
+      "elevation": 161,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_27",
+        "prov_34",
+        "prov_44",
+        "prov_46"
+      ],
+      "pixelCount": 1671
+    },
+    {
+      "id": "prov_31",
+      "color": [
+        96,
+        48,
+        80
+      ],
+      "center": [
+        537,
+        194
+      ],
+      "bbox": {
+        "x": 493,
+        "y": 176,
+        "w": 107,
+        "h": 40
+      },
+      "terrain": "forest",
+      "elevation": 167,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_7",
+        "prov_39",
+        "prov_35",
+        "prov_43"
+      ],
+      "pixelCount": 1954
+    },
+    {
+      "id": "prov_32",
+      "color": [
+        192,
+        176,
+        144
+      ],
+      "center": [
+        660,
+        222
+      ],
+      "bbox": {
+        "x": 612,
+        "y": 180,
+        "w": 93,
+        "h": 100
+      },
+      "terrain": "forest",
+      "elevation": 184,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_7",
+        "prov_35",
+        "prov_43",
+        "prov_55",
+        "prov_52",
+        "prov_66"
+      ],
+      "pixelCount": 4626
+    },
+    {
+      "id": "prov_33",
+      "color": [
+        208,
+        192,
+        80
+      ],
+      "center": [
+        1268,
+        192
+      ],
+      "bbox": {
+        "x": 1224,
+        "y": 182,
+        "w": 117,
+        "h": 32
+      },
+      "terrain": "plains",
+      "elevation": 211,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_16",
+        "prov_20",
+        "prov_36",
+        "prov_37",
+        "prov_12"
+      ],
+      "pixelCount": 1224
+    },
+    {
+      "id": "prov_34",
+      "color": [
+        208,
+        160,
+        96
+      ],
+      "center": [
+        818,
+        236
+      ],
+      "bbox": {
+        "x": 761,
+        "y": 187,
+        "w": 111,
+        "h": 108
+      },
+      "terrain": "hills",
+      "elevation": 187,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_30",
+        "prov_46",
+        "prov_48",
+        "prov_54",
+        "prov_44",
+        "prov_63",
+        "prov_72"
+      ],
+      "pixelCount": 6100
+    },
+    {
+      "id": "prov_35",
+      "color": [
+        192,
+        192,
+        144
+      ],
+      "center": [
+        613,
+        203
+      ],
+      "bbox": {
+        "x": 597,
+        "y": 189,
+        "w": 30,
+        "h": 30
+      },
+      "terrain": "forest",
+      "elevation": 185,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_7",
+        "prov_32",
+        "prov_31",
+        "prov_43"
+      ],
+      "pixelCount": 464
+    },
+    {
+      "id": "prov_36",
+      "color": [
+        96,
+        128,
+        48
+      ],
+      "center": [
+        1336,
+        209
+      ],
+      "bbox": {
+        "x": 1294,
+        "y": 189,
+        "w": 88,
+        "h": 48
+      },
+      "terrain": "plains",
+      "elevation": 174,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_33",
+        "prov_20",
+        "prov_37",
+        "prov_50"
+      ],
+      "pixelCount": 2848
+    },
+    {
+      "id": "prov_37",
+      "color": [
+        208,
+        192,
+        96
+      ],
+      "center": [
+        1285,
+        206
+      ],
+      "bbox": {
+        "x": 1259,
+        "y": 190,
+        "w": 41,
+        "h": 29
+      },
+      "terrain": "plains",
+      "elevation": 191,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_33",
+        "prov_36",
+        "prov_12",
+        "prov_50"
+      ],
+      "pixelCount": 427
+    },
+    {
+      "id": "prov_38",
+      "color": [
+        64,
+        64,
+        64
+      ],
+      "center": [
+        2023,
+        204
+      ],
+      "bbox": {
+        "x": 1990,
+        "y": 190,
+        "w": 58,
+        "h": 30
+      },
+      "terrain": "coast",
+      "elevation": 1,
+      "isLand": false,
+      "adjacentProvinces": [
+        "prov_28",
+        "prov_25",
+        "prov_45",
+        "prov_53"
+      ],
+      "pixelCount": 1141
+    },
+    {
+      "id": "prov_39",
+      "color": [
+        96,
+        48,
+        64
+      ],
+      "center": [
+        528,
+        236
+      ],
+      "bbox": {
+        "x": 456,
+        "y": 192,
+        "w": 132,
+        "h": 89
+      },
+      "terrain": "forest",
+      "elevation": 186,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_31",
+        "prov_43",
+        "prov_52",
+        "prov_23",
+        "prov_61",
+        "prov_62"
+      ],
+      "pixelCount": 6966
+    },
+    {
+      "id": "prov_40",
+      "color": [
+        48,
+        128,
+        112
+      ],
+      "center": [
+        1063,
+        207
+      ],
+      "bbox": {
+        "x": 1033,
+        "y": 192,
+        "w": 67,
+        "h": 28
+      },
+      "terrain": "mountain",
+      "elevation": 231,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_29",
+        "prov_22",
+        "prov_17",
+        "prov_51"
+      ],
+      "pixelCount": 983
+    },
+    {
+      "id": "prov_41",
+      "color": [
+        96,
+        144,
+        192
+      ],
+      "center": [
+        1142,
+        213
+      ],
+      "bbox": {
+        "x": 1115,
+        "y": 192,
+        "w": 51,
+        "h": 43
+      },
+      "terrain": "hills",
+      "elevation": 212,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_12",
+        "prov_17",
+        "prov_51"
+      ],
+      "pixelCount": 1347
+    },
+    {
+      "id": "prov_42",
+      "color": [
+        160,
+        144,
+        192
+      ],
+      "center": [
+        1209,
+        250
+      ],
+      "bbox": {
+        "x": 1182,
+        "y": 192,
+        "w": 85,
+        "h": 109
+      },
+      "terrain": "hills",
+      "elevation": 185,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_12",
+        "prov_50",
+        "prov_57"
+      ],
+      "pixelCount": 4064
+    },
+    {
+      "id": "prov_43",
+      "color": [
+        192,
+        176,
+        144
+      ],
+      "center": [
+        609,
+        221
+      ],
+      "bbox": {
+        "x": 582,
+        "y": 196,
+        "w": 61,
+        "h": 49
+      },
+      "terrain": "forest",
+      "elevation": 192,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_31",
+        "prov_35",
+        "prov_39",
+        "prov_52",
+        "prov_32"
+      ],
+      "pixelCount": 1215
+    },
+    {
+      "id": "prov_44",
+      "color": [
+        160,
+        208,
+        160
+      ],
+      "center": [
+        885,
+        258
+      ],
+      "bbox": {
+        "x": 855,
+        "y": 197,
+        "w": 68,
+        "h": 117
+      },
+      "terrain": "hills",
+      "elevation": 200,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_30",
+        "prov_27",
+        "prov_49",
+        "prov_26",
+        "prov_46",
+        "prov_54",
+        "prov_34",
+        "prov_69",
+        "prov_72"
+      ],
+      "pixelCount": 3778
+    },
+    {
+      "id": "prov_45",
+      "color": [
+        80,
+        80,
+        80
+      ],
+      "center": [
+        1996,
+        281
+      ],
+      "bbox": {
+        "x": 1960,
+        "y": 197,
+        "w": 88,
+        "h": 135
+      },
+      "terrain": "coast",
+      "elevation": 1,
+      "isLand": false,
+      "adjacentProvinces": [
+        "prov_25",
+        "prov_38",
+        "prov_53",
+        "prov_85"
+      ],
+      "pixelCount": 2868
+    },
+    {
+      "id": "prov_46",
+      "color": [
+        160,
+        64,
+        64
+      ],
+      "center": [
+        862,
+        218
+      ],
+      "bbox": {
+        "x": 836,
+        "y": 199,
+        "w": 54,
+        "h": 32
+      },
+      "terrain": "hills",
+      "elevation": 200,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_30",
+        "prov_34",
+        "prov_44",
+        "prov_54"
+      ],
+      "pixelCount": 713
+    },
+    {
+      "id": "prov_47",
+      "color": [
+        176,
+        80,
+        80
+      ],
+      "center": [
+        960,
+        217
+      ],
+      "bbox": {
+        "x": 925,
+        "y": 201,
+        "w": 80,
+        "h": 27
+      },
+      "terrain": "hills",
+      "elevation": 225,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_26",
+        "prov_49"
+      ],
+      "pixelCount": 955
+    },
+    {
+      "id": "prov_48",
+      "color": [
+        176,
+        128,
+        32
+      ],
+      "center": [
+        730,
+        267
+      ],
+      "bbox": {
+        "x": 687,
+        "y": 203,
+        "w": 103,
+        "h": 141
+      },
+      "terrain": "hills",
+      "elevation": 198,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_7",
+        "prov_34",
+        "prov_55",
+        "prov_63",
+        "prov_66",
+        "prov_82",
+        "prov_77",
+        "prov_87"
+      ],
+      "pixelCount": 7508
+    },
+    {
+      "id": "prov_49",
+      "color": [
+        176,
+        112,
+        144
+      ],
+      "center": [
+        953,
+        255
+      ],
+      "bbox": {
+        "x": 897,
+        "y": 203,
+        "w": 156,
+        "h": 121
+      },
+      "terrain": "hills",
+      "elevation": 217,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_44",
+        "prov_26",
+        "prov_47",
+        "prov_56",
+        "prov_51",
+        "prov_58",
+        "prov_69",
+        "prov_67",
+        "prov_73",
+        "prov_71",
+        "prov_84"
+      ],
+      "pixelCount": 4638
+    },
+    {
+      "id": "prov_50",
+      "color": [
+        48,
+        96,
+        32
+      ],
+      "center": [
+        1269,
+        230
+      ],
+      "bbox": {
+        "x": 1230,
+        "y": 204,
+        "w": 131,
+        "h": 53
+      },
+      "terrain": "plains",
+      "elevation": 181,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_12",
+        "prov_37",
+        "prov_36",
+        "prov_42"
+      ],
+      "pixelCount": 2549
+    },
+    {
+      "id": "prov_51",
+      "color": [
+        208,
+        192,
+        64
+      ],
+      "center": [
+        1089,
+        234
+      ],
+      "bbox": {
+        "x": 1024,
+        "y": 210,
+        "w": 134,
+        "h": 59
+      },
+      "terrain": "hills",
+      "elevation": 217,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_17",
+        "prov_40",
+        "prov_29",
+        "prov_41",
+        "prov_26",
+        "prov_57",
+        "prov_49",
+        "prov_12",
+        "prov_58"
+      ],
+      "pixelCount": 2234
+    },
+    {
+      "id": "prov_52",
+      "color": [
+        192,
+        192,
+        144
+      ],
+      "center": [
+        618,
+        252
+      ],
+      "bbox": {
+        "x": 578,
+        "y": 215,
+        "w": 81,
+        "h": 65
+      },
+      "terrain": "forest",
+      "elevation": 204,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_43",
+        "prov_39",
+        "prov_62",
+        "prov_32",
+        "prov_65",
+        "prov_66"
+      ],
+      "pixelCount": 1794
+    },
+    {
+      "id": "prov_53",
+      "color": [
+        64,
+        64,
+        64
+      ],
+      "center": [
+        2006,
+        263
+      ],
+      "bbox": {
+        "x": 1963,
+        "y": 219,
+        "w": 85,
+        "h": 86
+      },
+      "terrain": "coast",
+      "elevation": 1,
+      "isLand": false,
+      "adjacentProvinces": [
+        "prov_45",
+        "prov_38"
+      ],
+      "pixelCount": 6980
+    },
+    {
+      "id": "prov_54",
+      "color": [
+        144,
+        64,
+        64
+      ],
+      "center": [
+        863,
+        238
+      ],
+      "bbox": {
+        "x": 843,
+        "y": 225,
+        "w": 41,
+        "h": 26
+      },
+      "terrain": "hills",
+      "elevation": 209,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_34",
+        "prov_46",
+        "prov_44"
+      ],
+      "pixelCount": 595
+    },
+    {
+      "id": "prov_55",
+      "color": [
+        176,
+        128,
+        48
+      ],
+      "center": [
+        690,
+        270
+      ],
+      "bbox": {
+        "x": 680,
+        "y": 228,
+        "w": 22,
+        "h": 90
+      },
+      "terrain": "forest",
+      "elevation": 185,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_48",
+        "prov_7",
+        "prov_32",
+        "prov_66"
+      ],
+      "pixelCount": 572
+    },
+    {
+      "id": "prov_56",
+      "color": [
+        96,
+        48,
+        144
+      ],
+      "center": [
+        979,
+        247
+      ],
+      "bbox": {
+        "x": 938,
+        "y": 229,
+        "w": 83,
+        "h": 38
+      },
+      "terrain": "hills",
+      "elevation": 237,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_49",
+        "prov_58",
+        "prov_67"
+      ],
+      "pixelCount": 2002
+    },
+    {
+      "id": "prov_57",
+      "color": [
+        112,
+        128,
+        80
+      ],
+      "center": [
+        1140,
+        260
+      ],
+      "bbox": {
+        "x": 1101,
+        "y": 229,
+        "w": 94,
+        "h": 71
+      },
+      "terrain": "hills",
+      "elevation": 184,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_51",
+        "prov_12",
+        "prov_42",
+        "prov_58",
+        "prov_71"
+      ],
+      "pixelCount": 3637
+    },
+    {
+      "id": "prov_58",
+      "color": [
+        128,
+        112,
+        192
+      ],
+      "center": [
+        1054,
+        259
+      ],
+      "bbox": {
+        "x": 1012,
+        "y": 237,
+        "w": 99,
+        "h": 46
+      },
+      "terrain": "hills",
+      "elevation": 210,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_49",
+        "prov_51",
+        "prov_56",
+        "prov_67",
+        "prov_57",
+        "prov_71",
+        "prov_74"
+      ],
+      "pixelCount": 2873
+    },
+    {
+      "id": "prov_59",
+      "color": [
+        176,
+        128,
+        176
+      ],
+      "center": [
+        460,
+        301
+      ],
+      "bbox": {
+        "x": 387,
+        "y": 239,
+        "w": 158,
+        "h": 120
+      },
+      "terrain": "forest",
+      "elevation": 201,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_23",
+        "prov_61",
+        "prov_62",
+        "prov_76",
+        "prov_79",
+        "prov_91"
+      ],
+      "pixelCount": 9466
+    },
+    {
+      "id": "prov_60",
+      "color": [
+        128,
+        80,
+        64
+      ],
+      "center": [
+        226,
+        326
+      ],
+      "bbox": {
+        "x": 132,
+        "y": 228,
+        "w": 173,
+        "h": 181
+      },
+      "terrain": "forest",
+      "elevation": 175,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_64",
+        "prov_24",
+        "prov_23",
+        "prov_68",
+        "prov_76",
+        "prov_104"
+      ],
+      "pixelCount": 13370
+    },
+    {
+      "id": "prov_61",
+      "color": [
+        192,
+        208,
+        80
+      ],
+      "center": [
+        480,
+        265
+      ],
+      "bbox": {
+        "x": 450,
+        "y": 243,
+        "w": 88,
+        "h": 45
+      },
+      "terrain": "forest",
+      "elevation": 189,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_23",
+        "prov_39",
+        "prov_59",
+        "prov_62"
+      ],
+      "pixelCount": 1579
+    },
+    {
+      "id": "prov_62",
+      "color": [
+        192,
+        176,
+        144
+      ],
+      "center": [
+        568,
+        293
+      ],
+      "bbox": {
+        "x": 523,
+        "y": 243,
+        "w": 92,
+        "h": 104
+      },
+      "terrain": "forest",
+      "elevation": 214,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_52",
+        "prov_39",
+        "prov_65",
+        "prov_61",
+        "prov_70",
+        "prov_59",
+        "prov_79",
+        "prov_66"
+      ],
+      "pixelCount": 4090
+    },
+    {
+      "id": "prov_63",
+      "color": [
+        48,
+        80,
+        128
+      ],
+      "center": [
+        769,
+        283
+      ],
+      "bbox": {
+        "x": 740,
+        "y": 244,
+        "w": 68,
+        "h": 87
+      },
+      "terrain": "hills",
+      "elevation": 209,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_48",
+        "prov_34",
+        "prov_72",
+        "prov_77"
+      ],
+      "pixelCount": 2807
+    },
+    {
+      "id": "prov_64",
+      "color": [
+        176,
+        160,
+        32
+      ],
+      "center": [
+        198,
+        284
+      ],
+      "bbox": {
+        "x": 162,
+        "y": 233,
+        "w": 76,
+        "h": 111
+      },
+      "terrain": "forest",
+      "elevation": 162,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_60",
+        "prov_68"
+      ],
+      "pixelCount": 2438
+    },
+    {
+      "id": "prov_65",
+      "color": [
+        48,
+        144,
+        176
+      ],
+      "center": [
+        619,
+        277
+      ],
+      "bbox": {
+        "x": 594,
+        "y": 255,
+        "w": 55,
+        "h": 40
+      },
+      "terrain": "forest",
+      "elevation": 225,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_52",
+        "prov_62",
+        "prov_70",
+        "prov_66"
+      ],
+      "pixelCount": 759
+    },
+    {
+      "id": "prov_66",
+      "color": [
+        192,
+        128,
+        176
+      ],
+      "center": [
+        651,
+        308
+      ],
+      "bbox": {
+        "x": 588,
+        "y": 258,
+        "w": 120,
+        "h": 91
+      },
+      "terrain": "hills",
+      "elevation": 206,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_32",
+        "prov_52",
+        "prov_65",
+        "prov_55",
+        "prov_70",
+        "prov_48",
+        "prov_82",
+        "prov_62",
+        "prov_86",
+        "prov_79"
+      ],
+      "pixelCount": 4321
+    },
+    {
+      "id": "prov_67",
+      "color": [
+        112,
+        112,
+        112
+      ],
+      "center": [
+        1016,
+        276
+      ],
+      "bbox": {
+        "x": 992,
+        "y": 259,
+        "w": 62,
+        "h": 31
+      },
+      "terrain": "hills",
+      "elevation": 217,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_56",
+        "prov_58",
+        "prov_49",
+        "prov_71"
+      ],
+      "pixelCount": 894
+    },
+    {
+      "id": "prov_68",
+      "color": [
+        160,
+        160,
+        32
+      ],
+      "center": [
+        209,
+        288
+      ],
+      "bbox": {
+        "x": 189,
+        "y": 263,
+        "w": 49,
+        "h": 41
+      },
+      "terrain": "forest",
+      "elevation": 184,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_64",
+        "prov_60"
+      ],
+      "pixelCount": 768
+    },
+    {
+      "id": "prov_69",
+      "color": [
+        48,
+        128,
+        160
+      ],
+      "center": [
+        931,
+        303
+      ],
+      "bbox": {
+        "x": 875,
+        "y": 266,
+        "w": 108,
+        "h": 81
+      },
+      "terrain": "hills",
+      "elevation": 204,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_49",
+        "prov_73",
+        "prov_44",
+        "prov_72",
+        "prov_88"
+      ],
+      "pixelCount": 4805
+    },
+    {
+      "id": "prov_70",
+      "color": [
+        64,
+        144,
+        176
+      ],
+      "center": [
+        600,
+        301
+      ],
+      "bbox": {
+        "x": 565,
+        "y": 269,
+        "w": 62,
+        "h": 54
+      },
+      "terrain": "forest",
+      "elevation": 229,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_65",
+        "prov_62",
+        "prov_66"
+      ],
+      "pixelCount": 1551
+    },
+    {
+      "id": "prov_71",
+      "color": [
+        128,
+        80,
+        112
+      ],
+      "center": [
+        1058,
+        315
+      ],
+      "bbox": {
+        "x": 992,
+        "y": 274,
+        "w": 150,
+        "h": 93
+      },
+      "terrain": "plains",
+      "elevation": 188,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_58",
+        "prov_57",
+        "prov_74",
+        "prov_67",
+        "prov_49",
+        "prov_78",
+        "prov_81",
+        "prov_84",
+        "prov_73",
+        "prov_89"
+      ],
+      "pixelCount": 6579
+    },
+    {
+      "id": "prov_72",
+      "color": [
+        48,
+        96,
+        128
+      ],
+      "center": [
+        834,
+        303
+      ],
+      "bbox": {
+        "x": 766,
+        "y": 278,
+        "w": 158,
+        "h": 64
+      },
+      "terrain": "hills",
+      "elevation": 199,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_63",
+        "prov_34",
+        "prov_75",
+        "prov_44",
+        "prov_77",
+        "prov_69",
+        "prov_83",
+        "prov_88"
+      ],
+      "pixelCount": 2234
+    },
+    {
+      "id": "prov_73",
+      "color": [
+        208,
+        80,
+        48
+      ],
+      "center": [
+        978,
+        342
+      ],
+      "bbox": {
+        "x": 936,
+        "y": 278,
+        "w": 102,
+        "h": 105
+      },
+      "terrain": "hills",
+      "elevation": 185,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_49",
+        "prov_69",
+        "prov_84",
+        "prov_88",
+        "prov_71",
+        "prov_96"
+      ],
+      "pixelCount": 3194
+    },
+    {
+      "id": "prov_74",
+      "color": [
+        144,
+        80,
+        112
+      ],
+      "center": [
+        1076,
+        288
+      ],
+      "bbox": {
+        "x": 1051,
+        "y": 281,
+        "w": 53,
+        "h": 14
+      },
+      "terrain": "mountain",
+      "elevation": 202,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_71",
+        "prov_58"
+      ],
+      "pixelCount": 306
+    },
+    {
+      "id": "prov_75",
+      "color": [
+        48,
+        176,
+        64
+      ],
+      "center": [
+        827,
+        316
+      ],
+      "bbox": {
+        "x": 788,
+        "y": 288,
+        "w": 78,
+        "h": 49
+      },
+      "terrain": "hills",
+      "elevation": 204,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_72",
+        "prov_77",
+        "prov_83"
+      ],
+      "pixelCount": 1684
+    },
+    {
+      "id": "prov_76",
+      "color": [
+        96,
+        192,
+        128
+      ],
+      "center": [
+        352,
+        365
+      ],
+      "bbox": {
+        "x": 239,
+        "y": 294,
+        "w": 219,
+        "h": 130
+      },
+      "terrain": "plains",
+      "elevation": 189,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_23",
+        "prov_59",
+        "prov_91",
+        "prov_60",
+        "prov_97",
+        "prov_104"
+      ],
+      "pixelCount": 13533
+    },
+    {
+      "id": "prov_77",
+      "color": [
+        48,
+        160,
+        80
+      ],
+      "center": [
+        791,
+        328
+      ],
+      "bbox": {
+        "x": 759,
+        "y": 302,
+        "w": 72,
+        "h": 48
+      },
+      "terrain": "hills",
+      "elevation": 213,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_72",
+        "prov_75",
+        "prov_63",
+        "prov_48",
+        "prov_83",
+        "prov_88",
+        "prov_87",
+        "prov_90"
+      ],
+      "pixelCount": 1489
+    },
+    {
+      "id": "prov_78",
+      "color": [
+        80,
+        176,
+        96
+      ],
+      "center": [
+        1120,
+        331
+      ],
+      "bbox": {
+        "x": 1092,
+        "y": 309,
+        "w": 50,
+        "h": 74
+      },
+      "terrain": "plains",
+      "elevation": 152,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_71",
+        "prov_81",
+        "prov_89"
+      ],
+      "pixelCount": 1093
+    },
+    {
+      "id": "prov_79",
+      "color": [
+        48,
+        128,
+        80
+      ],
+      "center": [
+        547,
+        347
+      ],
+      "bbox": {
+        "x": 496,
+        "y": 317,
+        "w": 106,
+        "h": 57
+      },
+      "terrain": "plains",
+      "elevation": 218,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_62",
+        "prov_59",
+        "prov_66",
+        "prov_86",
+        "prov_95",
+        "prov_91"
+      ],
+      "pixelCount": 3101
+    },
+    {
+      "id": "prov_80",
+      "color": [
+        16,
+        16,
+        16
+      ],
+      "center": [
+        0,
+        699
+      ],
+      "bbox": {
+        "x": 0,
+        "y": 318,
+        "w": 2,
+        "h": 706
+      },
+      "terrain": "coast",
+      "elevation": 0,
+      "isLand": false,
+      "adjacentProvinces": [],
+      "pixelCount": 1286
+    },
+    {
+      "id": "prov_81",
+      "color": [
+        80,
+        176,
+        80
+      ],
+      "center": [
+        1092,
+        341
+      ],
+      "bbox": {
+        "x": 1063,
+        "y": 320,
+        "w": 62,
+        "h": 42
+      },
+      "terrain": "plains",
+      "elevation": 177,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_71",
+        "prov_78",
+        "prov_89"
+      ],
+      "pixelCount": 1198
+    },
+    {
+      "id": "prov_82",
+      "color": [
+        64,
+        64,
+        96
+      ],
+      "center": [
+        697,
+        333
+      ],
+      "bbox": {
+        "x": 669,
+        "y": 322,
+        "w": 65,
+        "h": 28
+      },
+      "terrain": "mountain",
+      "elevation": 210,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_66",
+        "prov_48",
+        "prov_87",
+        "prov_86"
+      ],
+      "pixelCount": 1103
+    },
+    {
+      "id": "prov_83",
+      "color": [
+        48,
+        176,
+        80
+      ],
+      "center": [
+        862,
+        336
+      ],
+      "bbox": {
+        "x": 824,
+        "y": 322,
+        "w": 77,
+        "h": 24
+      },
+      "terrain": "hills",
+      "elevation": 196,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_75",
+        "prov_72",
+        "prov_77",
+        "prov_88"
+      ],
+      "pixelCount": 962
+    },
+    {
+      "id": "prov_84",
+      "color": [
+        144,
+        80,
+        112
+      ],
+      "center": [
+        1004,
+        340
+      ],
+      "bbox": {
+        "x": 987,
+        "y": 323,
+        "w": 35,
+        "h": 32
+      },
+      "terrain": "plains",
+      "elevation": 180,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_71",
+        "prov_49",
+        "prov_73"
+      ],
+      "pixelCount": 657
+    },
+    {
+      "id": "prov_85",
+      "color": [
+        80,
+        80,
+        80
+      ],
+      "center": [
+        2004,
+        326
+      ],
+      "bbox": {
+        "x": 1961,
+        "y": 323,
+        "w": 87,
+        "h": 7
+      },
+      "terrain": "coast",
+      "elevation": 1,
+      "isLand": false,
+      "adjacentProvinces": [
+        "prov_45"
+      ],
+      "pixelCount": 603
+    },
+    {
+      "id": "prov_86",
+      "color": [
+        64,
+        176,
+        144
+      ],
+      "center": [
+        622,
+        372
+      ],
+      "bbox": {
+        "x": 575,
+        "y": 327,
+        "w": 119,
+        "h": 132
+      },
+      "terrain": "hills",
+      "elevation": 215,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_66",
+        "prov_82",
+        "prov_87",
+        "prov_79",
+        "prov_93",
+        "prov_94",
+        "prov_95",
+        "prov_105",
+        "prov_106"
+      ],
+      "pixelCount": 3559
+    },
+    {
+      "id": "prov_87",
+      "color": [
+        64,
+        48,
+        96
+      ],
+      "center": [
+        724,
+        350
+      ],
+      "bbox": {
+        "x": 678,
+        "y": 333,
+        "w": 94,
+        "h": 39
+      },
+      "terrain": "mountain",
+      "elevation": 231,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_82",
+        "prov_48",
+        "prov_77",
+        "prov_86",
+        "prov_90",
+        "prov_92",
+        "prov_93"
+      ],
+      "pixelCount": 1742
+    },
+    {
+      "id": "prov_88",
+      "color": [
+        96,
+        160,
+        176
+      ],
+      "center": [
+        867,
+        362
+      ],
+      "bbox": {
+        "x": 764,
+        "y": 340,
+        "w": 217,
+        "h": 54
+      },
+      "terrain": "hills",
+      "elevation": 201,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_83",
+        "prov_72",
+        "prov_69",
+        "prov_77",
+        "prov_73",
+        "prov_90",
+        "prov_96",
+        "prov_92",
+        "prov_98",
+        "prov_99"
+      ],
+      "pixelCount": 6447
+    },
+    {
+      "id": "prov_89",
+      "color": [
+        80,
+        176,
+        96
+      ],
+      "center": [
+        1110,
+        369
+      ],
+      "bbox": {
+        "x": 1081,
+        "y": 342,
+        "w": 72,
+        "h": 64
+      },
+      "terrain": "plains",
+      "elevation": 159,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_81",
+        "prov_78",
+        "prov_71"
+      ],
+      "pixelCount": 1032
+    },
+    {
+      "id": "prov_90",
+      "color": [
+        112,
+        160,
+        176
+      ],
+      "center": [
+        768,
+        358
+      ],
+      "bbox": {
+        "x": 755,
+        "y": 345,
+        "w": 39,
+        "h": 29
+      },
+      "terrain": "mountain",
+      "elevation": 237,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_77",
+        "prov_88",
+        "prov_87",
+        "prov_92"
+      ],
+      "pixelCount": 384
+    },
+    {
+      "id": "prov_91",
+      "color": [
+        192,
+        208,
+        64
+      ],
+      "center": [
+        477,
+        367
+      ],
+      "bbox": {
+        "x": 432,
+        "y": 346,
+        "w": 110,
+        "h": 50
+      },
+      "terrain": "plains",
+      "elevation": 203,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_76",
+        "prov_59",
+        "prov_79",
+        "prov_97",
+        "prov_95",
+        "prov_100"
+      ],
+      "pixelCount": 2445
+    },
+    {
+      "id": "prov_92",
+      "color": [
+        64,
+        64,
+        96
+      ],
+      "center": [
+        744,
+        378
+      ],
+      "bbox": {
+        "x": 719,
+        "y": 350,
+        "w": 78,
+        "h": 52
+      },
+      "terrain": "mountain",
+      "elevation": 239,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_87",
+        "prov_90",
+        "prov_93",
+        "prov_98",
+        "prov_88",
+        "prov_101"
+      ],
+      "pixelCount": 1285
+    },
+    {
+      "id": "prov_93",
+      "color": [
+        80,
+        64,
+        48
+      ],
+      "center": [
+        698,
+        394
+      ],
+      "bbox": {
+        "x": 653,
+        "y": 352,
+        "w": 114,
+        "h": 76
+      },
+      "terrain": "mountain",
+      "elevation": 221,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_86",
+        "prov_94",
+        "prov_87",
+        "prov_92",
+        "prov_101",
+        "prov_107",
+        "prov_109"
+      ],
+      "pixelCount": 4879
+    },
+    {
+      "id": "prov_94",
+      "color": [
+        192,
+        112,
+        112
+      ],
+      "center": [
+        639,
+        418
+      ],
+      "bbox": {
+        "x": 603,
+        "y": 353,
+        "w": 87,
+        "h": 111
+      },
+      "terrain": "hills",
+      "elevation": 221,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_86",
+        "prov_93",
+        "prov_109",
+        "prov_116",
+        "prov_106",
+        "prov_113"
+      ],
+      "pixelCount": 5016
+    },
+    {
+      "id": "prov_95",
+      "color": [
+        80,
+        96,
+        48
+      ],
+      "center": [
+        560,
+        381
+      ],
+      "bbox": {
+        "x": 518,
+        "y": 354,
+        "w": 76,
+        "h": 57
+      },
+      "terrain": "hills",
+      "elevation": 224,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_79",
+        "prov_91",
+        "prov_86",
+        "prov_100",
+        "prov_105"
+      ],
+      "pixelCount": 2595
+    },
+    {
+      "id": "prov_96",
+      "color": [
+        208,
+        176,
+        192
+      ],
+      "center": [
+        946,
+        394
+      ],
+      "bbox": {
+        "x": 880,
+        "y": 367,
+        "w": 127,
+        "h": 77
+      },
+      "terrain": "hills",
+      "elevation": 174,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_88",
+        "prov_73",
+        "prov_99",
+        "prov_103",
+        "prov_110",
+        "prov_98"
+      ],
+      "pixelCount": 2984
+    },
+    {
+      "id": "prov_97",
+      "color": [
+        96,
+        160,
+        128
+      ],
+      "center": [
+        435,
+        396
+      ],
+      "bbox": {
+        "x": 388,
+        "y": 369,
+        "w": 115,
+        "h": 57
+      },
+      "terrain": "plains",
+      "elevation": 204,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_76",
+        "prov_91",
+        "prov_100",
+        "prov_102",
+        "prov_104"
+      ],
+      "pixelCount": 3560
+    },
+    {
+      "id": "prov_98",
+      "color": [
+        96,
+        128,
+        144
+      ],
+      "center": [
+        863,
+        423
+      ],
+      "bbox": {
+        "x": 756,
+        "y": 374,
+        "w": 209,
+        "h": 93
+      },
+      "terrain": "hills",
+      "elevation": 194,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_92",
+        "prov_88",
+        "prov_99",
+        "prov_101",
+        "prov_103",
+        "prov_110",
+        "prov_96",
+        "prov_123"
+      ],
+      "pixelCount": 6775
+    },
+    {
+      "id": "prov_99",
+      "color": [
+        224,
+        176,
+        192
+      ],
+      "center": [
+        897,
+        401
+      ],
+      "bbox": {
+        "x": 829,
+        "y": 378,
+        "w": 111,
+        "h": 44
+      },
+      "terrain": "hills",
+      "elevation": 190,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_98",
+        "prov_88",
+        "prov_96",
+        "prov_103"
+      ],
+      "pixelCount": 1668
+    },
+    {
+      "id": "prov_100",
+      "color": [
+        192,
+        192,
+        64
+      ],
+      "center": [
+        534,
+        410
+      ],
+      "bbox": {
+        "x": 481,
+        "y": 380,
+        "w": 96,
+        "h": 70
+      },
+      "terrain": "plains",
+      "elevation": 217,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_91",
+        "prov_95",
+        "prov_97",
+        "prov_102",
+        "prov_105",
+        "prov_108"
+      ],
+      "pixelCount": 2231
+    },
+    {
+      "id": "prov_101",
+      "color": [
+        224,
+        96,
+        192
+      ],
+      "center": [
+        825,
+        440
+      ],
+      "bbox": {
+        "x": 749,
+        "y": 389,
+        "w": 202,
+        "h": 94
+      },
+      "terrain": "hills",
+      "elevation": 198,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_92",
+        "prov_98",
+        "prov_93",
+        "prov_107",
+        "prov_123",
+        "prov_109",
+        "prov_125"
+      ],
+      "pixelCount": 5568
+    },
+    {
+      "id": "prov_102",
+      "color": [
+        64,
+        48,
+        160
+      ],
+      "center": [
+        465,
+        437
+      ],
+      "bbox": {
+        "x": 385,
+        "y": 403,
+        "w": 176,
+        "h": 73
+      },
+      "terrain": "plains",
+      "elevation": 216,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_97",
+        "prov_100",
+        "prov_104",
+        "prov_113",
+        "prov_108",
+        "prov_120"
+      ],
+      "pixelCount": 5904
+    },
+    {
+      "id": "prov_103",
+      "color": [
+        208,
+        176,
+        192
+      ],
+      "center": [
+        903,
+        422
+      ],
+      "bbox": {
+        "x": 878,
+        "y": 404,
+        "w": 60,
+        "h": 33
+      },
+      "terrain": "hills",
+      "elevation": 185,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_99",
+        "prov_98",
+        "prov_96",
+        "prov_110"
+      ],
+      "pixelCount": 668
+    },
+    {
+      "id": "prov_104",
+      "color": [
+        96,
+        160,
+        128
+      ],
+      "center": [
+        323,
+        435
+      ],
+      "bbox": {
+        "x": 228,
+        "y": 406,
+        "w": 192,
+        "h": 66
+      },
+      "terrain": "forest",
+      "elevation": 187,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_60",
+        "prov_76",
+        "prov_97",
+        "prov_102",
+        "prov_114",
+        "prov_120"
+      ],
+      "pixelCount": 7338
+    },
+    {
+      "id": "prov_105",
+      "color": [
+        48,
+        176,
+        144
+      ],
+      "center": [
+        584,
+        426
+      ],
+      "bbox": {
+        "x": 574,
+        "y": 407,
+        "w": 21,
+        "h": 47
+      },
+      "terrain": "hills",
+      "elevation": 226,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_95",
+        "prov_86",
+        "prov_106",
+        "prov_100",
+        "prov_108"
+      ],
+      "pixelCount": 493
+    },
+    {
+      "id": "prov_106",
+      "color": [
+        64,
+        176,
+        144
+      ],
+      "center": [
+        596,
+        442
+      ],
+      "bbox": {
+        "x": 574,
+        "y": 410,
+        "w": 69,
+        "h": 53
+      },
+      "terrain": "hills",
+      "elevation": 225,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_105",
+        "prov_86",
+        "prov_108",
+        "prov_113",
+        "prov_94"
+      ],
+      "pixelCount": 779
+    },
+    {
+      "id": "prov_107",
+      "color": [
+        160,
+        208,
+        144
+      ],
+      "center": [
+        763,
+        434
+      ],
+      "bbox": {
+        "x": 732,
+        "y": 410,
+        "w": 77,
+        "h": 58
+      },
+      "terrain": "mountain",
+      "elevation": 208,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_93",
+        "prov_101",
+        "prov_109"
+      ],
+      "pixelCount": 1468
+    },
+    {
+      "id": "prov_108",
+      "color": [
+        64,
+        176,
+        144
+      ],
+      "center": [
+        572,
+        440
+      ],
+      "bbox": {
+        "x": 559,
+        "y": 415,
+        "w": 32,
+        "h": 41
+      },
+      "terrain": "hills",
+      "elevation": 226,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_100",
+        "prov_105",
+        "prov_102",
+        "prov_106",
+        "prov_113"
+      ],
+      "pixelCount": 546
+    },
+    {
+      "id": "prov_109",
+      "color": [
+        112,
+        128,
+        128
+      ],
+      "center": [
+        741,
+        453
+      ],
+      "bbox": {
+        "x": 670,
+        "y": 419,
+        "w": 173,
+        "h": 71
+      },
+      "terrain": "mountain",
+      "elevation": 211,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_93",
+        "prov_94",
+        "prov_107",
+        "prov_116",
+        "prov_101",
+        "prov_125"
+      ],
+      "pixelCount": 3881
+    },
+    {
+      "id": "prov_110",
+      "color": [
+        208,
+        176,
+        192
+      ],
+      "center": [
+        931,
+        435
+      ],
+      "bbox": {
+        "x": 906,
+        "y": 428,
+        "w": 45,
+        "h": 16
+      },
+      "terrain": "plains",
+      "elevation": 171,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_96",
+        "prov_103",
+        "prov_98"
+      ],
+      "pixelCount": 519
+    },
+    {
+      "id": "prov_111",
+      "color": [
+        48,
+        160,
+        96
+      ],
+      "center": [
+        1184,
+        457
+      ],
+      "bbox": {
+        "x": 1132,
+        "y": 427,
+        "w": 115,
+        "h": 66
+      },
+      "terrain": "forest",
+      "elevation": 174,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_117",
+        "prov_121",
+        "prov_126"
+      ],
+      "pixelCount": 3323
+    },
+    {
+      "id": "prov_112",
+      "color": [
+        176,
+        64,
+        176
+      ],
+      "center": [
+        1355,
+        455
+      ],
+      "bbox": {
+        "x": 1312,
+        "y": 428,
+        "w": 93,
+        "h": 61
+      },
+      "terrain": "forest",
+      "elevation": 162,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_117",
+        "prov_119",
+        "prov_126"
+      ],
+      "pixelCount": 2038
+    },
+    {
+      "id": "prov_113",
+      "color": [
+        112,
+        48,
+        48
+      ],
+      "center": [
+        510,
+        476
+      ],
+      "bbox": {
+        "x": 451,
+        "y": 436,
+        "w": 200,
+        "h": 94
+      },
+      "terrain": "hills",
+      "elevation": 218,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_102",
+        "prov_108",
+        "prov_106",
+        "prov_122",
+        "prov_94",
+        "prov_124",
+        "prov_116",
+        "prov_120",
+        "prov_128",
+        "prov_132"
+      ],
+      "pixelCount": 6112
+    },
+    {
+      "id": "prov_114",
+      "color": [
+        144,
+        80,
+        80
+      ],
+      "center": [
+        249,
+        472
+      ],
+      "bbox": {
+        "x": 196,
+        "y": 437,
+        "w": 149,
+        "h": 88
+      },
+      "terrain": "forest",
+      "elevation": 172,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_104",
+        "prov_120",
+        "prov_127",
+        "prov_134",
+        "prov_140"
+      ],
+      "pixelCount": 5450
+    },
+    {
+      "id": "prov_115",
+      "color": [
+        176,
+        112,
+        112
+      ],
+      "center": [
+        983,
+        525
+      ],
+      "bbox": {
+        "x": 877,
+        "y": 438,
+        "w": 214,
+        "h": 232
+      },
+      "terrain": "volcanic",
+      "elevation": 164,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_123",
+        "prov_145",
+        "prov_147",
+        "prov_155",
+        "prov_157",
+        "prov_162",
+        "prov_167",
+        "prov_176",
+        "prov_179"
+      ],
+      "pixelCount": 7829
+    },
+    {
+      "id": "prov_116",
+      "color": [
+        176,
+        48,
+        112
+      ],
+      "center": [
+        702,
+        471
+      ],
+      "bbox": {
+        "x": 644,
+        "y": 450,
+        "w": 131,
+        "h": 51
+      },
+      "terrain": "mountain",
+      "elevation": 216,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_94",
+        "prov_109",
+        "prov_113",
+        "prov_122",
+        "prov_125",
+        "prov_130"
+      ],
+      "pixelCount": 3106
+    },
+    {
+      "id": "prov_117",
+      "color": [
+        96,
+        112,
+        192
+      ],
+      "center": [
+        1290,
+        465
+      ],
+      "bbox": {
+        "x": 1213,
+        "y": 441,
+        "w": 165,
+        "h": 46
+      },
+      "terrain": "forest",
+      "elevation": 189,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_111",
+        "prov_112",
+        "prov_118",
+        "prov_126"
+      ],
+      "pixelCount": 3437
+    },
+    {
+      "id": "prov_118",
+      "color": [
+        160,
+        96,
+        80
+      ],
+      "center": [
+        1307,
+        462
+      ],
+      "bbox": {
+        "x": 1275,
+        "y": 450,
+        "w": 84,
+        "h": 28
+      },
+      "terrain": "forest",
+      "elevation": 195,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_117"
+      ],
+      "pixelCount": 842
+    },
+    {
+      "id": "prov_119",
+      "color": [
+        128,
+        32,
+        64
+      ],
+      "center": [
+        1442,
+        498
+      ],
+      "bbox": {
+        "x": 1386,
+        "y": 448,
+        "w": 132,
+        "h": 93
+      },
+      "terrain": "forest",
+      "elevation": 167,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_112",
+        "prov_126",
+        "prov_133",
+        "prov_137",
+        "prov_144"
+      ],
+      "pixelCount": 4102
+    },
+    {
+      "id": "prov_120",
+      "color": [
+        48,
+        96,
+        112
+      ],
+      "center": [
+        415,
+        502
+      ],
+      "bbox": {
+        "x": 332,
+        "y": 459,
+        "w": 187,
+        "h": 100
+      },
+      "terrain": "plains",
+      "elevation": 209,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_104",
+        "prov_102",
+        "prov_114",
+        "prov_113",
+        "prov_127",
+        "prov_132",
+        "prov_124",
+        "prov_150",
+        "prov_151"
+      ],
+      "pixelCount": 7856
+    },
+    {
+      "id": "prov_121",
+      "color": [
+        144,
+        64,
+        48
+      ],
+      "center": [
+        1158,
+        480
+      ],
+      "bbox": {
+        "x": 1101,
+        "y": 458,
+        "w": 144,
+        "h": 57
+      },
+      "terrain": "forest",
+      "elevation": 190,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_111",
+        "prov_131",
+        "prov_139",
+        "prov_126",
+        "prov_135"
+      ],
+      "pixelCount": 2537
+    },
+    {
+      "id": "prov_122",
+      "color": [
+        48,
+        64,
+        96
+      ],
+      "center": [
+        615,
+        506
+      ],
+      "bbox": {
+        "x": 563,
+        "y": 464,
+        "w": 158,
+        "h": 96
+      },
+      "terrain": "mountain",
+      "elevation": 225,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_113",
+        "prov_124",
+        "prov_116",
+        "prov_130",
+        "prov_146"
+      ],
+      "pixelCount": 6407
+    },
+    {
+      "id": "prov_123",
+      "color": [
+        128,
+        96,
+        80
+      ],
+      "center": [
+        866,
+        539
+      ],
+      "bbox": {
+        "x": 742,
+        "y": 464,
+        "w": 262,
+        "h": 147
+      },
+      "terrain": "hills",
+      "elevation": 198,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_98",
+        "prov_101",
+        "prov_115",
+        "prov_125",
+        "prov_142",
+        "prov_145",
+        "prov_163",
+        "prov_154"
+      ],
+      "pixelCount": 11287
+    },
+    {
+      "id": "prov_124",
+      "color": [
+        176,
+        176,
+        144
+      ],
+      "center": [
+        548,
+        520
+      ],
+      "bbox": {
+        "x": 494,
+        "y": 465,
+        "w": 148,
+        "h": 108
+      },
+      "terrain": "hills",
+      "elevation": 217,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_113",
+        "prov_122",
+        "prov_128",
+        "prov_132",
+        "prov_120",
+        "prov_146",
+        "prov_151"
+      ],
+      "pixelCount": 5101
+    },
+    {
+      "id": "prov_125",
+      "color": [
+        176,
+        48,
+        112
+      ],
+      "center": [
+        821,
+        498
+      ],
+      "bbox": {
+        "x": 739,
+        "y": 471,
+        "w": 188,
+        "h": 63
+      },
+      "terrain": "hills",
+      "elevation": 198,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_109",
+        "prov_101",
+        "prov_123",
+        "prov_116",
+        "prov_130",
+        "prov_142"
+      ],
+      "pixelCount": 6113
+    },
+    {
+      "id": "prov_126",
+      "color": [
+        64,
+        48,
+        112
+      ],
+      "center": [
+        1303,
+        504
+      ],
+      "bbox": {
+        "x": 1214,
+        "y": 471,
+        "w": 181,
+        "h": 102
+      },
+      "terrain": "forest",
+      "elevation": 198,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_111",
+        "prov_117",
+        "prov_129",
+        "prov_112",
+        "prov_119",
+        "prov_133",
+        "prov_121",
+        "prov_135",
+        "prov_143"
+      ],
+      "pixelCount": 4101
+    },
+    {
+      "id": "prov_127",
+      "color": [
+        128,
+        176,
+        48
+      ],
+      "center": [
+        347,
+        520
+      ],
+      "bbox": {
+        "x": 256,
+        "y": 474,
+        "w": 216,
+        "h": 82
+      },
+      "terrain": "forest",
+      "elevation": 201,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_114",
+        "prov_120",
+        "prov_134",
+        "prov_136",
+        "prov_140",
+        "prov_148",
+        "prov_150",
+        "prov_149"
+      ],
+      "pixelCount": 6639
+    },
+    {
+      "id": "prov_128",
+      "color": [
+        96,
+        48,
+        48
+      ],
+      "center": [
+        515,
+        505
+      ],
+      "bbox": {
+        "x": 488,
+        "y": 480,
+        "w": 57,
+        "h": 52
+      },
+      "terrain": "hills",
+      "elevation": 225,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_113",
+        "prov_124",
+        "prov_132"
+      ],
+      "pixelCount": 691
+    },
+    {
+      "id": "prov_129",
+      "color": [
+        176,
+        144,
+        96
+      ],
+      "center": [
+        1300,
+        496
+      ],
+      "bbox": {
+        "x": 1277,
+        "y": 485,
+        "w": 47,
+        "h": 24
+      },
+      "terrain": "forest",
+      "elevation": 192,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_126"
+      ],
+      "pixelCount": 994
+    },
+    {
+      "id": "prov_130",
+      "color": [
+        48,
+        96,
+        32
+      ],
+      "center": [
+        698,
+        527
+      ],
+      "bbox": {
+        "x": 631,
+        "y": 486,
+        "w": 176,
+        "h": 85
+      },
+      "terrain": "mountain",
+      "elevation": 215,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_122",
+        "prov_116",
+        "prov_125",
+        "prov_142",
+        "prov_146",
+        "prov_154"
+      ],
+      "pixelCount": 7846
+    },
+    {
+      "id": "prov_131",
+      "color": [
+        96,
+        176,
+        64
+      ],
+      "center": [
+        1164,
+        500
+      ],
+      "bbox": {
+        "x": 1124,
+        "y": 486,
+        "w": 87,
+        "h": 35
+      },
+      "terrain": "forest",
+      "elevation": 198,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_121",
+        "prov_139",
+        "prov_135",
+        "prov_138"
+      ],
+      "pixelCount": 1534
+    },
+    {
+      "id": "prov_132",
+      "color": [
+        96,
+        48,
+        48
+      ],
+      "center": [
+        462,
+        514
+      ],
+      "bbox": {
+        "x": 446,
+        "y": 487,
+        "w": 53,
+        "h": 47
+      },
+      "terrain": "hills",
+      "elevation": 217,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_113",
+        "prov_120",
+        "prov_128",
+        "prov_124"
+      ],
+      "pixelCount": 516
+    },
+    {
+      "id": "prov_133",
+      "color": [
+        192,
+        128,
+        48
+      ],
+      "center": [
+        1386,
+        516
+      ],
+      "bbox": {
+        "x": 1341,
+        "y": 491,
+        "w": 102,
+        "h": 60
+      },
+      "terrain": "forest",
+      "elevation": 219,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_126",
+        "prov_119",
+        "prov_137",
+        "prov_143"
+      ],
+      "pixelCount": 2599
+    },
+    {
+      "id": "prov_134",
+      "color": [
+        48,
+        96,
+        48
+      ],
+      "center": [
+        270,
+        514
+      ],
+      "bbox": {
+        "x": 234,
+        "y": 492,
+        "w": 71,
+        "h": 50
+      },
+      "terrain": "forest",
+      "elevation": 193,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_114",
+        "prov_127",
+        "prov_136",
+        "prov_140"
+      ],
+      "pixelCount": 1597
+    },
+    {
+      "id": "prov_135",
+      "color": [
+        48,
+        112,
+        96
+      ],
+      "center": [
+        1225,
+        517
+      ],
+      "bbox": {
+        "x": 1201,
+        "y": 498,
+        "w": 66,
+        "h": 32
+      },
+      "terrain": "forest",
+      "elevation": 184,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_131",
+        "prov_121",
+        "prov_138",
+        "prov_126"
+      ],
+      "pixelCount": 1044
+    },
+    {
+      "id": "prov_136",
+      "color": [
+        64,
+        96,
+        48
+      ],
+      "center": [
+        298,
+        523
+      ],
+      "bbox": {
+        "x": 277,
+        "y": 499,
+        "w": 37,
+        "h": 49
+      },
+      "terrain": "forest",
+      "elevation": 200,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_134",
+        "prov_127",
+        "prov_140"
+      ],
+      "pixelCount": 818
+    },
+    {
+      "id": "prov_137",
+      "color": [
+        112,
+        176,
+        176
+      ],
+      "center": [
+        1447,
+        526
+      ],
+      "bbox": {
+        "x": 1423,
+        "y": 501,
+        "w": 69,
+        "h": 50
+      },
+      "terrain": "forest",
+      "elevation": 201,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_119",
+        "prov_133",
+        "prov_144",
+        "prov_143"
+      ],
+      "pixelCount": 1810
+    },
+    {
+      "id": "prov_138",
+      "color": [
+        208,
+        96,
+        32
+      ],
+      "center": [
+        1178,
+        526
+      ],
+      "bbox": {
+        "x": 1142,
+        "y": 502,
+        "w": 105,
+        "h": 48
+      },
+      "terrain": "forest",
+      "elevation": 181,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_131",
+        "prov_135",
+        "prov_139"
+      ],
+      "pixelCount": 1729
+    },
+    {
+      "id": "prov_139",
+      "color": [
+        32,
+        112,
+        128
+      ],
+      "center": [
+        1122,
+        525
+      ],
+      "bbox": {
+        "x": 1089,
+        "y": 491,
+        "w": 74,
+        "h": 62
+      },
+      "terrain": "forest",
+      "elevation": 183,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_121",
+        "prov_131",
+        "prov_138"
+      ],
+      "pixelCount": 3196
+    },
+    {
+      "id": "prov_140",
+      "color": [
+        176,
+        48,
+        144
+      ],
+      "center": [
+        242,
+        546
+      ],
+      "bbox": {
+        "x": 166,
+        "y": 512,
+        "w": 169,
+        "h": 89
+      },
+      "terrain": "forest",
+      "elevation": 191,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_114",
+        "prov_141",
+        "prov_134",
+        "prov_136",
+        "prov_127",
+        "prov_152",
+        "prov_149",
+        "prov_160"
+      ],
+      "pixelCount": 4067
+    },
+    {
+      "id": "prov_141",
+      "color": [
+        176,
+        48,
+        160
+      ],
+      "center": [
+        208,
+        557
+      ],
+      "bbox": {
+        "x": 156,
+        "y": 526,
+        "w": 88,
+        "h": 57
+      },
+      "terrain": "forest",
+      "elevation": 188,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_140",
+        "prov_152"
+      ],
+      "pixelCount": 1903
+    },
+    {
+      "id": "prov_142",
+      "color": [
+        208,
+        208,
+        160
+      ],
+      "center": [
+        753,
+        567
+      ],
+      "bbox": {
+        "x": 694,
+        "y": 534,
+        "w": 115,
+        "h": 68
+      },
+      "terrain": "mountain",
+      "elevation": 214,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_130",
+        "prov_125",
+        "prov_123",
+        "prov_154"
+      ],
+      "pixelCount": 4547
+    },
+    {
+      "id": "prov_143",
+      "color": [
+        192,
+        160,
+        112
+      ],
+      "center": [
+        1404,
+        556
+      ],
+      "bbox": {
+        "x": 1374,
+        "y": 538,
+        "w": 70,
+        "h": 35
+      },
+      "terrain": "forest",
+      "elevation": 157,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_126",
+        "prov_133",
+        "prov_144",
+        "prov_137"
+      ],
+      "pixelCount": 1145
+    },
+    {
+      "id": "prov_144",
+      "color": [
+        80,
+        112,
+        112
+      ],
+      "center": [
+        1487,
+        565
+      ],
+      "bbox": {
+        "x": 1443,
+        "y": 538,
+        "w": 94,
+        "h": 78
+      },
+      "terrain": "hills",
+      "elevation": 163,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_137",
+        "prov_119",
+        "prov_143",
+        "prov_153"
+      ],
+      "pixelCount": 2940
+    },
+    {
+      "id": "prov_145",
+      "color": [
+        192,
+        192,
+        48
+      ],
+      "center": [
+        905,
+        584
+      ],
+      "bbox": {
+        "x": 848,
+        "y": 543,
+        "w": 113,
+        "h": 87
+      },
+      "terrain": "hills",
+      "elevation": 197,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_115",
+        "prov_147",
+        "prov_123",
+        "prov_156",
+        "prov_163",
+        "prov_167"
+      ],
+      "pixelCount": 3563
+    },
+    {
+      "id": "prov_146",
+      "color": [
+        176,
+        64,
+        64
+      ],
+      "center": [
+        569,
+        576
+      ],
+      "bbox": {
+        "x": 508,
+        "y": 545,
+        "w": 143,
+        "h": 66
+      },
+      "terrain": "mountain",
+      "elevation": 221,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_124",
+        "prov_122",
+        "prov_130",
+        "prov_154",
+        "prov_151",
+        "prov_168"
+      ],
+      "pixelCount": 4395
+    },
+    {
+      "id": "prov_147",
+      "color": [
+        176,
+        192,
+        48
+      ],
+      "center": [
+        951,
+        565
+      ],
+      "bbox": {
+        "x": 932,
+        "y": 550,
+        "w": 42,
+        "h": 34
+      },
+      "terrain": "volcanic",
+      "elevation": 179,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_145",
+        "prov_115",
+        "prov_155",
+        "prov_156"
+      ],
+      "pixelCount": 578
+    },
+    {
+      "id": "prov_148",
+      "color": [
+        160,
+        160,
+        96
+      ],
+      "center": [
+        383,
+        569
+      ],
+      "bbox": {
+        "x": 347,
+        "y": 551,
+        "w": 81,
+        "h": 52
+      },
+      "terrain": "hills",
+      "elevation": 200,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_127",
+        "prov_149",
+        "prov_150",
+        "prov_159"
+      ],
+      "pixelCount": 1703
+    },
+    {
+      "id": "prov_149",
+      "color": [
+        144,
+        64,
+        160
+      ],
+      "center": [
+        298,
+        610
+      ],
+      "bbox": {
+        "x": 246,
+        "y": 553,
+        "w": 140,
+        "h": 136
+      },
+      "terrain": "plains",
+      "elevation": 189,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_140",
+        "prov_127",
+        "prov_148",
+        "prov_159",
+        "prov_160",
+        "prov_168",
+        "prov_186"
+      ],
+      "pixelCount": 8681
+    },
+    {
+      "id": "prov_150",
+      "color": [
+        176,
+        128,
+        176
+      ],
+      "center": [
+        420,
+        595
+      ],
+      "bbox": {
+        "x": 383,
+        "y": 553,
+        "w": 113,
+        "h": 104
+      },
+      "terrain": "hills",
+      "elevation": 204,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_127",
+        "prov_120",
+        "prov_151",
+        "prov_148",
+        "prov_159"
+      ],
+      "pixelCount": 4359
+    },
+    {
+      "id": "prov_151",
+      "color": [
+        128,
+        160,
+        48
+      ],
+      "center": [
+        472,
+        601
+      ],
+      "bbox": {
+        "x": 407,
+        "y": 553,
+        "w": 160,
+        "h": 111
+      },
+      "terrain": "hills",
+      "elevation": 199,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_120",
+        "prov_150",
+        "prov_124",
+        "prov_146",
+        "prov_166",
+        "prov_168",
+        "prov_169",
+        "prov_173",
+        "prov_159"
+      ],
+      "pixelCount": 6043
+    },
+    {
+      "id": "prov_152",
+      "color": [
+        176,
+        48,
+        144
+      ],
+      "center": [
+        179,
+        580
+      ],
+      "bbox": {
+        "x": 141,
+        "y": 553,
+        "w": 104,
+        "h": 67
+      },
+      "terrain": "forest",
+      "elevation": 167,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_140",
+        "prov_141",
+        "prov_160",
+        "prov_164"
+      ],
+      "pixelCount": 2395
+    },
+    {
+      "id": "prov_153",
+      "color": [
+        208,
+        96,
+        144
+      ],
+      "center": [
+        1502,
+        575
+      ],
+      "bbox": {
+        "x": 1478,
+        "y": 560,
+        "w": 50,
+        "h": 33
+      },
+      "terrain": "forest",
+      "elevation": 145,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_144"
+      ],
+      "pixelCount": 935
+    },
+    {
+      "id": "prov_154",
+      "color": [
+        176,
+        112,
+        48
+      ],
+      "center": [
+        648,
+        603
+      ],
+      "bbox": {
+        "x": 582,
+        "y": 563,
+        "w": 188,
+        "h": 117
+      },
+      "terrain": "mountain",
+      "elevation": 216,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_146",
+        "prov_130",
+        "prov_142",
+        "prov_158",
+        "prov_165",
+        "prov_123",
+        "prov_168",
+        "prov_163",
+        "prov_170",
+        "prov_175",
+        "prov_174"
+      ],
+      "pixelCount": 6292
+    },
+    {
+      "id": "prov_155",
+      "color": [
+        128,
+        48,
+        128
+      ],
+      "center": [
+        968,
+        592
+      ],
+      "bbox": {
+        "x": 945,
+        "y": 568,
+        "w": 40,
+        "h": 49
+      },
+      "terrain": "hills",
+      "elevation": 176,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_115",
+        "prov_147",
+        "prov_156",
+        "prov_167"
+      ],
+      "pixelCount": 939
+    },
+    {
+      "id": "prov_156",
+      "color": [
+        192,
+        192,
+        64
+      ],
+      "center": [
+        933,
+        600
+      ],
+      "bbox": {
+        "x": 903,
+        "y": 575,
+        "w": 56,
+        "h": 54
+      },
+      "terrain": "hills",
+      "elevation": 184,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_145",
+        "prov_147",
+        "prov_155",
+        "prov_167"
+      ],
+      "pixelCount": 1584
+    },
+    {
+      "id": "prov_157",
+      "color": [
+        112,
+        112,
+        176
+      ],
+      "center": [
+        1047,
+        619
+      ],
+      "bbox": {
+        "x": 999,
+        "y": 575,
+        "w": 113,
+        "h": 81
+      },
+      "terrain": "plains",
+      "elevation": 155,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_115",
+        "prov_161",
+        "prov_162",
+        "prov_172"
+      ],
+      "pixelCount": 3119
+    },
+    {
+      "id": "prov_158",
+      "color": [
+        48,
+        96,
+        192
+      ],
+      "center": [
+        701,
+        619
+      ],
+      "bbox": {
+        "x": 663,
+        "y": 576,
+        "w": 71,
+        "h": 82
+      },
+      "terrain": "hills",
+      "elevation": 205,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_154",
+        "prov_165",
+        "prov_170"
+      ],
+      "pixelCount": 2099
+    },
+    {
+      "id": "prov_159",
+      "color": [
+        224,
+        128,
+        128
+      ],
+      "center": [
+        352,
+        630
+      ],
+      "bbox": {
+        "x": 309,
+        "y": 578,
+        "w": 130,
+        "h": 94
+      },
+      "terrain": "plains",
+      "elevation": 189,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_149",
+        "prov_148",
+        "prov_150",
+        "prov_151",
+        "prov_168"
+      ],
+      "pixelCount": 5872
+    },
+    {
+      "id": "prov_160",
+      "color": [
+        96,
+        160,
+        64
+      ],
+      "center": [
+        230,
+        630
+      ],
+      "bbox": {
+        "x": 155,
+        "y": 585,
+        "w": 151,
+        "h": 105
+      },
+      "terrain": "plains",
+      "elevation": 180,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_152",
+        "prov_164",
+        "prov_140",
+        "prov_149",
+        "prov_184",
+        "prov_186"
+      ],
+      "pixelCount": 4834
+    },
+    {
+      "id": "prov_161",
+      "color": [
+        112,
+        112,
+        192
+      ],
+      "center": [
+        1012,
+        616
+      ],
+      "bbox": {
+        "x": 989,
+        "y": 586,
+        "w": 52,
+        "h": 59
+      },
+      "terrain": "plains",
+      "elevation": 186,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_157",
+        "prov_162"
+      ],
+      "pixelCount": 989
+    },
+    {
+      "id": "prov_162",
+      "color": [
+        112,
+        112,
+        176
+      ],
+      "center": [
+        1002,
+        642
+      ],
+      "bbox": {
+        "x": 980,
+        "y": 592,
+        "w": 68,
+        "h": 82
+      },
+      "terrain": "plains",
+      "elevation": 198,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_115",
+        "prov_157",
+        "prov_161",
+        "prov_172",
+        "prov_179"
+      ],
+      "pixelCount": 2038
+    },
+    {
+      "id": "prov_163",
+      "color": [
+        144,
+        96,
+        96
+      ],
+      "center": [
+        854,
+        626
+      ],
+      "bbox": {
+        "x": 750,
+        "y": 593,
+        "w": 210,
+        "h": 70
+      },
+      "terrain": "hills",
+      "elevation": 198,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_123",
+        "prov_145",
+        "prov_154",
+        "prov_170",
+        "prov_171",
+        "prov_167",
+        "prov_176",
+        "prov_177"
+      ],
+      "pixelCount": 5673
+    },
+    {
+      "id": "prov_164",
+      "color": [
+        96,
+        160,
+        48
+      ],
+      "center": [
+        185,
+        633
+      ],
+      "bbox": {
+        "x": 134,
+        "y": 594,
+        "w": 141,
+        "h": 123
+      },
+      "terrain": "plains",
+      "elevation": 163,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_160",
+        "prov_152",
+        "prov_184"
+      ],
+      "pixelCount": 2697
+    },
+    {
+      "id": "prov_165",
+      "color": [
+        144,
+        80,
+        176
+      ],
+      "center": [
+        672,
+        642
+      ],
+      "bbox": {
+        "x": 632,
+        "y": 594,
+        "w": 88,
+        "h": 91
+      },
+      "terrain": "hills",
+      "elevation": 204,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_154",
+        "prov_158",
+        "prov_175",
+        "prov_170",
+        "prov_187"
+      ],
+      "pixelCount": 4484
+    },
+    {
+      "id": "prov_166",
+      "color": [
+        112,
+        48,
+        160
+      ],
+      "center": [
+        509,
+        617
+      ],
+      "bbox": {
+        "x": 480,
+        "y": 602,
+        "w": 63,
+        "h": 32
+      },
+      "terrain": "hills",
+      "elevation": 204,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_151",
+        "prov_169",
+        "prov_168"
+      ],
+      "pixelCount": 1015
+    },
+    {
+      "id": "prov_167",
+      "color": [
+        128,
+        48,
+        128
+      ],
+      "center": [
+        957,
+        626
+      ],
+      "bbox": {
+        "x": 931,
+        "y": 604,
+        "w": 49,
+        "h": 46
+      },
+      "terrain": "plains",
+      "elevation": 186,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_155",
+        "prov_115",
+        "prov_156",
+        "prov_145",
+        "prov_163",
+        "prov_176"
+      ],
+      "pixelCount": 1130
+    },
+    {
+      "id": "prov_168",
+      "color": [
+        64,
+        128,
+        112
+      ],
+      "center": [
+        493,
+        669
+      ],
+      "bbox": {
+        "x": 335,
+        "y": 605,
+        "w": 267,
+        "h": 126
+      },
+      "terrain": "hills",
+      "elevation": 199,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_146",
+        "prov_151",
+        "prov_154",
+        "prov_166",
+        "prov_169",
+        "prov_174",
+        "prov_173",
+        "prov_159",
+        "prov_180",
+        "prov_149",
+        "prov_186",
+        "prov_183",
+        "prov_189",
+        "prov_191",
+        "prov_193"
+      ],
+      "pixelCount": 9926
+    },
+    {
+      "id": "prov_169",
+      "color": [
+        128,
+        48,
+        160
+      ],
+      "center": [
+        484,
+        630
+      ],
+      "bbox": {
+        "x": 452,
+        "y": 612,
+        "w": 60,
+        "h": 31
+      },
+      "terrain": "hills",
+      "elevation": 200,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_166",
+        "prov_151",
+        "prov_173",
+        "prov_168"
+      ],
+      "pixelCount": 689
+    },
+    {
+      "id": "prov_170",
+      "color": [
+        80,
+        112,
+        48
+      ],
+      "center": [
+        759,
+        673
+      ],
+      "bbox": {
+        "x": 709,
+        "y": 618,
+        "w": 123,
+        "h": 104
+      },
+      "terrain": "hills",
+      "elevation": 195,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_154",
+        "prov_163",
+        "prov_171",
+        "prov_158",
+        "prov_165",
+        "prov_187",
+        "prov_188",
+        "prov_177"
+      ],
+      "pixelCount": 5546
+    },
+    {
+      "id": "prov_171",
+      "color": [
+        96,
+        192,
+        80
+      ],
+      "center": [
+        805,
+        659
+      ],
+      "bbox": {
+        "x": 758,
+        "y": 623,
+        "w": 97,
+        "h": 84
+      },
+      "terrain": "hills",
+      "elevation": 198,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_170",
+        "prov_163",
+        "prov_177"
+      ],
+      "pixelCount": 4320
+    },
+    {
+      "id": "prov_172",
+      "color": [
+        176,
+        176,
+        144
+      ],
+      "center": [
+        1048,
+        676
+      ],
+      "bbox": {
+        "x": 985,
+        "y": 628,
+        "w": 127,
+        "h": 98
+      },
+      "terrain": "plains",
+      "elevation": 178,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_157",
+        "prov_162",
+        "prov_179",
+        "prov_195"
+      ],
+      "pixelCount": 5963
+    },
+    {
+      "id": "prov_173",
+      "color": [
+        112,
+        48,
+        160
+      ],
+      "center": [
+        465,
+        651
+      ],
+      "bbox": {
+        "x": 429,
+        "y": 633,
+        "w": 77,
+        "h": 37
+      },
+      "terrain": "hills",
+      "elevation": 197,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_169",
+        "prov_151",
+        "prov_168",
+        "prov_180"
+      ],
+      "pixelCount": 1616
+    },
+    {
+      "id": "prov_174",
+      "color": [
+        176,
+        112,
+        48
+      ],
+      "center": [
+        572,
+        663
+      ],
+      "bbox": {
+        "x": 536,
+        "y": 636,
+        "w": 72,
+        "h": 60
+      },
+      "terrain": "forest",
+      "elevation": 201,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_168",
+        "prov_154",
+        "prov_183",
+        "prov_175"
+      ],
+      "pixelCount": 1707
+    },
+    {
+      "id": "prov_175",
+      "color": [
+        96,
+        144,
+        96
+      ],
+      "center": [
+        605,
+        753
+      ],
+      "bbox": {
+        "x": 513,
+        "y": 636,
+        "w": 156,
+        "h": 190
+      },
+      "terrain": "forest",
+      "elevation": 191,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_154",
+        "prov_165",
+        "prov_181",
+        "prov_174",
+        "prov_187",
+        "prov_183",
+        "prov_196",
+        "prov_197",
+        "prov_193",
+        "prov_208",
+        "prov_204",
+        "prov_214",
+        "prov_218",
+        "prov_219"
+      ],
+      "pixelCount": 10366
+    },
+    {
+      "id": "prov_176",
+      "color": [
+        128,
+        48,
+        128
+      ],
+      "center": [
+        946,
+        650
+      ],
+      "bbox": {
+        "x": 913,
+        "y": 636,
+        "w": 60,
+        "h": 29
+      },
+      "terrain": "plains",
+      "elevation": 202,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_163",
+        "prov_177",
+        "prov_167",
+        "prov_115",
+        "prov_179"
+      ],
+      "pixelCount": 649
+    },
+    {
+      "id": "prov_177",
+      "color": [
+        112,
+        160,
+        144
+      ],
+      "center": [
+        877,
+        676
+      ],
+      "bbox": {
+        "x": 827,
+        "y": 647,
+        "w": 132,
+        "h": 88
+      },
+      "terrain": "plains",
+      "elevation": 191,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_163",
+        "prov_176",
+        "prov_178",
+        "prov_179",
+        "prov_171",
+        "prov_182",
+        "prov_170"
+      ],
+      "pixelCount": 2396
+    },
+    {
+      "id": "prov_178",
+      "color": [
+        48,
+        48,
+        128
+      ],
+      "center": [
+        907,
+        684
+      ],
+      "bbox": {
+        "x": 880,
+        "y": 651,
+        "w": 55,
+        "h": 63
+      },
+      "terrain": "plains",
+      "elevation": 190,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_177",
+        "prov_179",
+        "prov_182"
+      ],
+      "pixelCount": 1835
+    },
+    {
+      "id": "prov_179",
+      "color": [
+        112,
+        176,
+        80
+      ],
+      "center": [
+        943,
+        702
+      ],
+      "bbox": {
+        "x": 886,
+        "y": 662,
+        "w": 166,
+        "h": 90
+      },
+      "terrain": "plains",
+      "elevation": 186,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_177",
+        "prov_178",
+        "prov_176",
+        "prov_115",
+        "prov_162",
+        "prov_172",
+        "prov_192",
+        "prov_195",
+        "prov_182"
+      ],
+      "pixelCount": 4586
+    },
+    {
+      "id": "prov_180",
+      "color": [
+        48,
+        128,
+        112
+      ],
+      "center": [
+        425,
+        672
+      ],
+      "bbox": {
+        "x": 393,
+        "y": 663,
+        "w": 83,
+        "h": 20
+      },
+      "terrain": "hills",
+      "elevation": 189,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_168",
+        "prov_173"
+      ],
+      "pixelCount": 513
+    },
+    {
+      "id": "prov_181",
+      "color": [
+        80,
+        144,
+        96
+      ],
+      "center": [
+        628,
+        678
+      ],
+      "bbox": {
+        "x": 611,
+        "y": 665,
+        "w": 34,
+        "h": 27
+      },
+      "terrain": "hills",
+      "elevation": 201,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_175"
+      ],
+      "pixelCount": 405
+    },
+    {
+      "id": "prov_182",
+      "color": [
+        96,
+        160,
+        144
+      ],
+      "center": [
+        866,
+        711
+      ],
+      "bbox": {
+        "x": 836,
+        "y": 665,
+        "w": 65,
+        "h": 87
+      },
+      "terrain": "plains",
+      "elevation": 182,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_177",
+        "prov_178",
+        "prov_179"
+      ],
+      "pixelCount": 2477
+    },
+    {
+      "id": "prov_183",
+      "color": [
+        176,
+        112,
+        48
+      ],
+      "center": [
+        570,
+        698
+      ],
+      "bbox": {
+        "x": 539,
+        "y": 666,
+        "w": 70,
+        "h": 69
+      },
+      "terrain": "forest",
+      "elevation": 194,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_174",
+        "prov_168",
+        "prov_175",
+        "prov_193"
+      ],
+      "pixelCount": 2658
+    },
+    {
+      "id": "prov_184",
+      "color": [
+        96,
+        128,
+        160
+      ],
+      "center": [
+        273,
+        695
+      ],
+      "bbox": {
+        "x": 251,
+        "y": 672,
+        "w": 51,
+        "h": 81
+      },
+      "terrain": "plains",
+      "elevation": 160,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_160",
+        "prov_164",
+        "prov_186",
+        "prov_205"
+      ],
+      "pixelCount": 1346
+    },
+    {
+      "id": "prov_185",
+      "color": [
+        96,
+        144,
+        144
+      ],
+      "center": [
+        1820,
+        696
+      ],
+      "bbox": {
+        "x": 1766,
+        "y": 660,
+        "w": 136,
+        "h": 71
+      },
+      "terrain": "plains",
+      "elevation": 170,
+      "isLand": true,
+      "adjacentProvinces": [],
+      "pixelCount": 4753
+    },
+    {
+      "id": "prov_186",
+      "color": [
+        160,
+        144,
+        80
+      ],
+      "center": [
+        311,
+        717
+      ],
+      "bbox": {
+        "x": 275,
+        "y": 678,
+        "w": 84,
+        "h": 79
+      },
+      "terrain": "plains",
+      "elevation": 174,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_149",
+        "prov_168",
+        "prov_160",
+        "prov_184",
+        "prov_189",
+        "prov_205"
+      ],
+      "pixelCount": 3639
+    },
+    {
+      "id": "prov_187",
+      "color": [
+        48,
+        48,
+        128
+      ],
+      "center": [
+        680,
+        755
+      ],
+      "bbox": {
+        "x": 640,
+        "y": 682,
+        "w": 116,
+        "h": 152
+      },
+      "terrain": "plains",
+      "elevation": 198,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_175",
+        "prov_165",
+        "prov_170",
+        "prov_188",
+        "prov_197",
+        "prov_201",
+        "prov_196",
+        "prov_213",
+        "prov_218",
+        "prov_220",
+        "prov_222"
+      ],
+      "pixelCount": 6652
+    },
+    {
+      "id": "prov_188",
+      "color": [
+        208,
+        192,
+        96
+      ],
+      "center": [
+        757,
+        728
+      ],
+      "bbox": {
+        "x": 683,
+        "y": 689,
+        "w": 150,
+        "h": 81
+      },
+      "terrain": "hills",
+      "elevation": 180,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_187",
+        "prov_170",
+        "prov_201",
+        "prov_207"
+      ],
+      "pixelCount": 6215
+    },
+    {
+      "id": "prov_189",
+      "color": [
+        80,
+        64,
+        112
+      ],
+      "center": [
+        380,
+        712
+      ],
+      "bbox": {
+        "x": 299,
+        "y": 690,
+        "w": 173,
+        "h": 101
+      },
+      "terrain": "plains",
+      "elevation": 185,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_168",
+        "prov_191",
+        "prov_186",
+        "prov_205"
+      ],
+      "pixelCount": 2130
+    },
+    {
+      "id": "prov_190",
+      "color": [
+        144,
+        80,
+        80
+      ],
+      "center": [
+        1687,
+        713
+      ],
+      "bbox": {
+        "x": 1641,
+        "y": 690,
+        "w": 85,
+        "h": 41
+      },
+      "terrain": "plains",
+      "elevation": 161,
+      "isLand": true,
+      "adjacentProvinces": [],
+      "pixelCount": 1973
+    },
+    {
+      "id": "prov_191",
+      "color": [
+        80,
+        64,
+        128
+      ],
+      "center": [
+        378,
+        746
+      ],
+      "bbox": {
+        "x": 306,
+        "y": 693,
+        "w": 173,
+        "h": 114
+      },
+      "terrain": "plains",
+      "elevation": 187,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_189",
+        "prov_168",
+        "prov_193",
+        "prov_200",
+        "prov_209",
+        "prov_205"
+      ],
+      "pixelCount": 8897
+    },
+    {
+      "id": "prov_192",
+      "color": [
+        112,
+        48,
+        48
+      ],
+      "center": [
+        960,
+        737
+      ],
+      "bbox": {
+        "x": 925,
+        "y": 699,
+        "w": 94,
+        "h": 105
+      },
+      "terrain": "plains",
+      "elevation": 179,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_179",
+        "prov_195",
+        "prov_198"
+      ],
+      "pixelCount": 2617
+    },
+    {
+      "id": "prov_193",
+      "color": [
+        176,
+        112,
+        112
+      ],
+      "center": [
+        502,
+        741
+      ],
+      "bbox": {
+        "x": 442,
+        "y": 708,
+        "w": 128,
+        "h": 70
+      },
+      "terrain": "forest",
+      "elevation": 186,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_168",
+        "prov_191",
+        "prov_183",
+        "prov_175",
+        "prov_200",
+        "prov_204"
+      ],
+      "pixelCount": 5441
+    },
+    {
+      "id": "prov_194",
+      "color": [
+        192,
+        160,
+        112
+      ],
+      "center": [
+        1564,
+        747
+      ],
+      "bbox": {
+        "x": 1527,
+        "y": 710,
+        "w": 84,
+        "h": 73
+      },
+      "terrain": "plains",
+      "elevation": 154,
+      "isLand": true,
+      "adjacentProvinces": [],
+      "pixelCount": 3339
+    },
+    {
+      "id": "prov_195",
+      "color": [
+        48,
+        144,
+        48
+      ],
+      "center": [
+        1044,
+        734
+      ],
+      "bbox": {
+        "x": 987,
+        "y": 712,
+        "w": 104,
+        "h": 59
+      },
+      "terrain": "plains",
+      "elevation": 169,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_179",
+        "prov_172",
+        "prov_192",
+        "prov_199",
+        "prov_198"
+      ],
+      "pixelCount": 2548
+    },
+    {
+      "id": "prov_196",
+      "color": [
+        80,
+        144,
+        96
+      ],
+      "center": [
+        612,
+        750
+      ],
+      "bbox": {
+        "x": 559,
+        "y": 714,
+        "w": 109,
+        "h": 81
+      },
+      "terrain": "forest",
+      "elevation": 189,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_175",
+        "prov_197",
+        "prov_187"
+      ],
+      "pixelCount": 2598
+    },
+    {
+      "id": "prov_197",
+      "color": [
+        96,
+        144,
+        96
+      ],
+      "center": [
+        629,
+        750
+      ],
+      "bbox": {
+        "x": 601,
+        "y": 719,
+        "w": 61,
+        "h": 50
+      },
+      "terrain": "forest",
+      "elevation": 189,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_196",
+        "prov_175",
+        "prov_187"
+      ],
+      "pixelCount": 1288
+    },
+    {
+      "id": "prov_198",
+      "color": [
+        64,
+        160,
+        160
+      ],
+      "center": [
+        1007,
+        763
+      ],
+      "bbox": {
+        "x": 955,
+        "y": 727,
+        "w": 125,
+        "h": 74
+      },
+      "terrain": "plains",
+      "elevation": 174,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_192",
+        "prov_195"
+      ],
+      "pixelCount": 4807
+    },
+    {
+      "id": "prov_199",
+      "color": [
+        48,
+        144,
+        32
+      ],
+      "center": [
+        1051,
+        738
+      ],
+      "bbox": {
+        "x": 1032,
+        "y": 728,
+        "w": 44,
+        "h": 25
+      },
+      "terrain": "plains",
+      "elevation": 180,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_195"
+      ],
+      "pixelCount": 421
+    },
+    {
+      "id": "prov_200",
+      "color": [
+        128,
+        208,
+        208
+      ],
+      "center": [
+        427,
+        752
+      ],
+      "bbox": {
+        "x": 396,
+        "y": 737,
+        "w": 64,
+        "h": 37
+      },
+      "terrain": "forest",
+      "elevation": 187,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_191",
+        "prov_193",
+        "prov_203",
+        "prov_204",
+        "prov_209"
+      ],
+      "pixelCount": 833
+    },
+    {
+      "id": "prov_201",
+      "color": [
+        160,
+        80,
+        96
+      ],
+      "center": [
+        721,
+        771
+      ],
+      "bbox": {
+        "x": 697,
+        "y": 738,
+        "w": 79,
+        "h": 75
+      },
+      "terrain": "swamp",
+      "elevation": 188,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_187",
+        "prov_188",
+        "prov_207",
+        "prov_211",
+        "prov_213"
+      ],
+      "pixelCount": 2530
+    },
+    {
+      "id": "prov_202",
+      "color": [
+        96,
+        176,
+        112
+      ],
+      "center": [
+        1719,
+        774
+      ],
+      "bbox": {
+        "x": 1672,
+        "y": 742,
+        "w": 94,
+        "h": 77
+      },
+      "terrain": "plains",
+      "elevation": 178,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_206",
+        "prov_212"
+      ],
+      "pixelCount": 3252
+    },
+    {
+      "id": "prov_203",
+      "color": [
+        112,
+        208,
+        208
+      ],
+      "center": [
+        421,
+        787
+      ],
+      "bbox": {
+        "x": 385,
+        "y": 750,
+        "w": 75,
+        "h": 73
+      },
+      "terrain": "forest",
+      "elevation": 174,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_200",
+        "prov_204",
+        "prov_209",
+        "prov_217"
+      ],
+      "pixelCount": 2707
+    },
+    {
+      "id": "prov_204",
+      "color": [
+        128,
+        208,
+        208
+      ],
+      "center": [
+        513,
+        824
+      ],
+      "bbox": {
+        "x": 426,
+        "y": 753,
+        "w": 176,
+        "h": 187
+      },
+      "terrain": "hills",
+      "elevation": 164,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_200",
+        "prov_203",
+        "prov_193",
+        "prov_175",
+        "prov_214",
+        "prov_219",
+        "prov_218",
+        "prov_229",
+        "prov_230",
+        "prov_242"
+      ],
+      "pixelCount": 4308
+    },
+    {
+      "id": "prov_205",
+      "color": [
+        176,
+        48,
+        96
+      ],
+      "center": [
+        273,
+        810
+      ],
+      "bbox": {
+        "x": 216,
+        "y": 753,
+        "w": 170,
+        "h": 115
+      },
+      "terrain": "plains",
+      "elevation": 177,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_184",
+        "prov_186",
+        "prov_189",
+        "prov_191",
+        "prov_209",
+        "prov_216",
+        "prov_217"
+      ],
+      "pixelCount": 6526
+    },
+    {
+      "id": "prov_206",
+      "color": [
+        64,
+        64,
+        128
+      ],
+      "center": [
+        1724,
+        813
+      ],
+      "bbox": {
+        "x": 1685,
+        "y": 761,
+        "w": 81,
+        "h": 94
+      },
+      "terrain": "plains",
+      "elevation": 162,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_202",
+        "prov_212",
+        "prov_226"
+      ],
+      "pixelCount": 3009
+    },
+    {
+      "id": "prov_207",
+      "color": [
+        160,
+        80,
+        80
+      ],
+      "center": [
+        769,
+        779
+      ],
+      "bbox": {
+        "x": 747,
+        "y": 763,
+        "w": 54,
+        "h": 52
+      },
+      "terrain": "swamp",
+      "elevation": 155,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_201",
+        "prov_188",
+        "prov_211",
+        "prov_213"
+      ],
+      "pixelCount": 1110
+    },
+    {
+      "id": "prov_208",
+      "color": [
+        80,
+        144,
+        96
+      ],
+      "center": [
+        545,
+        774
+      ],
+      "bbox": {
+        "x": 526,
+        "y": 764,
+        "w": 49,
+        "h": 22
+      },
+      "terrain": "forest",
+      "elevation": 183,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_175"
+      ],
+      "pixelCount": 348
+    },
+    {
+      "id": "prov_209",
+      "color": [
+        128,
+        208,
+        208
+      ],
+      "center": [
+        387,
+        791
+      ],
+      "bbox": {
+        "x": 368,
+        "y": 766,
+        "w": 43,
+        "h": 56
+      },
+      "terrain": "forest",
+      "elevation": 177,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_191",
+        "prov_200",
+        "prov_203",
+        "prov_205",
+        "prov_217"
+      ],
+      "pixelCount": 973
+    },
+    {
+      "id": "prov_210",
+      "color": [
+        112,
+        112,
+        64
+      ],
+      "center": [
+        1431,
+        836
+      ],
+      "bbox": {
+        "x": 1381,
+        "y": 773,
+        "w": 165,
+        "h": 135
+      },
+      "terrain": "plains",
+      "elevation": 177,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_215",
+        "prov_223",
+        "prov_225",
+        "prov_238",
+        "prov_231",
+        "prov_240"
+      ],
+      "pixelCount": 7224
+    },
+    {
+      "id": "prov_211",
+      "color": [
+        160,
+        64,
+        80
+      ],
+      "center": [
+        738,
+        798
+      ],
+      "bbox": {
+        "x": 712,
+        "y": 781,
+        "w": 54,
+        "h": 36
+      },
+      "terrain": "swamp",
+      "elevation": 183,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_201",
+        "prov_207",
+        "prov_213"
+      ],
+      "pixelCount": 797
+    },
+    {
+      "id": "prov_212",
+      "color": [
+        128,
+        64,
+        144
+      ],
+      "center": [
+        1666,
+        828
+      ],
+      "bbox": {
+        "x": 1622,
+        "y": 783,
+        "w": 94,
+        "h": 90
+      },
+      "terrain": "plains",
+      "elevation": 205,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_202",
+        "prov_206",
+        "prov_215",
+        "prov_221",
+        "prov_226",
+        "prov_225"
+      ],
+      "pixelCount": 3881
+    },
+    {
+      "id": "prov_213",
+      "color": [
+        160,
+        80,
+        80
+      ],
+      "center": [
+        746,
+        813
+      ],
+      "bbox": {
+        "x": 699,
+        "y": 797,
+        "w": 81,
+        "h": 30
+      },
+      "terrain": "swamp",
+      "elevation": 179,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_211",
+        "prov_207",
+        "prov_187",
+        "prov_201",
+        "prov_220"
+      ],
+      "pixelCount": 1126
+    },
+    {
+      "id": "prov_214",
+      "color": [
+        208,
+        160,
+        144
+      ],
+      "center": [
+        537,
+        818
+      ],
+      "bbox": {
+        "x": 515,
+        "y": 805,
+        "w": 74,
+        "h": 39
+      },
+      "terrain": "forest",
+      "elevation": 174,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_204",
+        "prov_175",
+        "prov_219"
+      ],
+      "pixelCount": 760
+    },
+    {
+      "id": "prov_215",
+      "color": [
+        144,
+        192,
+        112
+      ],
+      "center": [
+        1565,
+        836
+      ],
+      "bbox": {
+        "x": 1496,
+        "y": 805,
+        "w": 155,
+        "h": 66
+      },
+      "terrain": "plains",
+      "elevation": 200,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_221",
+        "prov_212",
+        "prov_210",
+        "prov_225"
+      ],
+      "pixelCount": 5119
+    },
+    {
+      "id": "prov_216",
+      "color": [
+        160,
+        192,
+        64
+      ],
+      "center": [
+        266,
+        875
+      ],
+      "bbox": {
+        "x": 196,
+        "y": 809,
+        "w": 157,
+        "h": 121
+      },
+      "terrain": "plains",
+      "elevation": 170,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_205",
+        "prov_217"
+      ],
+      "pixelCount": 7867
+    },
+    {
+      "id": "prov_217",
+      "color": [
+        64,
+        160,
+        96
+      ],
+      "center": [
+        363,
+        847
+      ],
+      "bbox": {
+        "x": 319,
+        "y": 810,
+        "w": 108,
+        "h": 87
+      },
+      "terrain": "plains",
+      "elevation": 170,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_205",
+        "prov_209",
+        "prov_203",
+        "prov_216"
+      ],
+      "pixelCount": 4798
+    },
+    {
+      "id": "prov_218",
+      "color": [
+        208,
+        160,
+        144
+      ],
+      "center": [
+        616,
+        852
+      ],
+      "bbox": {
+        "x": 536,
+        "y": 816,
+        "w": 163,
+        "h": 99
+      },
+      "terrain": "forest",
+      "elevation": 185,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_175",
+        "prov_219",
+        "prov_187",
+        "prov_222",
+        "prov_204",
+        "prov_228",
+        "prov_229",
+        "prov_236",
+        "prov_242"
+      ],
+      "pixelCount": 5257
+    },
+    {
+      "id": "prov_219",
+      "color": [
+        208,
+        176,
+        144
+      ],
+      "center": [
+        559,
+        830
+      ],
+      "bbox": {
+        "x": 522,
+        "y": 817,
+        "w": 90,
+        "h": 32
+      },
+      "terrain": "forest",
+      "elevation": 176,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_214",
+        "prov_175",
+        "prov_218",
+        "prov_204"
+      ],
+      "pixelCount": 1201
+    },
+    {
+      "id": "prov_220",
+      "color": [
+        128,
+        128,
+        112
+      ],
+      "center": [
+        784,
+        854
+      ],
+      "bbox": {
+        "x": 711,
+        "y": 818,
+        "w": 142,
+        "h": 91
+      },
+      "terrain": "swamp",
+      "elevation": 165,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_213",
+        "prov_187",
+        "prov_222",
+        "prov_233"
+      ],
+      "pixelCount": 4241
+    },
+    {
+      "id": "prov_221",
+      "color": [
+        64,
+        96,
+        160
+      ],
+      "center": [
+        1619,
+        844
+      ],
+      "bbox": {
+        "x": 1595,
+        "y": 827,
+        "w": 48,
+        "h": 36
+      },
+      "terrain": "plains",
+      "elevation": 202,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_215",
+        "prov_212"
+      ],
+      "pixelCount": 1179
+    },
+    {
+      "id": "prov_222",
+      "color": [
+        96,
+        112,
+        176
+      ],
+      "center": [
+        752,
+        879
+      ],
+      "bbox": {
+        "x": 659,
+        "y": 828,
+        "w": 206,
+        "h": 112
+      },
+      "terrain": "plains",
+      "elevation": 174,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_218",
+        "prov_187",
+        "prov_220",
+        "prov_227",
+        "prov_228",
+        "prov_233"
+      ],
+      "pixelCount": 6761
+    },
+    {
+      "id": "prov_223",
+      "color": [
+        160,
+        112,
+        192
+      ],
+      "center": [
+        1478,
+        874
+      ],
+      "bbox": {
+        "x": 1452,
+        "y": 847,
+        "w": 83,
+        "h": 53
+      },
+      "terrain": "plains",
+      "elevation": 202,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_210",
+        "prov_225",
+        "prov_238",
+        "prov_241"
+      ],
+      "pixelCount": 2029
+    },
+    {
+      "id": "prov_224",
+      "color": [
+        128,
+        48,
+        160
+      ],
+      "center": [
+        1277,
+        886
+      ],
+      "bbox": {
+        "x": 1247,
+        "y": 847,
+        "w": 86,
+        "h": 77
+      },
+      "terrain": "plains",
+      "elevation": 190,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_231",
+        "prov_239",
+        "prov_243",
+        "prov_240"
+      ],
+      "pixelCount": 3106
+    },
+    {
+      "id": "prov_225",
+      "color": [
+        96,
+        96,
+        112
+      ],
+      "center": [
+        1543,
+        877
+      ],
+      "bbox": {
+        "x": 1494,
+        "y": 851,
+        "w": 180,
+        "h": 51
+      },
+      "terrain": "plains",
+      "elevation": 229,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_210",
+        "prov_223",
+        "prov_215",
+        "prov_232",
+        "prov_212",
+        "prov_226",
+        "prov_234",
+        "prov_241"
+      ],
+      "pixelCount": 3254
+    },
+    {
+      "id": "prov_226",
+      "color": [
+        64,
+        176,
+        128
+      ],
+      "center": [
+        1694,
+        867
+      ],
+      "bbox": {
+        "x": 1664,
+        "y": 852,
+        "w": 61,
+        "h": 35
+      },
+      "terrain": "plains",
+      "elevation": 167,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_212",
+        "prov_206",
+        "prov_225",
+        "prov_232",
+        "prov_235"
+      ],
+      "pixelCount": 1246
+    },
+    {
+      "id": "prov_227",
+      "color": [
+        192,
+        144,
+        80
+      ],
+      "center": [
+        697,
+        878
+      ],
+      "bbox": {
+        "x": 672,
+        "y": 858,
+        "w": 56,
+        "h": 40
+      },
+      "terrain": "plains",
+      "elevation": 173,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_222",
+        "prov_228"
+      ],
+      "pixelCount": 1359
+    },
+    {
+      "id": "prov_228",
+      "color": [
+        112,
+        48,
+        160
+      ],
+      "center": [
+        656,
+        897
+      ],
+      "bbox": {
+        "x": 617,
+        "y": 859,
+        "w": 111,
+        "h": 71
+      },
+      "terrain": "plains",
+      "elevation": 167,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_218",
+        "prov_222",
+        "prov_227",
+        "prov_236"
+      ],
+      "pixelCount": 3161
+    },
+    {
+      "id": "prov_229",
+      "color": [
+        48,
+        64,
+        160
+      ],
+      "center": [
+        568,
+        881
+      ],
+      "bbox": {
+        "x": 546,
+        "y": 861,
+        "w": 64,
+        "h": 45
+      },
+      "terrain": "plains",
+      "elevation": 181,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_204",
+        "prov_218",
+        "prov_230",
+        "prov_242"
+      ],
+      "pixelCount": 1662
+    },
+    {
+      "id": "prov_230",
+      "color": [
+        48,
+        64,
+        144
+      ],
+      "center": [
+        544,
+        889
+      ],
+      "bbox": {
+        "x": 535,
+        "y": 863,
+        "w": 27,
+        "h": 46
+      },
+      "terrain": "forest",
+      "elevation": 173,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_204",
+        "prov_229",
+        "prov_242"
+      ],
+      "pixelCount": 544
+    },
+    {
+      "id": "prov_231",
+      "color": [
+        192,
+        80,
+        48
+      ],
+      "center": [
+        1336,
+        881
+      ],
+      "bbox": {
+        "x": 1297,
+        "y": 856,
+        "w": 101,
+        "h": 48
+      },
+      "terrain": "plains",
+      "elevation": 175,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_224",
+        "prov_239",
+        "prov_240",
+        "prov_210"
+      ],
+      "pixelCount": 2082
+    },
+    {
+      "id": "prov_232",
+      "color": [
+        176,
+        144,
+        48
+      ],
+      "center": [
+        1634,
+        887
+      ],
+      "bbox": {
+        "x": 1585,
+        "y": 872,
+        "w": 115,
+        "h": 41
+      },
+      "terrain": "plains",
+      "elevation": 211,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_225",
+        "prov_234",
+        "prov_226",
+        "prov_235"
+      ],
+      "pixelCount": 1936
+    },
+    {
+      "id": "prov_233",
+      "color": [
+        128,
+        128,
+        96
+      ],
+      "center": [
+        831,
+        904
+      ],
+      "bbox": {
+        "x": 791,
+        "y": 873,
+        "w": 73,
+        "h": 61
+      },
+      "terrain": "plains",
+      "elevation": 151,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_220",
+        "prov_222"
+      ],
+      "pixelCount": 615
+    },
+    {
+      "id": "prov_234",
+      "color": [
+        208,
+        64,
+        176
+      ],
+      "center": [
+        1584,
+        903
+      ],
+      "bbox": {
+        "x": 1548,
+        "y": 875,
+        "w": 115,
+        "h": 54
+      },
+      "terrain": "plains",
+      "elevation": 181,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_225",
+        "prov_232",
+        "prov_241",
+        "prov_235",
+        "prov_245"
+      ],
+      "pixelCount": 2528
+    },
+    {
+      "id": "prov_235",
+      "color": [
+        112,
+        144,
+        48
+      ],
+      "center": [
+        1688,
+        914
+      ],
+      "bbox": {
+        "x": 1645,
+        "y": 879,
+        "w": 81,
+        "h": 72
+      },
+      "terrain": "plains",
+      "elevation": 169,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_232",
+        "prov_226",
+        "prov_234"
+      ],
+      "pixelCount": 3616
+    },
+    {
+      "id": "prov_236",
+      "color": [
+        96,
+        160,
+        160
+      ],
+      "center": [
+        608,
+        905
+      ],
+      "bbox": {
+        "x": 583,
+        "y": 880,
+        "w": 65,
+        "h": 49
+      },
+      "terrain": "plains",
+      "elevation": 145,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_218",
+        "prov_228",
+        "prov_242"
+      ],
+      "pixelCount": 1021
+    },
+    {
+      "id": "prov_237",
+      "color": [
+        112,
+        96,
+        48
+      ],
+      "center": [
+        1216,
+        905
+      ],
+      "bbox": {
+        "x": 1181,
+        "y": 878,
+        "w": 75,
+        "h": 59
+      },
+      "terrain": "plains",
+      "elevation": 185,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_243",
+        "prov_248"
+      ],
+      "pixelCount": 2649
+    },
+    {
+      "id": "prov_238",
+      "color": [
+        160,
+        96,
+        128
+      ],
+      "center": [
+        1431,
+        898
+      ],
+      "bbox": {
+        "x": 1398,
+        "y": 880,
+        "w": 97,
+        "h": 37
+      },
+      "terrain": "plains",
+      "elevation": 217,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_210",
+        "prov_223",
+        "prov_241",
+        "prov_244",
+        "prov_240"
+      ],
+      "pixelCount": 1457
+    },
+    {
+      "id": "prov_239",
+      "color": [
+        208,
+        80,
+        48
+      ],
+      "center": [
+        1321,
+        902
+      ],
+      "bbox": {
+        "x": 1297,
+        "y": 888,
+        "w": 47,
+        "h": 28
+      },
+      "terrain": "plains",
+      "elevation": 207,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_231",
+        "prov_240",
+        "prov_224"
+      ],
+      "pixelCount": 771
+    },
+    {
+      "id": "prov_240",
+      "color": [
+        48,
+        112,
+        64
+      ],
+      "center": [
+        1366,
+        916
+      ],
+      "bbox": {
+        "x": 1321,
+        "y": 894,
+        "w": 101,
+        "h": 42
+      },
+      "terrain": "plains",
+      "elevation": 210,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_231",
+        "prov_239",
+        "prov_210",
+        "prov_238",
+        "prov_224",
+        "prov_244",
+        "prov_243",
+        "prov_246"
+      ],
+      "pixelCount": 2379
+    },
+    {
+      "id": "prov_241",
+      "color": [
+        112,
+        48,
+        48
+      ],
+      "center": [
+        1490,
+        914
+      ],
+      "bbox": {
+        "x": 1448,
+        "y": 899,
+        "w": 108,
+        "h": 44
+      },
+      "terrain": "plains",
+      "elevation": 214,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_238",
+        "prov_223",
+        "prov_225",
+        "prov_234",
+        "prov_245",
+        "prov_244",
+        "prov_247"
+      ],
+      "pixelCount": 2231
+    },
+    {
+      "id": "prov_242",
+      "color": [
+        64,
+        64,
+        160
+      ],
+      "center": [
+        569,
+        918
+      ],
+      "bbox": {
+        "x": 545,
+        "y": 904,
+        "w": 48,
+        "h": 33
+      },
+      "terrain": "plains",
+      "elevation": 167,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_229",
+        "prov_230",
+        "prov_218",
+        "prov_204",
+        "prov_236"
+      ],
+      "pixelCount": 831
+    },
+    {
+      "id": "prov_243",
+      "color": [
+        144,
+        128,
+        160
+      ],
+      "center": [
+        1265,
+        926
+      ],
+      "bbox": {
+        "x": 1233,
+        "y": 906,
+        "w": 110,
+        "h": 41
+      },
+      "terrain": "plains",
+      "elevation": 215,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_237",
+        "prov_224",
+        "prov_246",
+        "prov_240",
+        "prov_248"
+      ],
+      "pixelCount": 1754
+    },
+    {
+      "id": "prov_244",
+      "color": [
+        208,
+        176,
+        128
+      ],
+      "center": [
+        1386,
+        948
+      ],
+      "bbox": {
+        "x": 1300,
+        "y": 906,
+        "w": 206,
+        "h": 84
+      },
+      "terrain": "plains",
+      "elevation": 178,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_238",
+        "prov_241",
+        "prov_240",
+        "prov_246",
+        "prov_247",
+        "prov_249"
+      ],
+      "pixelCount": 5642
+    },
+    {
+      "id": "prov_245",
+      "color": [
+        96,
+        160,
+        192
+      ],
+      "center": [
+        1533,
+        935
+      ],
+      "bbox": {
+        "x": 1491,
+        "y": 913,
+        "w": 98,
+        "h": 57
+      },
+      "terrain": "plains",
+      "elevation": 168,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_241",
+        "prov_234",
+        "prov_247"
+      ],
+      "pixelCount": 2397
+    },
+    {
+      "id": "prov_246",
+      "color": [
+        96,
+        192,
+        96
+      ],
+      "center": [
+        1293,
+        949
+      ],
+      "bbox": {
+        "x": 1228,
+        "y": 924,
+        "w": 135,
+        "h": 46
+      },
+      "terrain": "plains",
+      "elevation": 198,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_243",
+        "prov_240",
+        "prov_244",
+        "prov_248",
+        "prov_249"
+      ],
+      "pixelCount": 2761
+    },
+    {
+      "id": "prov_247",
+      "color": [
+        64,
+        96,
+        96
+      ],
+      "center": [
+        1489,
+        956
+      ],
+      "bbox": {
+        "x": 1435,
+        "y": 925,
+        "w": 134,
+        "h": 47
+      },
+      "terrain": "plains",
+      "elevation": 179,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_241",
+        "prov_245",
+        "prov_244"
+      ],
+      "pixelCount": 2632
+    },
+    {
+      "id": "prov_248",
+      "color": [
+        112,
+        96,
+        48
+      ],
+      "center": [
+        1155,
+        947
+      ],
+      "bbox": {
+        "x": 1086,
+        "y": 921,
+        "w": 188,
+        "h": 62
+      },
+      "terrain": "plains",
+      "elevation": 173,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_237",
+        "prov_249",
+        "prov_243",
+        "prov_246"
+      ],
+      "pixelCount": 4418
+    },
+    {
+      "id": "prov_249",
+      "color": [
+        144,
+        64,
+        80
+      ],
+      "center": [
+        1227,
+        964
+      ],
+      "bbox": {
+        "x": 1184,
+        "y": 938,
+        "w": 147,
+        "h": 55
+      },
+      "terrain": "plains",
+      "elevation": 158,
+      "isLand": true,
+      "adjacentProvinces": [
+        "prov_248",
+        "prov_246",
+        "prov_244"
+      ],
+      "pixelCount": 2013
+    }
+  ],
+  "colorToProvinceId": {
+    "101010": "prov_80",
+    "207080": "prov_139",
+    "303080": "prov_187",
+    "304060": "prov_122",
+    "304090": "prov_230",
+    "305080": "prov_63",
+    "306020": "prov_130",
+    "306030": "prov_134",
+    "306070": "prov_120",
+    "306080": "prov_72",
+    "307040": "prov_240",
+    "307060": "prov_135",
+    "308050": "prov_79",
+    "308070": "prov_180",
+    "309020": "prov_199",
+    "309030": "prov_195",
+    "403050": "prov_20",
+    "403060": "prov_87",
+    "403070": "prov_126",
+    "404040": "prov_53",
+    "404060": "prov_92",
+    "404080": "prov_206",
+    "406030": "prov_136",
+    "406060": "prov_247",
+    "408070": "prov_168",
+    "504030": "prov_93",
+    "504060": "prov_17",
+    "504070": "prov_189",
+    "504080": "prov_191",
+    "505050": "prov_85",
+    "506030": "prov_95",
+    "507030": "prov_170",
+    "507040": "prov_8",
+    "507070": "prov_144",
+    "508050": "prov_24",
+    "509060": "prov_208",
+    "603030": "prov_132",
+    "603040": "prov_39",
+    "603050": "prov_31",
+    "603090": "prov_56",
+    "606070": "prov_225",
+    "608030": "prov_36",
+    "608090": "prov_98",
+    "609060": "prov_197",
+    "609090": "prov_185",
+    "703030": "prov_241",
+    "705090": "prov_18",
+    "706030": "prov_248",
+    "707040": "prov_210",
+    "707070": "prov_67",
+    "708050": "prov_57",
+    "708080": "prov_109",
+    "709030": "prov_235",
+    "802040": "prov_119",
+    "803080": "prov_176",
+    "804090": "prov_212",
+    "805040": "prov_60",
+    "805070": "prov_71",
+    "806050": "prov_123",
+    "808060": "prov_233",
+    "808070": "prov_220",
+    "902060": "prov_12",
+    "904030": "prov_121",
+    "904040": "prov_54",
+    "904050": "prov_249",
+    "905050": "prov_190",
+    "905070": "prov_84",
+    "906060": "prov_163",
+    "908030": "prov_26",
+    "908040": "prov_27",
+    "4050a0": "prov_7",
+    "d09060": "prov_9",
+    "d05050": "prov_13",
+    "90e040": "prov_14",
+    "40b050": "prov_15",
+    "40c050": "prov_16",
+    "5060c0": "prov_19",
+    "80a080": "prov_22",
+    "b040b0": "prov_112",
+    "80a090": "prov_29",
+    "c0b090": "prov_62",
+    "d0c050": "prov_33",
+    "d0a060": "prov_34",
+    "c0c090": "prov_52",
+    "d0c060": "prov_188",
+    "6090c0": "prov_41",
+    "a090c0": "prov_42",
+    "a0d0a0": "prov_44",
+    "a04040": "prov_46",
+    "b05050": "prov_47",
+    "b08020": "prov_48",
+    "b07090": "prov_49",
+    "d0c040": "prov_51",
+    "b08030": "prov_55",
+    "8070c0": "prov_58",
+    "b080b0": "prov_150",
+    "c0d050": "prov_61",
+    "b0a020": "prov_64",
+    "3090b0": "prov_65",
+    "c080b0": "prov_66",
+    "a0a020": "prov_68",
+    "3080a0": "prov_69",
+    "4090b0": "prov_70",
+    "d05030": "prov_239",
+    "30b040": "prov_75",
+    "60c080": "prov_76",
+    "30a050": "prov_77",
+    "50b060": "prov_89",
+    "50b050": "prov_81",
+    "30b050": "prov_83",
+    "40b090": "prov_108",
+    "60a0b0": "prov_88",
+    "70a0b0": "prov_90",
+    "c0d040": "prov_91",
+    "c07070": "prov_94",
+    "d0b0c0": "prov_110",
+    "60a080": "prov_104",
+    "e0b0c0": "prov_99",
+    "c0c040": "prov_156",
+    "e060c0": "prov_101",
+    "4030a0": "prov_102",
+    "30b090": "prov_105",
+    "a0d090": "prov_107",
+    "30a060": "prov_111",
+    "b07070": "prov_193",
+    "b03070": "prov_125",
+    "6070c0": "prov_117",
+    "a06050": "prov_118",
+    "b0b090": "prov_172",
+    "80b030": "prov_127",
+    "b09060": "prov_129",
+    "60b040": "prov_131",
+    "c08030": "prov_133",
+    "70b0b0": "prov_137",
+    "d06020": "prov_138",
+    "b03090": "prov_152",
+    "b030a0": "prov_141",
+    "d0d0a0": "prov_142",
+    "c0a070": "prov_194",
+    "c0c030": "prov_145",
+    "b04040": "prov_146",
+    "b0c030": "prov_147",
+    "a0a060": "prov_148",
+    "9040a0": "prov_149",
+    "80a030": "prov_151",
+    "d06090": "prov_153",
+    "b07030": "prov_183",
+    "7070b0": "prov_162",
+    "3060c0": "prov_158",
+    "e08080": "prov_159",
+    "60a040": "prov_160",
+    "7070c0": "prov_161",
+    "60a030": "prov_164",
+    "9050b0": "prov_165",
+    "7030a0": "prov_228",
+    "8030a0": "prov_224",
+    "60c050": "prov_171",
+    "70a090": "prov_177",
+    "70b050": "prov_179",
+    "60a090": "prov_182",
+    "6080a0": "prov_184",
+    "a09050": "prov_186",
+    "40a0a0": "prov_198",
+    "80d0d0": "prov_209",
+    "a05060": "prov_201",
+    "60b070": "prov_202",
+    "70d0d0": "prov_203",
+    "b03060": "prov_205",
+    "a05050": "prov_213",
+    "a04050": "prov_211",
+    "d0a090": "prov_218",
+    "90c070": "prov_215",
+    "a0c040": "prov_216",
+    "40a060": "prov_217",
+    "d0b090": "prov_219",
+    "4060a0": "prov_221",
+    "6070b0": "prov_222",
+    "a070c0": "prov_223",
+    "40b080": "prov_226",
+    "c09050": "prov_227",
+    "3040a0": "prov_229",
+    "c05030": "prov_231",
+    "b09030": "prov_232",
+    "d040b0": "prov_234",
+    "60a0a0": "prov_236",
+    "a06080": "prov_238",
+    "4040a0": "prov_242",
+    "9080a0": "prov_243",
+    "d0b080": "prov_244",
+    "60a0c0": "prov_245",
+    "60c060": "prov_246"
+  }
+}

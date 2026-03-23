@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Zundral - Game Flowcharts</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  body { background: #1a1a2e; color: #e0e0e0; font-family: 'Segoe UI', sans-serif; padding: 40px; max-width: 1400px; margin: 0 auto; }
+  h1 { color: #00d4ff; text-align: center; font-size: 2em; margin-bottom: 40px; }
+  h2 { color: #ffd700; margin-top: 50px; padding: 10px 20px; background: #16213e; border-left: 4px solid #ffd700; }
+  .mermaid { background: #0f3460; border-radius: 12px; padding: 30px; margin: 20px 0; }
+  .legend { display: flex; gap: 20px; justify-content: center; margin: 30px 0; flex-wrap: wrap; }
+  .legend-item { padding: 8px 16px; border-radius: 6px; font-weight: bold; font-size: 14px; }
+  .green { background: #2ecc71; color: #fff; }
+  .yellow { background: #f39c12; color: #fff; }
+  .red { background: #e74c3c; color: #fff; }
+  hr { border: 1px solid #16213e; margin: 40px 0; }
+</style>
+</head>
+<body>
+
+<h1>ZUNDRAL - Game Flowcharts (Current State)</h1>
+
+<div class="legend">
+  <span class="legend-item green">Working</span>
+  <span class="legend-item yellow">Partial</span>
+  <span class="legend-item red">Placeholder / Not Implemented</span>
+</div>
+
+<hr>
+
+<h2>1. NAVIGATION FLOW</h2>
+<div class="mermaid">
+graph LR
+    subgraph TOP_BAR["Top Bar - Always Visible"]
+        POP["Pop 15/50"]
+        TAX["Taxes"]
+        RES["Wood | Stone | Food | Iron | Gold"]
+    end
+
+    subgraph TABS["Main Tabs"]
+        B["Buildings"]
+        C["Council"]
+        A["Army"]
+        MI["Missions"]
+        EX["Expeditions"]
+        LB["Leaderboard"]
+        FA["Factions"]
+        BL["Blacksmith"]
+        TE["Technologies"]
+    end
+
+    A --> A1["Mercenaries"]
+    A --> A2["Regular Army"]
+    A2 --> A3["Banner List"]
+    A3 --> A4["+ Form New"]
+    A3 --> A5["Edit"]
+    A3 --> A6["Train"]
+</div>
+
+<hr>
+
+<h2>2. GAME LOOP (1 tick = 1 second)</h2>
+<div class="mermaid">
+graph TD
+    TICK["TICK every 1 sec"] --> G["Gold += taxes"]
+    G --> PROD["Resources += production rates"]
+    PROD --> FOOD["Food: produce then consume"]
+    FOOD --> POP{"Food > 0?"}
+    POP -->|"Yes"| GROW["Pop += growth rate"]
+    POP -->|"No"| STARVE["Pop -= 1"]
+    GROW --> TRAIN["Banner Training"]
+    STARVE --> TRAIN
+    TRAIN -->|"per banner"| T1["Pop -= 1 | Iron -= cost | Squad += 1"]
+    T1 --> DONE{"All squads full?"}
+    DONE -->|"Yes"| READY["Banner READY"]
+    DONE -->|"No"| MISSION["Mission Tick"]
+    READY --> MISSION
+    MISSION -->|"elapsed++"| MCHECK{"Time up?"}
+    MCHECK -->|"Yes"| BATTLE["Battle!"]
+    MCHECK -->|"No"| SAVE["Auto-save"]
+    BATTLE --> SAVE
+</div>
+
+<hr>
+
+<h2>3. RESOURCE SYSTEM</h2>
+<div class="mermaid">
+graph TD
+    subgraph PRODUCE["Production"]
+        LM["Lumber Mill"] -->|"workers x level"| WOOD["Wood /sec"]
+        QU["Quarry"] -->|"workers x level"| STONE["Stone /sec"]
+        FM["Farm"] -->|"workers x level"| FOODP["Food /sec"]
+        IM["Iron Mine"] -->|"workers x level"| IRON["Iron /sec"]
+        TAX["Population x Tax"] --> GOLD["Gold /sec"]
+    end
+
+    subgraph STORE["Storage"]
+        WOOD --> WH["Warehouse"]
+        STONE --> WH
+        FOODP --> WH
+        IRON --> WH
+        GOLD --> WH
+    end
+
+    subgraph SPEND["Spending"]
+        WH -->|"wood + stone"| UPG["Building Upgrades"]
+        WH -->|"iron"| RECRUIT["Train Soldiers"]
+        WH -->|"iron + gold"| SMITH["Blacksmith"]
+        WH -->|"gold"| MERC["Buy Mercenaries"]
+        WH -->|"food /sec"| FEED["Feed Population"]
+    end
+</div>
+
+<hr>
+
+<h2>4. BUILDING SYSTEM</h2>
+<div class="mermaid">
+graph TD
+    TH["Town Hall L1-3"] -->|"L1 unlocks"| RES_B["Lumber Mill | Quarry | Farm | Iron Mine"]
+    TH -->|"L1 unlocks"| SUP_B["House | Warehouse"]
+    TH -->|"L2 unlocks"| MIL_B["Barracks | Tavern"]
+    TH -->|"L2 unlocks"| ACA["Military Academy"]
+
+    RES_B -->|"level up"| EFF1["+25% production | +30% capacity"]
+    SUP_B -->|"House level up"| EFF2["+5 pop cap"]
+    SUP_B -->|"Warehouse level up"| EFF3["+30% all resource caps"]
+    MIL_B -->|"Barracks level up"| EFF4["Training slots: min(level, 3)"]
+    MIL_B -->|"Tavern level up"| EFF5["+happiness | Festival"]
+    ACA -->|"level up"| EFF6["NO EFFECT YET"]
+
+    style ACA fill:#e74c3c,color:#fff
+    style EFF6 fill:#e74c3c,color:#fff
+</div>
+
+<hr>
+
+<h2>5. RECRUITING / MILITARY</h2>
+<div class="mermaid">
+graph TD
+    subgraph REGULAR["Regular Army"]
+        NEW["+ Form Banner"] --> SLOTS["8 Squad Slots"]
+        SLOTS --> PICK["Pick Unit Type"]
+        PICK --> PIKE["Pikemen"]
+        PICK --> WARR["Warrior"]
+        PICK --> ARCH["Archer"]
+        PICK --> MIL["Militia"]
+        PICK --> OTHER["+ 5 more types"]
+        PIKE --> IDLE["Banner IDLE 0/10"]
+        WARR --> IDLE
+        ARCH --> IDLE
+        MIL --> IDLE
+        IDLE -->|"Train"| TRAINING["TRAINING: 1 pop + iron /sec"]
+        TRAINING -->|"all squads full"| READY["READY for deployment"]
+    end
+
+    subgraph MERCS["Mercenaries"]
+        PAY["Pay 50 Gold"] --> TPL["Pick Template"]
+        TPL --> MW["Warriors x8"]
+        TPL --> MA["Archers x8"]
+        TPL --> MM["Mixed x8"]
+        MW --> ARRIVE["Arrives via Queue"]
+        MA --> ARRIVE
+        MM --> ARRIVE
+        ARRIVE --> MREADY["READY instantly"]
+    end
+
+    subgraph CMD["Commanders"]
+        HIRE["Recruit"] --> ASSIGN["Assign to Banner"]
+        ASSIGN --> BONUS["+10-20% attack/defence"]
+        ASSIGN -->|"battles"| LVLUP["Gain XP, Level 1-99"]
+    end
+</div>
+
+<hr>
+
+<h2>6. MISSION SYSTEM</h2>
+<div class="mermaid">
+graph LR
+    POOL["20 Mission Pool"] --> SHOW["3 Shown"]
+    SHOW --> STAGE["Stage Banner"]
+    STAGE --> DEPLOY["Deploy"]
+    DEPLOY -->|"3 sec"| BATTLE["Battle!"]
+    BATTLE --> SKIM["Phase 1: Skirmish"]
+    SKIM --> MELEE["Phase 2: Melee"]
+    MELEE --> PURSUIT["Phase 3: Pursuit"]
+    PURSUIT --> RESULT{"Win?"}
+    RESULT -->|"Yes"| REWARDS["Gold + Resources + XP"]
+    RESULT -->|"No"| RETRY["Can Retry"]
+    REWARDS --> SCORE["Leaderboard Updated"]
+</div>
+
+<hr>
+
+<h2>7. EXPEDITION SYSTEM (Incomplete)</h2>
+<div class="mermaid">
+graph TD
+    EXP["1 Expedition Available"] --> FUND["Fund: 500W 250S 1000F 5Pop"]
+    FUND --> LAUNCH["Launch - 3 sec"]
+    LAUNCH --> FORT["Fortress Created"]
+    FORT --> BUILDINGS["Wall | Gatehouse | Watch Post | Barracks | Stable | Storehouse"]
+    FORT --> GARRISON["Assign Garrison"]
+
+    FORT --> TODO1["Siege Battles - PARTIAL"]
+    FORT --> TODO2["Enemy Waves - NOT DONE"]
+    FORT --> TODO3["Expand - NOT DONE"]
+
+    style TODO1 fill:#e74c3c,color:#fff
+    style TODO2 fill:#e74c3c,color:#fff
+    style TODO3 fill:#e74c3c,color:#fff
+</div>
+
+<hr>
+
+<h2>8. SYSTEMS STATUS</h2>
+<div class="mermaid">
+graph TD
+    subgraph WORKING["WORKING"]
+        W1["Resources"]
+        W2["Population"]
+        W3["Buildings"]
+        W4["Army / Banners"]
+        W5["Missions"]
+        W6["Leaderboard"]
+        W7["Banner XP"]
+    end
+
+    subgraph PARTIAL["PARTIAL"]
+        P1["Blacksmith"]
+        P2["Commanders"]
+        P3["Mercenaries"]
+        P4["Expeditions"]
+    end
+
+    subgraph NONE["NO EFFECT YET"]
+        N1["Technologies - 28 techs"]
+        N2["Factions - 30 perks"]
+        N3["Military Academy"]
+    end
+
+    style WORKING fill:#2ecc71,color:#fff
+    style PARTIAL fill:#f39c12,color:#fff
+    style NONE fill:#e74c3c,color:#fff
+</div>
+
+</body>
+</html>

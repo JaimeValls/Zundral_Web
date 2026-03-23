@@ -139,6 +139,8 @@ export interface GameState {
     id: number;
     name: string;
     description?: string;
+    terrain?: string;
+    missionType?: 'list' | 'expedition';
     duration: number;
     status: 'available' | 'running' | 'completedRewardsPending' | 'completedRewardsClaimed' | 'archived';
     staged: number[];
@@ -159,7 +161,7 @@ export interface GameState {
     title: string;
     shortSummary: string;
     description: string;
-    state: 'available' | 'funding' | 'readyToLaunch' | 'travelling' | 'completed';
+    state: 'available' | 'funding' | 'readyToLaunch' | 'travelling' | 'completed' | 'failed';
     requirements: {
       wood: { required: number; current: number };
       stone: { required: number; current: number };
@@ -167,6 +169,24 @@ export interface GameState {
       population: { required: number; current: number };
     };
     travelProgress: number;
+    mapState?: {
+      fortressProvinceId: string;
+      armyPositions: Record<number, string>;
+      missionPositions: Record<number, string>;
+      revealedProvinces: string[];
+      provinceControl: Record<string, string>;
+      turnNumber: number;
+      pendingOrders: Record<number, any>;
+      enemyArmies?: any[];
+      nextEnemyId?: number;
+      expeditionFailed?: boolean;
+      fieldBattleResults?: any[];
+      battleProvinces?: string[];
+      expeditionMissions?: any[];                // expedition-type missions on the map
+      completedExpeditionMissionIds?: number[];   // IDs completed this turn (for reward popup)
+      expeditionLog?: any[];                      // event log entries
+      battleAftermath?: Record<string, number>;   // provinceId → turnsRemaining for VFX decay
+    };
     fortress?: {
       buildings: Array<{
         id: string;
@@ -179,8 +199,7 @@ export interface GameState {
       stats: {
         fortHP: number;
         archerSlots: number;
-        garrisonWarriors: number;
-        garrisonArchers: number;
+        garrisonCapacity?: number;
         storedSquads: number;
       };
       garrison: number[];
@@ -346,6 +365,8 @@ const SAVE_KEY = 'rts_agent_save_v1';
 
 class PersistenceService {
   private autoSaveTimer: number | null = null;
+  private unloadHandler: (() => void) | null = null;
+  private isResetting = false;
 
   loadState(): GameState | null {
     try {
@@ -379,6 +400,12 @@ class PersistenceService {
   }
 
   saveState(state: GameState): void {
+    // Block all saves during reset to prevent stale state from overwriting clean default
+    if (this.isResetting) {
+      console.log('[PERSISTENCE] Save blocked — reset in progress');
+      return;
+    }
+
     // Check if localStorage is available
     if (typeof localStorage === 'undefined') {
       console.error('[PERSISTENCE] localStorage is not available, cannot save');
@@ -408,18 +435,28 @@ class PersistenceService {
   }
 
   resetState(): GameState {
-    // Clear any existing save first
+    // Block all future saves from stale in-memory state
+    this.isResetting = true;
+
+    // Clear all game-related localStorage keys
     try {
       localStorage.removeItem(SAVE_KEY);
-      console.log('[PERSISTENCE] Cleared existing save before reset');
+      // Also clear simulator caches
+      localStorage.removeItem('gameUnitStats');
+      localStorage.removeItem('gameBattleParams');
+      localStorage.removeItem('gameDivisions');
+      localStorage.removeItem('fortressSimulatorStats');
+      console.log('[PERSISTENCE] Cleared all game data from localStorage');
     } catch (e) {
       console.error('[PERSISTENCE] Failed to clear save:', e);
     }
 
+    // Save the fresh default state (temporarily allow the save)
     const defaultState = createDefaultGameState();
-    // Save the default state immediately
+    this.isResetting = false;
     this.saveState(defaultState);
-    console.log('[PERSISTENCE] Reset complete - default state saved with empty banners:', defaultState.banners.length);
+    this.isResetting = true; // Re-block until page reloads
+    console.log('[PERSISTENCE] Reset complete - default state saved');
     return defaultState;
   }
 
@@ -435,17 +472,28 @@ class PersistenceService {
       this.saveState(state);
     }, AUTOSAVE_INTERVAL_MS);
 
-    // Also save on page unload
-    window.addEventListener('beforeunload', () => {
+    // Remove any previous unload handler
+    if (this.unloadHandler) {
+      window.removeEventListener('beforeunload', this.unloadHandler);
+    }
+
+    // Save on page unload
+    this.unloadHandler = () => {
       const state = saveCallback();
       this.saveState(state);
-    });
+    };
+    window.addEventListener('beforeunload', this.unloadHandler);
   }
 
   stopAutoSave(): void {
     if (this.autoSaveTimer !== null) {
       clearInterval(this.autoSaveTimer);
       this.autoSaveTimer = null;
+    }
+    // Also remove the beforeunload handler — critical for resetGame() to work
+    if (this.unloadHandler) {
+      window.removeEventListener('beforeunload', this.unloadHandler);
+      this.unloadHandler = null;
     }
   }
 
@@ -476,6 +524,10 @@ class PersistenceService {
 
     if (sanitized.barracks) {
       sanitized.barracks.level = Math.max(1, Math.min(sanitized.barracks.level, 100));
+      // Ensure all 3 mercenary templates are available (migration for older saves)
+      if (sanitized.barracks.maxTemplates < 3) {
+        sanitized.barracks.maxTemplates = 3;
+      }
     }
 
     if (sanitized.tavern) {

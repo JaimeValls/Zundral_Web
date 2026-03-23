@@ -286,8 +286,176 @@ function BattleChart({ timeline }: { timeline: BattleResult['timeline'] }) {
   );
 }
 
-// Graph drawing functions (defined outside component for reuse)
-function drawSiegeGraph(canvas: HTMLCanvasElement, timeline: SiegeRound[], fortHPmax: number, graphDataRef?: React.MutableRefObject<any>, hoveredRound?: number | null) {
+// ── Shared graph helpers ──────────────────────────────────────────────────
+
+/** Format a number as short label: 1200 → "1.2K", 50 → "50" */
+function shortNum(n: number): string {
+  if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
+  return Math.round(n).toString();
+}
+
+/** Generate nice Y-axis tick values (0, max/4, max/2, 3max/4, max) */
+function yTicks(max: number, count = 5): number[] {
+  if (max <= 0) return [0];
+  const step = max / (count - 1);
+  return Array.from({ length: count }, (_, i) => Math.round(i * step));
+}
+
+/** Draw horizontal grid lines with Y-axis tick labels */
+function drawGrid(
+  ctx: CanvasRenderingContext2D,
+  ticks: number[],
+  max: number,
+  left: number, top: number, right: number, bottom: number,
+  color: string,
+  labelColor: string
+) {
+  const plotH = bottom - top;
+  ctx.font = '18px system-ui, sans-serif';
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+
+  ticks.forEach(v => {
+    const y = bottom - (v / max) * plotH;
+    // Grid line
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 0.5;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.moveTo(left, y);
+    ctx.lineTo(right, y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    // Label
+    ctx.fillStyle = labelColor;
+    ctx.fillText(shortNum(v), left - 6, y);
+  });
+}
+
+/** Draw X-axis tick labels */
+function drawXTicks(
+  ctx: CanvasRenderingContext2D,
+  values: number[],
+  mapX: (v: number) => number,
+  bottom: number,
+  label: string,
+  color: string,
+  maxTicks = 10
+) {
+  const step = Math.max(1, Math.ceil(values.length / maxTicks));
+  ctx.font = '18px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  ctx.fillStyle = color;
+
+  values.forEach((v, i) => {
+    if (i % step === 0 || i === values.length - 1) {
+      ctx.fillText(String(v), mapX(v), bottom + 4);
+    }
+  });
+
+  // X-axis label
+  ctx.font = '20px system-ui, sans-serif';
+  ctx.fillText(label, (mapX(values[0]) + mapX(values[values.length - 1])) / 2, bottom + 24);
+}
+
+/** Draw title centered at the top */
+function drawTitle(ctx: CanvasRenderingContext2D, title: string, w: number, y: number) {
+  ctx.font = 'bold 22px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  ctx.fillStyle = '#cbd5e1'; // slate-300
+  ctx.fillText(title, w / 2, y);
+}
+
+/** Draw legend items horizontally centered */
+function drawLegend(
+  ctx: CanvasRenderingContext2D,
+  items: Array<{ label: string; color: string; dashed?: boolean }>,
+  centerX: number, y: number
+) {
+  ctx.font = '18px system-ui, sans-serif';
+  ctx.textBaseline = 'middle';
+
+  // Measure total width
+  const itemWidths = items.map(item => {
+    return 20 + 6 + ctx.measureText(item.label).width + 16; // swatch + gap + text + spacing
+  });
+  const totalW = itemWidths.reduce((a, b) => a + b, 0) - 16;
+  let x = centerX - totalW / 2;
+
+  items.forEach((item, i) => {
+    // Swatch
+    if (item.dashed) {
+      ctx.strokeStyle = item.color;
+      ctx.lineWidth = 2;
+      ctx.setLineDash([4, 3]);
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + 20, y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    } else {
+      ctx.fillStyle = item.color;
+      ctx.fillRect(x, y - 5, 20, 10);
+    }
+    // Text
+    ctx.fillStyle = '#94a3b8'; // slate-400
+    ctx.textAlign = 'left';
+    ctx.fillText(item.label, x + 26, y);
+    x += itemWidths[i];
+  });
+}
+
+/** Draw a data line with optional area fill and dot markers */
+function drawDataLine(
+  ctx: CanvasRenderingContext2D,
+  points: Array<{ x: number; y: number }>,
+  color: string,
+  opts?: { fill?: boolean; dashed?: boolean; lineWidth?: number }
+) {
+  if (points.length === 0) return;
+  const lw = opts?.lineWidth ?? 2.5;
+
+  if (opts?.dashed) ctx.setLineDash([6, 4]);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = lw;
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  points.forEach((p, i) => { i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y); });
+  ctx.stroke();
+  if (opts?.dashed) ctx.setLineDash([]);
+
+  // Area fill
+  if (opts?.fill && points.length > 1) {
+    const bottom = Math.max(...points.map(p => p.y)) + 50; // approximate bottom
+    ctx.fillStyle = color.replace(')', ', 0.08)').replace('rgb(', 'rgba(');
+    // Use hex to rgba
+    const r = parseInt(color.slice(1, 3), 16);
+    const g = parseInt(color.slice(3, 5), 16);
+    const b = parseInt(color.slice(5, 7), 16);
+    ctx.fillStyle = `rgba(${r}, ${g}, ${b}, 0.08)`;
+    ctx.beginPath();
+    points.forEach((p, i) => { i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y); });
+    ctx.lineTo(points[points.length - 1].x, bottom);
+    ctx.lineTo(points[0].x, bottom);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // Dot markers
+  points.forEach(p => {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+    ctx.fill();
+  });
+}
+
+
+// ── Siege Graph ───────────────────────────────────────────────────────────
+
+function drawSiegeGraph(canvas: HTMLCanvasElement, timeline: SiegeRound[], fortHPmax: number, graphDataRef?: React.MutableRefObject<any>, hoveredRound?: number | null, initialGarrison?: number) {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
 
@@ -296,71 +464,146 @@ function drawSiegeGraph(canvas: HTMLCanvasElement, timeline: SiegeRound[], fortH
   ctx.clearRect(0, 0, w, h);
   if (!timeline.length) return;
 
-  const maxAttackers = Math.max(...timeline.map(r => r.attackers), 1);
-  const rounds = timeline[timeline.length - 1].round;
+  // Layout
+  const PAD = { top: 58, bottom: 54, left: 70, right: 20 };
+  const plotW = w - PAD.left - PAD.right;
+  const plotH = h - PAD.top - PAD.bottom;
 
-  const mapX = (t: number) => (t / rounds) * (w - 40) + 20;
-  const mapY = (v: number, max: number) => h - 20 - (v / max) * (h - 40);
+  // Data ranges — use a unified max so both lines share the same scale
+  const maxHP = fortHPmax;
+  const maxAtk = Math.max(...timeline.map(r => r.attackers), 1);
+  const yMax = Math.max(maxHP, maxAtk);
+  const rounds = timeline.map(r => r.round);
+
+  const mapX = (t: number) => PAD.left + ((t - rounds[0]) / (rounds[rounds.length - 1] - rounds[0] || 1)) * plotW;
+  const mapY = (v: number) => PAD.top + plotH - (v / yMax) * plotH;
 
   // Store graph data for tooltip calculations
   if (graphDataRef) {
     graphDataRef.current = {
-      mapX,
-      mapY,
-      w,
-      h,
-      fortHPmax,
-      maxAttackers,
-      rounds,
+      mapX, mapY: (v: number, _max: number) => mapY(v), w, h,
+      fortHPmax, maxAttackers: maxAtk, rounds: rounds[rounds.length - 1],
       fortHP: timeline.map(r => r.fortHP),
       attackers: timeline.map(r => r.attackers),
+      initialGarrison: initialGarrison || 0,
       timeline
     };
   }
 
-  // Draw axes
-  ctx.strokeStyle = '#555';
+  // ── Background ──
+  ctx.fillStyle = '#0f172a'; // slate-900
+  ctx.fillRect(0, 0, w, h);
+
+  // ── Title ──
+  drawTitle(ctx, 'Wall Assault — Troops & Wall HP over Siege Rounds', w, 8);
+
+  // ── Legend ──
+  const legendItems: Array<{ label: string; color: string }> = [
+    { label: 'Wall HP (Fortress)', color: '#e2e8f0' },
+    { label: 'Attackers (Remaining)', color: '#f87171' },
+  ];
+  if (initialGarrison && initialGarrison > 0) {
+    legendItems.push({ label: 'Defenders (Garrison)', color: '#38bdf8' });
+  }
+  drawLegend(ctx, legendItems, w / 2, 38);
+
+  // ── Grid + axes ──
+  const ticks = yTicks(yMax);
+  drawGrid(ctx, ticks, yMax, PAD.left, PAD.top, w - PAD.right, PAD.top + plotH, '#334155', '#64748b');
+
+  // Axes
+  ctx.strokeStyle = '#475569';
   ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.moveTo(20, 10);
-  ctx.lineTo(20, h - 20);
-  ctx.lineTo(w - 10, h - 20);
+  ctx.moveTo(PAD.left, PAD.top);
+  ctx.lineTo(PAD.left, PAD.top + plotH);
+  ctx.lineTo(w - PAD.right, PAD.top + plotH);
   ctx.stroke();
 
-  // Draw lines
-  function drawLine(values: number[], max: number, colour: string) {
-    if (!ctx) return;
-    ctx.strokeStyle = colour;
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    values.forEach((v, i) => {
-      const t = timeline[i].round;
-      const x = mapX(t);
-      const y = mapY(v, max);
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    });
-    ctx.stroke();
+  // X ticks
+  drawXTicks(ctx, rounds, mapX, PAD.top + plotH, 'Siege Round', '#64748b');
+
+  // Y-axis label (rotated)
+  ctx.save();
+  ctx.translate(14, PAD.top + plotH / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.font = '20px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#64748b';
+  ctx.fillText('Count / HP', 0, 0);
+  ctx.restore();
+
+  // ── Data lines ──
+  const hpPoints = timeline.map(r => ({ x: mapX(r.round), y: mapY(r.fortHP) }));
+  const atkPoints = timeline.map(r => ({ x: mapX(r.round), y: mapY(r.attackers) }));
+
+  // Defenders line (constant during wall assault — garrison stays behind walls)
+  if (initialGarrison && initialGarrison > 0) {
+    const defPoints = timeline.map(r => ({ x: mapX(r.round), y: mapY(initialGarrison) }));
+    drawDataLine(ctx, defPoints, '#38bdf8', { fill: false, dashed: true });
   }
 
-  drawLine(timeline.map(r => r.fortHP), fortHPmax, '#2d9cff');
-  drawLine(timeline.map(r => r.attackers), maxAttackers, '#ff5d5d');
+  drawDataLine(ctx, hpPoints, '#e2e8f0', { fill: true });
+  drawDataLine(ctx, atkPoints, '#f87171', { fill: true });
 
-  // Draw vertical guideline at hovered round
-  if (hoveredRound !== null && hoveredRound !== undefined && ctx) {
-    const guidelineX = mapX(hoveredRound);
-    if (guidelineX >= 20 && guidelineX <= w - 10) {
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+  // ── Breach marker ──
+  const breachIdx = timeline.findIndex(r => r.fortHP <= 0);
+  if (breachIdx >= 0) {
+    const bx = mapX(timeline[breachIdx].round);
+    ctx.strokeStyle = '#fbbf24';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([6, 3]);
+    ctx.beginPath();
+    ctx.moveTo(bx, PAD.top);
+    ctx.lineTo(bx, PAD.top + plotH);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.font = 'bold 18px system-ui, sans-serif';
+    ctx.fillStyle = '#fbbf24';
+    ctx.textAlign = 'center';
+    ctx.fillText('⚠ BREACH', bx, PAD.top - 4);
+  }
+
+  // ── Hover guideline + highlighted dots ──
+  if (hoveredRound !== null && hoveredRound !== undefined) {
+    const gx = mapX(hoveredRound);
+    if (gx >= PAD.left && gx <= w - PAD.right) {
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
       ctx.lineWidth = 1;
       ctx.setLineDash([4, 4]);
       ctx.beginPath();
-      ctx.moveTo(guidelineX, 10);
-      ctx.lineTo(guidelineX, h - 20);
+      ctx.moveTo(gx, PAD.top);
+      ctx.lineTo(gx, PAD.top + plotH);
       ctx.stroke();
       ctx.setLineDash([]);
+
+      // Highlighted data points at hovered round
+      const ri = timeline.findIndex(r => r.round === hoveredRound);
+      if (ri >= 0) {
+        // Wall HP dot (white)
+        ctx.fillStyle = '#e2e8f0';
+        ctx.beginPath();
+        ctx.arc(gx, mapY(timeline[ri].fortHP), 8, 0, Math.PI * 2);
+        ctx.fill();
+        // Attackers dot (red)
+        ctx.fillStyle = '#f87171';
+        ctx.beginPath();
+        ctx.arc(gx, mapY(timeline[ri].attackers), 8, 0, Math.PI * 2);
+        ctx.fill();
+        // Defenders dot (blue)
+        if (initialGarrison && initialGarrison > 0) {
+          ctx.fillStyle = '#38bdf8';
+          ctx.beginPath();
+          ctx.arc(gx, mapY(initialGarrison), 8, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
     }
   }
 }
+
+
+// ── Inner Battle Graph ────────────────────────────────────────────────────
 
 function drawInnerBattleGraph(canvas: HTMLCanvasElement, timeline: InnerBattleStep[], graphDataRef?: React.MutableRefObject<any>, hoveredStep?: number | null) {
   const ctx = canvas.getContext('2d');
@@ -371,67 +614,119 @@ function drawInnerBattleGraph(canvas: HTMLCanvasElement, timeline: InnerBattleSt
   ctx.clearRect(0, 0, w, h);
   if (!timeline.length) return;
 
+  // Layout
+  const PAD = { top: 58, bottom: 54, left: 70, right: 20 };
+  const plotW = w - PAD.left - PAD.right;
+  const plotH = h - PAD.top - PAD.bottom;
+
+  // Data ranges — unified Y max
   const maxDef = Math.max(...timeline.map(r => r.defenders), 1);
   const maxAtk = Math.max(...timeline.map(r => r.attackers), 1);
-  const steps = timeline[timeline.length - 1].step;
+  const yMax = Math.max(maxDef, maxAtk);
+  const steps = timeline.map(r => r.step);
 
-  const mapX = (t: number) => (t / steps) * (w - 40) + 20;
-  const mapY = (v: number, max: number) => h - 20 - (v / max) * (h - 40);
+  const mapX = (t: number) => PAD.left + ((t - steps[0]) / (steps[steps.length - 1] - steps[0] || 1)) * plotW;
+  const mapY = (v: number) => PAD.top + plotH - (v / yMax) * plotH;
 
   // Store graph data for tooltip calculations
   if (graphDataRef) {
     graphDataRef.current = {
-      mapX,
-      mapY,
-      w,
-      h,
-      maxDef,
-      maxAtk,
-      steps,
+      mapX, mapY: (v: number, _max: number) => mapY(v), w, h,
+      maxDef, maxAtk, steps: steps[steps.length - 1],
       defenders: timeline.map(r => r.defenders),
       attackers: timeline.map(r => r.attackers),
       timeline
     };
   }
 
-  // Draw axes
-  ctx.strokeStyle = '#555';
+  // ── Background ──
+  ctx.fillStyle = '#0f172a';
+  ctx.fillRect(0, 0, w, h);
+
+  // ── Title ──
+  drawTitle(ctx, 'Inner Defence Battle — Troops Remaining per Step', w, 8);
+
+  // ── Legend ──
+  drawLegend(ctx, [
+    { label: 'Defenders (Garrison)', color: '#38bdf8' },
+    { label: 'Attackers', color: '#f87171' },
+  ], w / 2, 38);
+
+  // ── Phase bands ──
+  const phaseColors: Record<string, string> = {
+    skirmish: 'rgba(251, 191, 36, 0.06)',
+    melee:    'rgba(239, 68, 68, 0.06)',
+    pursuit:  'rgba(168, 85, 247, 0.06)',
+  };
+  const phaseLabelColors: Record<string, string> = {
+    skirmish: '#fbbf24',
+    melee:    '#ef4444',
+    pursuit:  '#a855f7',
+  };
+  let prevPhase = '';
+  timeline.forEach((s, i) => {
+    if (s.phase !== prevPhase) {
+      // Find end of this phase
+      let endIdx = i;
+      while (endIdx < timeline.length - 1 && timeline[endIdx + 1].phase === s.phase) endIdx++;
+      const x1 = mapX(s.step) - (plotW / steps.length) * 0.5;
+      const x2 = mapX(timeline[endIdx].step) + (plotW / steps.length) * 0.5;
+      // Band
+      ctx.fillStyle = phaseColors[s.phase] || 'rgba(100,100,100,0.05)';
+      ctx.fillRect(Math.max(x1, PAD.left), PAD.top, Math.min(x2, w - PAD.right) - Math.max(x1, PAD.left), plotH);
+      // Phase label at top
+      ctx.font = 'bold 16px system-ui, sans-serif';
+      ctx.fillStyle = phaseLabelColors[s.phase] || '#94a3b8';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+      const cx = (Math.max(x1, PAD.left) + Math.min(x2, w - PAD.right)) / 2;
+      ctx.fillText(s.phase.charAt(0).toUpperCase() + s.phase.slice(1), cx, PAD.top + plotH + 0);
+      prevPhase = s.phase;
+    }
+  });
+
+  // ── Grid + axes ──
+  const ticks = yTicks(yMax);
+  drawGrid(ctx, ticks, yMax, PAD.left, PAD.top, w - PAD.right, PAD.top + plotH, '#334155', '#64748b');
+
+  ctx.strokeStyle = '#475569';
   ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.moveTo(20, 10);
-  ctx.lineTo(20, h - 20);
-  ctx.lineTo(w - 10, h - 20);
+  ctx.moveTo(PAD.left, PAD.top);
+  ctx.lineTo(PAD.left, PAD.top + plotH);
+  ctx.lineTo(w - PAD.right, PAD.top + plotH);
   ctx.stroke();
 
-  // Draw lines
-  function drawLine(values: number[], max: number, colour: string) {
-    if (!ctx) return;
-    ctx.strokeStyle = colour;
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    values.forEach((v, i) => {
-      const t = timeline[i].step;
-      const x = mapX(t);
-      const y = mapY(v, max);
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    });
-    ctx.stroke();
-  }
+  // X ticks
+  drawXTicks(ctx, steps, mapX, PAD.top + plotH, 'Battle Step', '#64748b');
 
-  drawLine(timeline.map(r => r.defenders), maxDef, '#2d9cff');
-  drawLine(timeline.map(r => r.attackers), maxAtk, '#ff5d5d');
+  // Y-axis label
+  ctx.save();
+  ctx.translate(14, PAD.top + plotH / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.font = '20px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#64748b';
+  ctx.fillText('Troops Remaining', 0, 0);
+  ctx.restore();
 
-  // Draw vertical guideline at hovered step
+  // ── Data lines ──
+  const defPoints = timeline.map(r => ({ x: mapX(r.step), y: mapY(r.defenders) }));
+  const atkPoints = timeline.map(r => ({ x: mapX(r.step), y: mapY(r.attackers) }));
+
+  drawDataLine(ctx, defPoints, '#38bdf8', { fill: true });
+  drawDataLine(ctx, atkPoints, '#f87171', { fill: true });
+
+  // ── Hover guideline ──
   if (hoveredStep !== null && hoveredStep !== undefined) {
-    const guidelineX = mapX(hoveredStep);
-    if (guidelineX >= 20 && guidelineX <= w - 10) {
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+    const gx = mapX(hoveredStep);
+    if (gx >= PAD.left && gx <= w - PAD.right) {
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
       ctx.lineWidth = 1;
       ctx.setLineDash([4, 4]);
       ctx.beginPath();
-      ctx.moveTo(guidelineX, 10);
-      ctx.lineTo(guidelineX, h - 20);
+      ctx.moveTo(gx, PAD.top);
+      ctx.lineTo(gx, PAD.top + plotH);
       ctx.stroke();
       ctx.setLineDash([]);
     }
@@ -439,7 +734,7 @@ function drawInnerBattleGraph(canvas: HTMLCanvasElement, timeline: InnerBattleSt
 }
 
 // Graph canvas components
-function SiegeGraphCanvas({ timeline, fortHPmax }: { timeline: SiegeRound[]; fortHPmax: number }) {
+function SiegeGraphCanvas({ timeline, fortHPmax, initialGarrison }: { timeline: SiegeRound[]; fortHPmax: number; initialGarrison?: number }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const graphDataRef = useRef<any>(null);
@@ -447,7 +742,7 @@ function SiegeGraphCanvas({ timeline, fortHPmax }: { timeline: SiegeRound[]; for
     visible: boolean;
     x: number;
     y: number;
-    data: Array<{ label: string; value: number; color: string }>;
+    data: Array<{ label: string; value: number; color: string; delta?: number }>;
     round: number;
   } | null>(null);
   const [hoveredRound, setHoveredRound] = useState<number | null>(null);
@@ -457,7 +752,7 @@ function SiegeGraphCanvas({ timeline, fortHPmax }: { timeline: SiegeRound[]; for
       // Small delay to ensure canvas is properly sized
       const timer = setTimeout(() => {
         if (canvasRef.current) {
-          drawSiegeGraph(canvasRef.current, timeline, fortHPmax, graphDataRef, hoveredRound);
+          drawSiegeGraph(canvasRef.current, timeline, fortHPmax, graphDataRef, hoveredRound, initialGarrison);
         }
       }, 10);
       return () => clearTimeout(timer);
@@ -493,19 +788,30 @@ function SiegeGraphCanvas({ timeline, fortHPmax }: { timeline: SiegeRound[]; for
 
     // Only show tooltip if close enough (within 30 pixels) and within bounds
     if (minDist < 30 && mouseX >= 20 && mouseX <= data.w - 10 && mouseY >= 10 && mouseY <= data.h - 20) {
-      const tooltipData: Array<{ label: string; value: number; color: string }> = [];
+      const tooltipData: Array<{ label: string; value: number; color: string; delta?: number }> = [];
 
       if (closestIndex >= 0 && closestIndex < timeline.length) {
+        const prevHP = closestIndex > 0 ? data.fortHP[closestIndex - 1] : data.fortHPmax;
+        const prevAtk = closestIndex > 0 ? data.attackers[closestIndex - 1] : timeline[0].attackers + timeline[0].killed;
         tooltipData.push({
-          label: 'Fort HP',
+          label: 'Wall HP',
           value: data.fortHP[closestIndex],
-          color: '#2d9cff'
+          color: '#e2e8f0',
+          delta: prevHP - data.fortHP[closestIndex],
         });
         tooltipData.push({
-          label: 'Remaining Attackers',
+          label: 'Attackers',
           value: data.attackers[closestIndex],
-          color: '#ff5d5d'
+          color: '#f87171',
+          delta: prevAtk - data.attackers[closestIndex],
         });
+        if (data.initialGarrison && data.initialGarrison > 0) {
+          tooltipData.push({
+            label: 'Defenders',
+            value: data.initialGarrison,
+            color: '#38bdf8',
+          });
+        }
       }
 
       setHoveredRound(timeline[closestIndex].round);
@@ -530,42 +836,37 @@ function SiegeGraphCanvas({ timeline, fortHPmax }: { timeline: SiegeRound[]; for
   if (timeline.length === 0) return null;
 
   return (
-    <details className="mt-3 pt-3 border-t border-slate-700">
-      <summary className="text-slate-400 cursor-pointer hover:text-slate-300 text-[11px] font-semibold">
-        Siege Graph
-      </summary>
-      <div ref={containerRef} className="mt-2 relative">
-        <canvas
-          ref={canvasRef}
-          className="w-full h-[220px] bg-slate-950 border border-slate-700 rounded-lg cursor-crosshair"
-          style={{ imageRendering: 'crisp-edges' }}
-          onMouseMove={handleMouseMove}
-          onMouseLeave={handleMouseLeave}
-        />
-        {tooltip && tooltip.visible && (
-          <div
-            className="absolute pointer-events-none z-50 bg-slate-900 border border-slate-700 rounded-lg shadow-xl p-2 text-xs"
-            style={{
-              left: `${tooltip.x + 10}px`,
-              top: `${tooltip.y - 10}px`,
-              transform: 'translateY(-100%)'
-            }}
-          >
-            <div className="font-semibold text-slate-300 mb-1">Round {tooltip.round}</div>
-            {tooltip.data.map((item, idx) => (
-              <div key={idx} className="flex items-center gap-2 mb-1">
-                <div className="w-3 h-3 rounded" style={{ backgroundColor: item.color }}></div>
-                <span className="text-slate-400">{item.label}:</span>
-                <span className="text-white font-semibold">{item.value.toFixed(1)}</span>
-              </div>
-            ))}
-          </div>
-        )}
-        <div className="text-[10px] text-slate-400 mt-1">
-          Blue line = Fort HP. Red line = remaining attackers.
+    <div ref={containerRef} className="mt-2 relative">
+      <canvas
+        ref={canvasRef}
+        className="w-full h-[280px] rounded-lg cursor-crosshair"
+        style={{ imageRendering: 'crisp-edges' }}
+        onMouseMove={handleMouseMove}
+        onMouseLeave={handleMouseLeave}
+      />
+      {tooltip && tooltip.visible && (
+        <div
+          className="absolute pointer-events-none z-50 bg-slate-900/95 border border-slate-600 rounded-lg shadow-xl p-2 text-xs"
+          style={{
+            left: `${Math.min(tooltip.x + 10, (containerRef.current?.clientWidth || 400) - 180)}px`,
+            top: `${tooltip.y - 10}px`,
+            transform: 'translateY(-100%)'
+          }}
+        >
+          <div className="font-semibold text-slate-200 mb-1">Round {tooltip.round}</div>
+          {tooltip.data.map((item, idx) => (
+            <div key={idx} className="flex items-center gap-2">
+              <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: item.color }}></div>
+              <span className="text-slate-400">{item.label}:</span>
+              <span className="text-white font-semibold">{Math.round(item.value).toLocaleString()}</span>
+              {item.delta !== undefined && item.delta > 0 && (
+                <span className="text-red-400 font-semibold">(-{Math.round(item.delta)})</span>
+              )}
+            </div>
+          ))}
         </div>
-      </div>
-    </details>
+      )}
+    </div>
   );
 }
 
@@ -627,14 +928,14 @@ function InnerBattleGraphCanvas({ timeline }: { timeline: InnerBattleStep[] }) {
 
       if (closestIndex >= 0 && closestIndex < timeline.length) {
         tooltipData.push({
-          label: 'Inner Defenders',
+          label: 'Defenders',
           value: data.defenders[closestIndex],
-          color: '#2d9cff'
+          color: '#38bdf8'
         });
         tooltipData.push({
-          label: 'Inner Attackers',
+          label: 'Attackers',
           value: data.attackers[closestIndex],
-          color: '#ff5d5d'
+          color: '#f87171'
         });
       }
 
@@ -660,42 +961,34 @@ function InnerBattleGraphCanvas({ timeline }: { timeline: InnerBattleStep[] }) {
   if (timeline.length === 0) return null;
 
   return (
-    <details className="mt-3 pt-3 border-t border-slate-700">
-      <summary className="text-slate-400 cursor-pointer hover:text-slate-300 text-[11px] font-semibold">
-        Inner Battle Graph
-      </summary>
-      <div ref={containerRef} className="mt-2 relative">
-        <canvas
-          ref={canvasRef}
-          className="w-full h-[220px] bg-slate-950 border border-slate-700 rounded-lg cursor-crosshair"
-          style={{ imageRendering: 'crisp-edges' }}
-          onMouseMove={handleMouseMove}
-          onMouseLeave={handleMouseLeave}
-        />
-        {tooltip && tooltip.visible && (
-          <div
-            className="absolute pointer-events-none z-50 bg-slate-900 border border-slate-700 rounded-lg shadow-xl p-2 text-xs"
-            style={{
-              left: `${tooltip.x + 10}px`,
-              top: `${tooltip.y - 10}px`,
-              transform: 'translateY(-100%)'
-            }}
-          >
-            <div className="font-semibold text-slate-300 mb-1">Step {tooltip.step}</div>
-            {tooltip.data.map((item, idx) => (
-              <div key={idx} className="flex items-center gap-2 mb-1">
-                <div className="w-3 h-3 rounded" style={{ backgroundColor: item.color }}></div>
-                <span className="text-slate-400">{item.label}:</span>
-                <span className="text-white font-semibold">{item.value.toFixed(1)}</span>
-              </div>
-            ))}
-          </div>
-        )}
-        <div className="text-[10px] text-slate-400 mt-1">
-          Blue line = inner defenders. Red line = inner attackers. Phases: skirmish → melee → pursuit
+    <div ref={containerRef} className="mt-2 relative">
+      <canvas
+        ref={canvasRef}
+        className="w-full h-[280px] rounded-lg cursor-crosshair"
+        style={{ imageRendering: 'crisp-edges' }}
+        onMouseMove={handleMouseMove}
+        onMouseLeave={handleMouseLeave}
+      />
+      {tooltip && tooltip.visible && (
+        <div
+          className="absolute pointer-events-none z-50 bg-slate-900/95 border border-slate-600 rounded-lg shadow-xl p-2 text-xs"
+          style={{
+            left: `${Math.min(tooltip.x + 10, (containerRef.current?.clientWidth || 400) - 180)}px`,
+            top: `${tooltip.y - 10}px`,
+            transform: 'translateY(-100%)'
+          }}
+        >
+          <div className="font-semibold text-slate-200 mb-1">Step {tooltip.step} — <span className="capitalize">{timeline.find(s => s.step === tooltip!.step)?.phase}</span></div>
+          {tooltip.data.map((item, idx) => (
+            <div key={idx} className="flex items-center gap-2">
+              <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: item.color }}></div>
+              <span className="text-slate-400">{item.label}:</span>
+              <span className="text-white font-semibold">{Math.round(item.value).toLocaleString()}</span>
+            </div>
+          ))}
         </div>
-      </div>
-    </details>
+      )}
+    </div>
   );
 }
 

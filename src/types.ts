@@ -93,6 +93,11 @@ export type Banner = {
   xpNextLevel?: number;
   // Commander system
   commanderId?: number | null;
+  // Field battle destruction context
+  destroyedTurn?: number;
+  destroyedInProvince?: string;
+  destroyedByEnemy?: string;
+  fieldBattleId?: string;
 };
 
 export type BannerLossNotice = {
@@ -179,6 +184,8 @@ export type Mission = {
   id: number;
   name: string;
   description?: string;
+  terrain?: 'forest' | 'hills' | 'plains' | 'river' | 'building';
+  missionType?: 'list' | 'expedition'; // list = mission tab, expedition = map auto-complete
   duration: number; // seconds
   status: 'available' | 'running' | 'completedRewardsPending' | 'completedRewardsClaimed' | 'archived';
   staged: number[];    // Banner IDs queued for deployment
@@ -263,7 +270,7 @@ export interface PlayerFactionState {
 // Fortress / Expeditions
 // ----------------------------------------------------------------------------
 
-export type ExpeditionState = 'available' | 'funding' | 'readyToLaunch' | 'travelling' | 'completed';
+export type ExpeditionState = 'available' | 'funding' | 'readyToLaunch' | 'travelling' | 'completed' | 'failed';
 
 export type FortressBuilding = {
   id: string;
@@ -274,8 +281,7 @@ export type FortressBuilding = {
   getEffect: (level: number) => {
     fortHP?: number;
     archerSlots?: number;
-    garrisonWarriors?: number;
-    garrisonArchers?: number;
+    garrisonCapacity?: number;
     storedSquads?: number;
   };
   getUpgradeCost: (level: number) => { wood: number; stone: number };
@@ -284,8 +290,7 @@ export type FortressBuilding = {
 export type FortressStats = {
   fortHP: number;
   archerSlots: number;
-  garrisonWarriors: number;
-  garrisonArchers: number;
+  garrisonCapacity: number;
   storedSquads: number;
 };
 
@@ -309,6 +314,15 @@ export type InnerBattleStep = {
   killedDefenders: number;
 };
 
+export type BattleSquadEntry = {
+  type: string;          // unit type key (e.g. 'longsword', 'crossbowmen')
+  displayName: string;   // human-readable (e.g. 'Longswords', 'Crossbowmen')
+  role: 'melee' | 'ranged';
+  initial: number;       // starting count
+  final: number;         // surviving count
+  lost: number;          // initial - final
+};
+
 export type SiegeBattleResult = {
   outcome: 'fortress_holds_walls' | 'fortress_holds_inner' | 'fortress_falls' | 'stalemate';
   siegeRounds: number;
@@ -321,6 +335,40 @@ export type SiegeBattleResult = {
   initialAttackers: number;
   initialGarrison: { warriors: number; archers: number };
   finalGarrison: { warriors: number; archers: number };
+  attackerComposition?: BattleSquadEntry[];
+  defenderComposition?: BattleSquadEntry[];
+  battleTakeaway?: string;
+};
+
+export type FieldBattlePlayerArmy = {
+  bannerId: number;
+  bannerName: string;
+  initialTroops: number;
+  finalTroops: number;
+  composition: BattleSquadEntry[];
+};
+
+export type FieldBattleEnemyArmy = {
+  enemyId: number;
+  enemyName: string;
+  initialTroops: number;
+  finalTroops: number;
+  composition: BattleSquadEntry[];
+};
+
+export type FieldBattleResult = {
+  id: string;                       // "fb_{turn}_{index}"
+  turn: number;
+  provinceId: string;
+  outcome: 'player_wins' | 'enemy_wins' | 'draw';
+  // Primary army (backward compat + largest contributor)
+  playerArmy: FieldBattlePlayerArmy;
+  enemyArmy: FieldBattleEnemyArmy;
+  // All participating armies (multi-army battles)
+  playerArmies?: FieldBattlePlayerArmy[];
+  enemyArmies?: FieldBattleEnemyArmy[];
+  timeline: InnerBattleStep[];
+  battleTakeaway: string;
 };
 
 export type Expedition = {
@@ -371,9 +419,57 @@ export interface MapData {
   colorToProvinceId: Record<string, string>;
 }
 
+// Turn-based order system
+export type ArmyOrderType = 'hold' | 'move';
+
+export interface ArmyOrder {
+  bannerId: number;
+  type: ArmyOrderType;
+  targetProvinceId?: string; // required when type === 'move'
+}
+
+// NPC enemy army that marches toward the fortress
+export interface EnemyArmy {
+  id: number;
+  templateId: string;       // 'spearmen' | 'archers' | 'mixed'
+  name: string;             // from mercenary template
+  squads: Array<{ type: string; count: number }>;
+  provinceId: string;       // current location on map
+  totalTroops: number;      // sum of count * 10 per squad (e.g. 80)
+  spawnTurn: number;        // turn when spawned
+  status: 'marching' | 'destroyed';
+  // Field battle destruction context
+  destroyedTurn?: number;
+  destroyedByBannerId?: number;
+  destroyedByBannerName?: string;
+  fieldBattleId?: string;
+}
+
+export type ExpeditionLogEntry = {
+  id: string;                    // unique key (e.g. "log_{turn}_{index}")
+  turn: number;
+  type: 'hostile_detected' | 'battle_resolved' | 'army_destroyed'
+      | 'mission_completed' | 'fortress_attacked' | 'fortress_damaged';
+  text: string;                  // short readable message
+  provinceId?: string;           // for camera focus
+  battleResultId?: string;       // links to FieldBattleResult.id for "open report"
+};
+
 export interface ExpeditionMapState {
   fortressProvinceId: string;
   armyPositions: Record<number, string>;   // bannerId → provinceId
+  missionPositions: Record<number, string>; // missionId → provinceId
   revealedProvinces: string[];
   provinceControl: Record<string, string>; // provinceId → faction/player
+  turnNumber: number;                       // starts at 1
+  pendingOrders: Record<number, ArmyOrder>; // bannerId → order for next turn
+  enemyArmies?: EnemyArmy[];               // NPC hostile forces on the map
+  nextEnemyId?: number;                     // incrementing ID counter for enemies
+  expeditionFailed?: boolean;               // true when fortress falls to enemy attack
+  fieldBattleResults?: FieldBattleResult[]; // history of field battles
+  battleProvinces?: string[];               // provinces with battles THIS turn (visual highlight)
+  expeditionMissions?: Mission[];           // expedition-type missions placed on the map
+  completedExpeditionMissionIds?: number[];  // IDs completed THIS turn (for reward popup)
+  expeditionLog?: ExpeditionLogEntry[];     // event log entries (newest first)
+  battleAftermath?: Record<string, number>; // provinceId → turnsRemaining (3,2,1) for VFX decay
 }

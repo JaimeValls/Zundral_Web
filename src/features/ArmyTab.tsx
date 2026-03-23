@@ -54,6 +54,18 @@ export interface ArmyTabProps {
   showRecruitmentInfo: boolean;
   bannerHint: { id: number | string; message: string } | null;
   warehouse: WarehouseState;
+  expeditions?: Array<{
+    expeditionId: string;
+    title: string;
+    state: string;
+    fortress?: {
+      lastBattle?: any;
+      garrison: number[];
+    };
+    mapState?: {
+      fieldBattleResults?: any[];
+    };
+  }>;
   // Callbacks
   onSetArmyTab: (tab: 'overview' | 'mercenaries' | 'regular') => void;
   onGoToProduction: () => void;
@@ -71,6 +83,8 @@ export interface ArmyTabProps {
   onDeleteBanner: (bannerId: number) => void;
   onCreateNewBanner: () => void;
   onSelectUnit: (unitType: UnitType, bannerId: number, slotIndex: number) => void;
+  onRequestReinforcement?: (bannerId: number) => void;
+  onShowResourceError?: (msg: string) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -107,6 +121,9 @@ export default function ArmyTab({
   onDeleteBanner,
   onCreateNewBanner,
   onSelectUnit,
+  onRequestReinforcement,
+  onShowResourceError,
+  expeditions,
 }: ArmyTabProps) {
   // Internal UI-only state — does not affect game logic or saves
   const [anchoredPickerState, setAnchoredPickerState] = useState<{
@@ -295,16 +312,32 @@ export default function ArmyTab({
                 <div className="text-xs text-slate-600 italic px-2 py-3">No armies stationed</div>
               ) : (
                 <div className="space-y-1.5">
-                  {stationed.map(b => (
-                    <div key={b.id} className="flex items-center gap-3 p-2.5 rounded-lg bg-slate-900 border border-slate-800">
-                      {typeBadge(b.type)}
-                      <span className="text-xs font-semibold text-slate-200 truncate min-w-[80px] max-w-[120px]">{b.name}</span>
-                      <div className="flex gap-1 flex-wrap flex-1">{compositionPills(b.squads || [])}</div>
-                      <span className="text-[10px] px-2 py-0.5 rounded border text-emerald-400 bg-emerald-950/30 border-emerald-900/50 font-semibold shrink-0">
-                        Stationed
-                      </span>
-                    </div>
-                  ))}
+                  {stationed.map(b => {
+                    const isDamaged = b.type === 'mercenary' && (b.squads || []).some(s => s.currentSize < s.maxSize);
+                    const totalMissing = isDamaged ? (b.squads || []).reduce((sum, s) => sum + (s.maxSize - s.currentSize), 0) : 0;
+                    const isReinforcing = barracks?.trainingQueue.some(j => j.type === 'reinforcement' && j.bannerId === b.id);
+                    return (
+                      <div key={b.id} className={`flex items-center gap-3 p-2.5 rounded-lg bg-slate-900 border ${isReinforcing ? 'border-amber-800/60' : 'border-slate-800'}`}>
+                        {typeBadge(b.type)}
+                        <span className="text-xs font-semibold text-slate-200 truncate min-w-[80px] max-w-[120px]">{b.name}</span>
+                        <div className="flex gap-1 flex-wrap flex-1">{compositionPills(b.squads || [])}</div>
+                        {isDamaged && !isReinforcing ? (
+                          <button
+                            onClick={() => onRequestReinforcement?.(b.id)}
+                            className="px-2 py-1 bg-amber-700/80 hover:bg-amber-600 text-amber-100 rounded text-[10px] font-semibold border border-amber-500/50 shrink-0 whitespace-nowrap transition-colors"
+                          >
+                            🔄 Recruit ({totalMissing} · {totalMissing}g)
+                          </button>
+                        ) : isReinforcing ? (
+                          <span className="text-[10px] text-amber-400 animate-pulse font-semibold shrink-0">🔄 Recruiting...</span>
+                        ) : (
+                          <span className="text-[10px] px-2 py-0.5 rounded border text-emerald-400 bg-emerald-950/30 border-emerald-900/50 font-semibold shrink-0">
+                            Stationed
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -368,8 +401,136 @@ export default function ArmyTab({
               )}
             </div>
 
+            {/* -------- SECTION 5: BATTLE HISTORY -------- */}
+            {expeditions && (() => {
+              // Collect siege battles and field battles from all expeditions
+              const siegeBattles: Array<{ expTitle: string; expState: string; battle: any }> = [];
+              const fieldBattles: Array<any> = [];
+
+              for (const exp of expeditions) {
+                if (exp.fortress?.lastBattle) {
+                  siegeBattles.push({ expTitle: exp.title, expState: exp.state, battle: exp.fortress.lastBattle });
+                }
+                if (exp.mapState?.fieldBattleResults) {
+                  fieldBattles.push(...exp.mapState.fieldBattleResults);
+                }
+              }
+
+              if (siegeBattles.length === 0 && fieldBattles.length === 0) return null;
+
+              const recentFieldBattles = [...fieldBattles].reverse().slice(0, 5);
+
+              return (
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-red-400 text-sm">📜</span>
+                    <span className="text-[10px] text-red-400 font-semibold uppercase tracking-wide">Battle History</span>
+                    <span className="text-[9px] text-slate-600">({siegeBattles.length + fieldBattles.length})</span>
+                  </div>
+
+                  {/* Fortress Siege Battles */}
+                  {siegeBattles.map((sb, idx) => {
+                    const b = sb.battle;
+                    const isVictory = b.outcome === 'fortress_holds_walls' || b.outcome === 'fortress_holds_inner';
+                    const isFall = b.outcome === 'fortress_falls';
+                    const totalDefenders = (b.initialGarrison?.warriors || 0) + (b.initialGarrison?.archers || 0);
+                    const totalDefLost = totalDefenders - (b.finalDefenders || 0);
+                    const totalAtkLost = (b.initialAttackers || 0) - (b.finalAttackers || 0);
+
+                    return (
+                      <details key={`siege-${idx}`} className="rounded-lg border border-slate-700 bg-slate-800/50 mb-2">
+                        <summary className="p-3 cursor-pointer hover:bg-slate-700/30 flex items-center gap-3">
+                          <span className="text-lg">🏰</span>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-xs font-semibold text-slate-200">Fortress Siege</span>
+                              <span className="text-[10px] text-slate-500">— {sb.expTitle}</span>
+                            </div>
+                            <div className="text-[10px] text-slate-500 mt-0.5">
+                              {formatShort(b.initialAttackers)} attackers vs {formatShort(totalDefenders)} defenders
+                            </div>
+                          </div>
+                          <span className={`text-[10px] px-2 py-0.5 rounded font-bold uppercase ${
+                            isVictory ? 'bg-emerald-900/50 text-emerald-400 border border-emerald-800'
+                            : isFall ? 'bg-red-900/50 text-red-400 border border-red-800'
+                            : 'bg-amber-900/50 text-amber-400 border border-amber-800'
+                          }`}>
+                            {isVictory ? 'Held' : isFall ? 'Fallen' : 'Stalemate'}
+                          </span>
+                        </summary>
+                        <div className="px-3 pb-3 border-t border-slate-700">
+                          <div className="grid grid-cols-3 gap-2 mt-3 text-center">
+                            <div className="rounded-lg p-2 bg-red-950/20 border border-red-900/30">
+                              <div className="text-[9px] text-slate-500 uppercase">Attackers Lost</div>
+                              <div className="text-xs font-bold text-red-400">{formatShort(totalAtkLost)} / {formatShort(b.initialAttackers)}</div>
+                            </div>
+                            <div className="rounded-lg p-2 bg-blue-950/20 border border-blue-900/30">
+                              <div className="text-[9px] text-slate-500 uppercase">Defenders Lost</div>
+                              <div className="text-xs font-bold text-blue-400">{formatShort(totalDefLost)} / {formatShort(totalDefenders)}</div>
+                            </div>
+                            <div className="rounded-lg p-2 bg-amber-950/20 border border-amber-900/30">
+                              <div className="text-[9px] text-slate-500 uppercase">Wall HP</div>
+                              <div className="text-xs font-bold text-amber-400">{formatShort(b.initialFortHP)} → {formatShort(b.finalFortHP)}</div>
+                            </div>
+                          </div>
+                        </div>
+                      </details>
+                    );
+                  })}
+
+                  {/* Field Battles */}
+                  {recentFieldBattles.map((fb: any) => {
+                    const isVictory = fb.outcome === 'player_wins';
+                    const isDefeat = fb.outcome === 'enemy_wins';
+                    return (
+                      <details key={`field-${fb.id}`} className="rounded-lg border border-slate-700 bg-slate-800/50 mb-2">
+                        <summary className="p-3 cursor-pointer hover:bg-slate-700/30 flex items-center gap-3">
+                          <span className="text-lg">⚔️</span>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-xs font-semibold text-slate-200">{fb.playerArmy?.bannerName || 'Unknown'}</span>
+                              <span className="text-[10px] text-slate-500">vs</span>
+                              <span className="text-xs font-semibold text-red-300">{fb.enemyArmy?.enemyName || 'Unknown'}</span>
+                            </div>
+                            <div className="text-[10px] text-slate-500 mt-0.5">
+                              Turn {fb.turn} — Province {fb.provinceId}
+                            </div>
+                          </div>
+                          <span className={`text-[10px] px-2 py-0.5 rounded font-bold uppercase ${
+                            isVictory ? 'bg-emerald-900/50 text-emerald-400 border border-emerald-800'
+                            : isDefeat ? 'bg-red-900/50 text-red-400 border border-red-800'
+                            : 'bg-amber-900/50 text-amber-400 border border-amber-800'
+                          }`}>
+                            {isVictory ? 'Victory' : isDefeat ? 'Defeat' : 'Draw'}
+                          </span>
+                        </summary>
+                        <div className="px-3 pb-3 border-t border-slate-700">
+                          <div className="grid grid-cols-2 gap-2 mt-3 text-center">
+                            <div className="rounded-lg p-2 bg-blue-950/20 border border-blue-900/30">
+                              <div className="text-[9px] text-slate-500 uppercase">Player Army</div>
+                              <div className="text-xs font-bold text-blue-400">
+                                {Math.round(fb.playerArmy?.initialTroops || 0)} → {Math.round(fb.playerArmy?.finalTroops || 0)}
+                              </div>
+                              <div className="text-[9px] text-blue-400">-{Math.round((fb.playerArmy?.initialTroops || 0) - (fb.playerArmy?.finalTroops || 0))}</div>
+                            </div>
+                            <div className="rounded-lg p-2 bg-red-950/20 border border-red-900/30">
+                              <div className="text-[9px] text-slate-500 uppercase">Enemy Army</div>
+                              <div className="text-xs font-bold text-red-400">
+                                {Math.round(fb.enemyArmy?.initialTroops || 0)} → {Math.round(fb.enemyArmy?.finalTroops || 0)}
+                              </div>
+                              <div className="text-[9px] text-red-400">-{Math.round((fb.enemyArmy?.initialTroops || 0) - (fb.enemyArmy?.finalTroops || 0))}</div>
+                            </div>
+                          </div>
+                        </div>
+                      </details>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+
             {/* Summary footer */}
-            {onMission.length === 0 && inTransit.length === 0 && stationed.length === 0 && inTraining.length === 0 && (
+            {onMission.length === 0 && inTransit.length === 0 && stationed.length === 0 && inTraining.length === 0 && !expeditions?.some(e => e.fortress?.lastBattle || e.mapState?.fieldBattleResults?.length) && (
               <div className="rounded-lg border border-dashed border-slate-800 bg-slate-900 p-6 text-center">
                 <span className="text-2xl">🏴</span>
                 <p className="text-xs text-slate-500 mt-2">No military forces yet. Hire mercenaries or create armies to get started.</p>
@@ -461,8 +622,13 @@ export default function ArmyTab({
                         <img src={getResourceIcon('Gold')} className="w-3 h-3" alt="gold" />
                       </div>
                       <button
-                        onClick={() => onStartBarracksTraining(template.id)}
-                        disabled={!canHire}
+                        onClick={() => {
+                          if (!canHire) {
+                            if (!hasEnoughGold) onShowResourceError?.('Not enough Gold');
+                            return;
+                          }
+                          onStartBarracksTraining(template.id);
+                        }}
                         className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${canHire
                           ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
                           : 'bg-slate-800 text-slate-600 cursor-not-allowed'
@@ -485,17 +651,29 @@ export default function ArmyTab({
               </div>
               <div className="space-y-1.5">
                 {barracks.trainingQueue.map(job => {
-                  const progress = (job.elapsedTime / (job.arrivalTime || 1)) * 100;
+                  const isReinforcement = job.type === 'reinforcement';
+                  const progress = isReinforcement
+                    ? (job.soldiersNeeded > 0 ? (job.soldiersTrained / job.soldiersNeeded) * 100 : 0)
+                    : (job.elapsedTime / (job.arrivalTime || 1)) * 100;
+                  const banner = isReinforcement ? banners.find(b => b.id === job.bannerId) : null;
                   return (
                     <div key={job.id} className="flex items-center gap-2">
-                      <div className="flex-1 h-1.5 rounded-full bg-slate-800 overflow-hidden border border-slate-700">
+                      {isReinforcement && (
+                        <span className="text-[9px] text-amber-400 font-medium truncate max-w-[80px]">
+                          {banner?.name || 'Reinforcing'}
+                        </span>
+                      )}
+                      <div className={`flex-1 h-1.5 rounded-full bg-slate-800 overflow-hidden border border-slate-700`}>
                         <div
-                          className="h-full bg-emerald-500 transition-all"
-                          style={{ width: `${progress}%` }}
+                          className={`h-full transition-all ${isReinforcement ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                          style={{ width: `${Math.min(100, progress)}%` }}
                         />
                       </div>
                       <span className="text-[9px] text-slate-400 font-semibold whitespace-nowrap">
-                        {job.elapsedTime}s / {job.arrivalTime || 0}s
+                        {isReinforcement
+                          ? `${job.soldiersTrained}/${job.soldiersNeeded} 🪙`
+                          : `${job.elapsedTime}s / ${job.arrivalTime || 0}s`
+                        }
                       </span>
                     </div>
                   );
@@ -511,17 +689,35 @@ export default function ArmyTab({
               {banners.filter(b => b.type === 'mercenary').length === 0 ? (
                 <div className="text-xs text-slate-600 italic">No mercenaries stationed</div>
               ) : (
-                banners.filter(b => b.type === 'mercenary').map(b => (
-                  <div key={b.id} className="p-2 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-between">
-                    <span className="text-xs font-semibold text-slate-200">{b.name}</span>
-                    <button
-                      onClick={() => onDeleteBannerModal(b.id)}
-                      className="w-6 h-6 rounded bg-red-950/30 text-red-500 flex items-center justify-center text-xs hover:bg-red-500 hover:text-white transition-all"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                ))
+                banners.filter(b => b.type === 'mercenary').map(b => {
+                  const isDamaged = (b.squads || []).some(s => s.currentSize < s.maxSize);
+                  const totalMissing = isDamaged ? (b.squads || []).reduce((sum, s) => sum + (s.maxSize - s.currentSize), 0) : 0;
+                  const isReinforcing = barracks?.trainingQueue.some(j => j.type === 'reinforcement' && j.bannerId === b.id);
+                  return (
+                    <div key={b.id} className={`p-2 rounded-lg bg-slate-900 border ${isReinforcing ? 'border-amber-800/60' : 'border-slate-800'} flex items-center justify-between gap-2`}>
+                      <span className="text-xs font-semibold text-slate-200 truncate">{b.name}</span>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {isDamaged && !isReinforcing && (
+                          <button
+                            onClick={() => onRequestReinforcement?.(b.id)}
+                            className="px-2 py-1 bg-amber-700/80 hover:bg-amber-600 text-amber-100 rounded text-[9px] font-semibold border border-amber-500/50 whitespace-nowrap transition-colors"
+                          >
+                            🔄 Recruit ({totalMissing}g)
+                          </button>
+                        )}
+                        {isReinforcing && (
+                          <span className="text-[9px] text-amber-400 animate-pulse font-semibold">🔄 Recruiting...</span>
+                        )}
+                        <button
+                          onClick={() => onDeleteBannerModal(b.id)}
+                          className="w-6 h-6 rounded bg-red-950/30 text-red-500 flex items-center justify-center text-xs hover:bg-red-500 hover:text-white transition-all"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
               )}
             </div>
           </div>

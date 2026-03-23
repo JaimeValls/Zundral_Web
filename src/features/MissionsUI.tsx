@@ -49,6 +49,7 @@ function getEnemyTotal(comp: Division | { warrior?: number; archer?: number } | 
 
 export interface MissionsUIProps {
   missions: Mission[];
+  expeditionMissions?: Mission[];
   banners: Banner[];
   missionBannerSelector: number | null;
   missionLoading: number | null;
@@ -66,6 +67,7 @@ export interface MissionsUIProps {
 
 export default function MissionsUI({
   missions,
+  expeditionMissions,
   banners,
   missionBannerSelector,
   missionLoading,
@@ -135,6 +137,81 @@ export default function MissionsUI({
 
         {/* Right: missions list */}
         <div className="md:col-span-2 space-y-3">
+          {/* ── Expedition Missions (read-only cards) ── */}
+          {expeditionMissions && expeditionMissions.length > 0 && (
+            <div className="space-y-2">
+              <div className="text-xs font-bold text-purple-400 uppercase tracking-wider mt-2">
+                ⭐ Expedition Missions
+              </div>
+              {expeditionMissions.map((em) => {
+                const isCompleted = em.status === 'completedRewardsPending' || em.status === 'completedRewardsClaimed';
+                const enemyTotal = getEnemyTotal(em.enemyComposition as Division);
+                const unitCounts: string[] = [];
+                if (em.enemyComposition) {
+                  for (const unitType in em.enemyComposition) {
+                    const count = (em.enemyComposition as Record<string, number>)[unitType] || 0;
+                    if (count > 0) {
+                      unitCounts.push(`${count} ${unitDisplayNames[unitType as UnitType] || unitType}`);
+                    }
+                  }
+                }
+
+                return (
+                  <div
+                    key={`exp-${em.id}`}
+                    className={`rounded-xl border p-3 ${
+                      isCompleted
+                        ? 'border-emerald-700/50 bg-emerald-950/30'
+                        : 'border-purple-700/50 bg-purple-950/30'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold">{em.name}</span>
+                        <span className={`px-2 py-0.5 text-[10px] font-bold rounded ${
+                          isCompleted
+                            ? 'bg-emerald-900 text-emerald-300'
+                            : 'bg-purple-900 text-purple-300'
+                        }`}>
+                          {isCompleted ? '✅ Cleared' : '⭐ Expedition'}
+                        </span>
+                      </div>
+                    </div>
+                    {em.description && (
+                      <div className="mt-1.5 text-xs text-slate-400 leading-relaxed">{em.description}</div>
+                    )}
+                    {enemyTotal > 0 && (
+                      <div className="mt-1.5 text-xs font-semibold text-slate-300">
+                        Enemies: {enemyTotal} troops{unitCounts.length > 0 && ` (${unitCounts.join(', ')})`}
+                      </div>
+                    )}
+                    {!isCompleted && (
+                      <div className="mt-2 text-[11px] text-purple-400/80 italic">
+                        🗺️ Find on the Expedition Map ({em.terrain || 'plains'} region) — move an army there to complete
+                      </div>
+                    )}
+                    {isCompleted && em.rewardTier && em.rewards && (
+                      <div className="mt-1.5 text-xs text-amber-300 font-semibold">
+                        Rewards: {em.rewardTier}: {[
+                          em.rewards.food ? `${formatInt(em.rewards.food)} Food` : null,
+                          em.rewards.wood ? `${formatInt(em.rewards.wood)} Wood` : null,
+                          em.rewards.stone ? `${formatInt(em.rewards.stone)} Stone` : null,
+                          em.rewards.iron ? `${formatInt(em.rewards.iron)} Iron` : null,
+                          em.rewards.gold ? `${formatInt(em.rewards.gold)} Gold` : null,
+                        ].filter(Boolean).join(', ')}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* ── List Missions (interactive cards) ── */}
+          <div className="text-xs font-bold text-amber-400 uppercase tracking-wider mt-2">
+            📋 List Missions
+          </div>
+
           {missions.map((m) => {
             const readyBanners = banners.filter(b => b.status === 'ready');
             const hasReadyBanners = readyBanners.length > 0;

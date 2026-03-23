@@ -24,6 +24,7 @@ interface UseMapInteractionOptions {
   provinces: ProvinceData[];
   lookup: Uint8Array;
   enabled: boolean;
+  onProvinceClick?: (province: ProvinceData | null) => void;
 }
 
 const MIN_SCALE = 0.3;
@@ -43,6 +44,7 @@ export function useMapInteraction({
   provinces,
   lookup,
   enabled,
+  onProvinceClick,
 }: UseMapInteractionOptions) {
   const [view, setView] = useState<ViewTransform>({
     offsetX: 0,
@@ -55,6 +57,10 @@ export function useMapInteraction({
 
   const isDragging = useRef(false);
   const lastMouse = useRef({ x: 0, y: 0 });
+
+  // Ref for province click callback — avoids re-creating memoized handleClick
+  const onProvinceClickRef = useRef(onProvinceClick);
+  onProvinceClickRef.current = onProvinceClick;
 
   // Keep a ref to the current view so mousemove/click handlers can read it
   // without needing `view` in their dependency array (avoids stale closures)
@@ -88,8 +94,9 @@ export function useMapInteraction({
     [containerRef]
   );
 
-  // Mouse down
+  // Mouse down — only process events on the canvas itself (ignore UI overlays)
   const handleMouseDown = useCallback((e: MouseEvent) => {
+    if (!(e.target instanceof HTMLCanvasElement)) return;
     if (e.button === 0 || e.button === 1) {
       isDragging.current = true;
       lastMouse.current = { x: e.clientX, y: e.clientY };
@@ -132,9 +139,10 @@ export function useMapInteraction({
     isDragging.current = false;
   }, []);
 
-  // Click (select province)
+  // Click (select province) — only process clicks on the canvas itself (ignore UI overlays like debug menu)
   const handleClick = useCallback(
     (e: MouseEvent) => {
+      if (!(e.target instanceof HTMLCanvasElement)) return;
       const container = containerRef.current;
       if (!container) return;
 
@@ -144,6 +152,9 @@ export function useMapInteraction({
       const prov = getProvinceAtPixel(
         mapX, mapY, lookup, mapData.mapWidth, mapData.mapHeight, provinces
       );
+      // Fire click callback (always, every click — not toggled)
+      onProvinceClickRef.current?.(prov);
+      // Toggle visual selection as before
       setSelectedProvince(prev => (prev?.id === prov?.id ? null : prov));
     },
     [containerRef, lookup, mapData, provinces]

@@ -28,6 +28,8 @@ export interface CouncilUIProps {
   onRecruitCommander: (archetype: CommanderArchetype) => void;
   onOpenAssignModal: (commanderId: number) => void;
   onUnassignCommander: (commanderId: number) => void;
+  warehouse: { wood: number; stone: number; gold: number };
+  onShowResourceError?: (msg: string) => void;
 }
 
 export default function CouncilUI({
@@ -44,6 +46,8 @@ export default function CouncilUI({
   onRecruitCommander,
   onOpenAssignModal,
   onUnassignCommander,
+  warehouse,
+  onShowResourceError,
 }: CouncilUIProps) {
   return (
     <section className="max-w-game mx-auto px-2 sm:px-4 md:px-6 space-y-3 sm:space-y-4">
@@ -54,14 +58,31 @@ export default function CouncilUI({
         {!militaryAcademy || militaryAcademy.level === 0 ? (
           <div className="text-slate-400">
             <p className="font-semibold mb-2">A Military Academy is required to recruit a commander</p>
-            {!militaryAcademy && canBuildMilitaryAcademy(townHall.level) && (
-              <button
-                onClick={onBuildMilitaryAcademy}
-                className="px-3 py-2 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-sm"
-              >
-                Build Military Academy ({getMilitaryAcademyBuildCost().wood} Wood, {getMilitaryAcademyBuildCost().stone} Stone)
-              </button>
-            )}
+            {!militaryAcademy && canBuildMilitaryAcademy(townHall.level) && (() => {
+              const cost = getMilitaryAcademyBuildCost();
+              const enoughWood = warehouse.wood >= cost.wood;
+              const enoughStone = warehouse.stone >= cost.stone;
+              const affordable = enoughWood && enoughStone;
+              return (
+                <button
+                  onClick={() => {
+                    if (!affordable) {
+                      const missing: string[] = [];
+                      if (!enoughWood) missing.push('Wood');
+                      if (!enoughStone) missing.push('Stone');
+                      onShowResourceError?.(`Not enough ${missing.join(', ')}`);
+                      return;
+                    }
+                    onBuildMilitaryAcademy();
+                  }}
+                  className={affordable
+                    ? "px-3 py-2 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-sm"
+                    : "px-3 py-2 rounded bg-slate-700 text-slate-400 text-sm cursor-not-allowed opacity-70"}
+                >
+                  Build Military Academy ({cost.wood} Wood, {cost.stone} Stone)
+                </button>
+              );
+            })()}
           </div>
         ) : (
           <div>

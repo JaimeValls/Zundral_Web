@@ -439,26 +439,21 @@ function main() {
   const labelToProvIndex = new Map<number, number>();
   provinces.forEach((p, i) => labelToProvIndex.set(p.label, i + 1));
 
-  // ── Output province_lookup.png ──
-  // Each pixel encodes the 1-based province index directly in the R channel (0 = background).
-  // For >255 provinces, overflow into G channel: index = R + G*256.
-  // The runtime loads this PNG and reads province indices directly — no color matching needed.
-  const lookupPng = new PNG({ width: W, height: H });
+  // ── Output province_lookup.bin ──
+  // Raw Uint8Array: each byte = 1-based province index (0 = background).
+  // Loaded at runtime via fetch() + ArrayBuffer — NO image decoding, NO color management.
+  // This avoids browser PNG color space conversion that can shift R values by ±1.
+  const lookupBuffer = new Uint8Array(W * H);
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
       const idx = y * W + x;
       const label = labels[idx];
-      const provIdx = labelToProvIndex.get(label) || 0;
-      const pi = idx * 4;
-      lookupPng.data[pi] = provIdx & 0xff;         // R = low byte
-      lookupPng.data[pi + 1] = (provIdx >> 8) & 0xff; // G = high byte (for >255 provinces)
-      lookupPng.data[pi + 2] = 0;                   // B = unused
-      lookupPng.data[pi + 3] = 255;                 // A = opaque
+      lookupBuffer[idx] = labelToProvIndex.get(label) || 0;
     }
   }
-  const lookupPath = path.join(MAP_DIR, 'province_lookup.png');
-  lookupPng.pack().pipe(fs.createWriteStream(lookupPath));
-  console.log(`  Wrote ${lookupPath}`);
+  const lookupBinPath = path.join(MAP_DIR, 'province_lookup.bin');
+  fs.writeFileSync(lookupBinPath, lookupBuffer);
+  console.log(`  Wrote ${lookupBinPath} (${lookupBuffer.length} bytes)`);
 
   // colorToProvinceId is kept for backward compat but no longer used at runtime
   const colorToProvinceId: Record<string, string> = {};

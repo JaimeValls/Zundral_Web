@@ -18,11 +18,14 @@
   label{display:block;margin:8px 0 4px;font-weight:600}
   input[type=number]{width:100%;padding:8px;border-radius:10px;border:1px solid var(--border);background:var(--panel-2);color:var(--text)}
   input[type=range]{width:100%}
+  input[type=text]{padding:6px 8px;border-radius:8px;border:1px solid var(--border);background:var(--panel-2);color:var(--text);font-size:13px}
   .row{display:flex;gap:10px;align-items:center}
   .btns{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
   button{appearance:none;border:0;border-radius:10px;padding:9px 12px;font-weight:800;cursor:pointer;background:#2d9cff;color:#051018}
   button.alt{background:#2a3341;color:var(--text);border:1px solid var(--border)}
   button.warn{background:var(--danger);color:#280b0b}
+  button.sm{padding:5px 8px;font-size:11px;border-radius:6px}
+  button.green{background:#22c55e;color:#052e16}
   .kpi{display:grid;gap:10px;grid-template-columns:repeat(4,1fr)}
   @media (max-width:900px){.kpi{grid-template-columns:repeat(2,1fr)}}
   .kpi .box{background:#12161d;border:1px dashed var(--border);border-radius:10px;padding:10px}
@@ -41,10 +44,31 @@
   .unit-panel h4{margin:0 0 8px 0;font-size:14px;color:var(--accent)}
   .unit-panel label{font-size:12px;margin:6px 0 2px}
   .unit-panel input{font-size:12px;padding:6px}
-  .divisions-table{width:100%;margin-top:8px}
-  .divisions-table th{text-align:left;padding:8px}
-  .divisions-table td{text-align:center;padding:6px}
-  .divisions-table input{width:100px;margin:0 auto}
+  /* Team tabs */
+  .team-tabs{display:flex;gap:0;margin-bottom:12px}
+  .team-tab{flex:1;padding:10px;text-align:center;font-weight:800;font-size:13px;cursor:pointer;border:1px solid var(--border);background:var(--panel-2);transition:all .15s}
+  .team-tab:first-child{border-radius:10px 0 0 10px}
+  .team-tab:last-child{border-radius:0 10px 10px 0}
+  .team-tab.active-t1{background:#1e3a5f;border-color:#3b82f6;color:#93c5fd}
+  .team-tab.active-t2{background:#4a1c1c;border-color:#ef4444;color:#fca5a5}
+  /* Player section */
+  .player-section{background:var(--panel-2);border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:8px}
+  .player-header{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+  .player-header input{flex:1;font-weight:700;font-size:14px}
+  /* Army card */
+  .army-card{background:#12161d;border:1px solid var(--border);border-radius:8px;padding:8px;margin-bottom:6px}
+  .army-header{display:flex;align-items:center;gap:6px;margin-bottom:6px}
+  .army-header input{flex:1;font-weight:600;font-size:12px}
+  .army-units{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
+  .army-unit{display:flex;align-items:center;gap:4px;font-size:11px}
+  .army-unit label{margin:0;font-size:10px;font-weight:600;color:var(--muted);white-space:nowrap}
+  .army-unit input{width:60px;padding:4px;font-size:11px}
+  /* Drill-down results */
+  .drill{margin-top:12px}
+  .drill-team{border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:8px}
+  .drill-player{margin-left:12px;padding:6px 0;border-bottom:1px solid #1e2430}
+  .drill-army{margin-left:24px;padding:3px 0;font-size:11px}
+  .sev-green{color:#4ade80}.sev-amber{color:#fbbf24}.sev-red{color:#f87171}.sev-dead{color:#ef4444;font-weight:800}
 </style>
 </head>
 <body>
@@ -62,20 +86,15 @@
     </div>
 
     <div class="card">
-      <h3>Divisions</h3>
-      <table class="divisions-table">
-        <thead>
-          <tr>
-            <th>Unit</th>
-            <th>A count</th>
-            <th>B count</th>
-          </tr>
-        </thead>
-        <tbody id="divisions_tbody"></tbody>
-      </table>
+      <h3>Teams &amp; Armies</h3>
+      <div class="team-tabs">
+        <div class="team-tab active-t1" id="tab_team1" onclick="switchTeam(0)">⚔ Team 1</div>
+        <div class="team-tab" id="tab_team2" onclick="switchTeam(1)">⚔ Team 2</div>
+      </div>
+      <div id="team_content"></div>
       <div style="margin-top:8px;display:flex;justify-content:space-between;align-items:center">
-        <div class="sub">A Total: <span id="A_total" class="mono">0</span></div>
-        <div class="sub">B Total: <span id="B_total" class="mono">0</span></div>
+        <div class="sub">Team 1: <span id="total_t1" class="mono" style="color:#93c5fd">0</span></div>
+        <div class="sub">Team 2: <span id="total_t2" class="mono" style="color:#fca5a5">0</span></div>
       </div>
       <div class="btns" style="margin-top:8px">
         <button id="run">Run battle</button>
@@ -111,19 +130,20 @@
       <div class="kpi" id="kpi">
         <div class="box"><div class="sub">Winner</div><div class="n" id="k_winner">—</div></div>
         <div class="box"><div class="sub">Ticks</div><div class="n" id="k_ticks">—</div></div>
-        <div class="box"><div class="sub">A troops / morale</div><div class="n" id="k_A">—</div></div>
-        <div class="box"><div class="sub">B troops / morale</div><div class="n" id="k_B">—</div></div>
+        <div class="box"><div class="sub">Team 1</div><div class="n" id="k_t1">—</div></div>
+        <div class="box"><div class="sub">Team 2</div><div class="n" id="k_t2">—</div></div>
       </div>
       <div id="break_info" class="sub" style="margin-top:6px"></div>
+      <div id="drill_down" class="drill"></div>
     </div>
     <div class="card">
       <h3>Graphs</h3>
       <canvas id="chart1"></canvas>
       <div class="legend">
-        <span class="legend-item"><span class="swatch" style="background:#6fb3ff"></span>A morale</span>
-        <span class="legend-item"><span class="swatch" style="background:#8b0000"></span>B morale</span>
-        <span class="legend-item"><span class="swatch" style="background:#2d9cff"></span>A troops</span>
-        <span class="legend-item"><span class="swatch" style="background:#ff5d5d"></span>B troops</span>
+        <span class="legend-item"><span class="swatch" style="background:#6fb3ff"></span>T1 morale</span>
+        <span class="legend-item"><span class="swatch" style="background:#8b0000"></span>T2 morale</span>
+        <span class="legend-item"><span class="swatch" style="background:#2d9cff"></span>T1 troops</span>
+        <span class="legend-item"><span class="swatch" style="background:#ff5d5d"></span>T2 troops</span>
       </div>
       <div class="legend">
         <span class="legend-item"><span class="swatch" style="background:rgba(45,156,255,.3)"></span>Skirmish</span>
@@ -139,10 +159,10 @@
       <div class="scroll">
         <table id="tbl"><thead><tr>
           <th>tick</th><th>phase</th>
-          <th>A troops</th><th>B troops</th>
-          <th>A morale</th><th>B morale</th>
-          <th>A→B</th><th>B→A</th>
-          <th>A ratio</th><th>B ratio</th>
+          <th>T1 troops</th><th>T2 troops</th>
+          <th>T1 morale</th><th>T2 morale</th>
+          <th>T1→T2</th><th>T2→T1</th>
+          <th>T1 ratio</th><th>T2 ratio</th>
         </tr></thead><tbody></tbody></table>
       </div>
     </div>
@@ -160,252 +180,287 @@
 
 <script>
 const $=id=>document.getElementById(id);
-const toNum=el=>parseFloat(el.value||0);
+const toNum=el=>{if(!el)return 0;const v=el.value||el.textContent||'0';return parseFloat(v)||0};
 const per100=x=>x/100;
 
-// Unit type definitions
-const unitTypes = ['warrior', 'militia', 'longsword', 'pikemen', 'light_cavalry', 'heavy_cavalry', 'archer', 'skirmisher', 'crossbowmen'];
-const unitDisplayNames = {
-  warrior: 'Shieldmen',
-  militia: 'Militia',
-  longsword: 'Longswords',
-  pikemen: 'Pikemen',
-  light_cavalry: 'Light Cavalry',
-  heavy_cavalry: 'Heavy Cavalry',
-  archer: 'Archers',
-  skirmisher: 'Skirmishers',
-  crossbowmen: 'Crossbowmen'
-};
+// ─── Unit types ──────────────────────────────────────────
+const unitTypes = ['warrior','militia','longsword','pikemen','light_cavalry','heavy_cavalry','archer','skirmisher','crossbowmen'];
+const unitDisplayNames = {warrior:'Shieldmen',militia:'Militia',longsword:'Longswords',pikemen:'Pikemen',light_cavalry:'Light Cavalry',heavy_cavalry:'Heavy Cavalry',archer:'Archers',skirmisher:'Skirmishers',crossbowmen:'Crossbowmen'};
+const unitShortNames = {warrior:'Shield',militia:'Mil',longsword:'Lswd',pikemen:'Pike',light_cavalry:'LCav',heavy_cavalry:'HCav',archer:'Arch',skirmisher:'Skirm',crossbowmen:'Xbow'};
 
-// Default unit stats
 const defaultStats = {
-  warrior: {skirmish_attack:0,skirmish_defence:15,melee_attack:15,melee_defence:12,pursuit:3,morale_per_100:110},
-  archer: {skirmish_attack:30,skirmish_defence:6,melee_attack:5,melee_defence:5,pursuit:4,morale_per_100:80},
-  skirmisher: {skirmish_attack:18,skirmish_defence:10,melee_attack:10,melee_defence:9,pursuit:5,morale_per_100:100},
-  crossbowmen: {skirmish_attack:42,skirmish_defence:10,melee_attack:3,melee_defence:4,pursuit:3,morale_per_100:90},
-  militia: {skirmish_attack:0,skirmish_defence:8,melee_attack:8,melee_defence:6,pursuit:2,morale_per_100:70},
-  longsword: {skirmish_attack:0,skirmish_defence:10,melee_attack:22,melee_defence:10,pursuit:4,morale_per_100:120},
-  pikemen: {skirmish_attack:0,skirmish_defence:12,melee_attack:10,melee_defence:16,pursuit:2,morale_per_100:110},
-  light_cavalry: {skirmish_attack:6,skirmish_defence:8,melee_attack:16,melee_defence:10,pursuit:9,morale_per_100:110},
-  heavy_cavalry: {skirmish_attack:4,skirmish_defence:10,melee_attack:24,melee_defence:14,pursuit:10,morale_per_100:130}
+  warrior:{skirmish_attack:0,skirmish_defence:15,melee_attack:15,melee_defence:12,pursuit:3,morale_per_100:110},
+  archer:{skirmish_attack:30,skirmish_defence:6,melee_attack:5,melee_defence:5,pursuit:4,morale_per_100:80},
+  skirmisher:{skirmish_attack:18,skirmish_defence:10,melee_attack:10,melee_defence:9,pursuit:5,morale_per_100:100},
+  crossbowmen:{skirmish_attack:42,skirmish_defence:10,melee_attack:3,melee_defence:4,pursuit:3,morale_per_100:90},
+  militia:{skirmish_attack:0,skirmish_defence:8,melee_attack:8,melee_defence:6,pursuit:2,morale_per_100:70},
+  longsword:{skirmish_attack:0,skirmish_defence:10,melee_attack:22,melee_defence:10,pursuit:4,morale_per_100:120},
+  pikemen:{skirmish_attack:0,skirmish_defence:12,melee_attack:10,melee_defence:16,pursuit:2,morale_per_100:110},
+  light_cavalry:{skirmish_attack:6,skirmish_defence:8,melee_attack:16,melee_defence:10,pursuit:9,morale_per_100:110},
+  heavy_cavalry:{skirmish_attack:4,skirmish_defence:10,melee_attack:24,melee_defence:14,pursuit:10,morale_per_100:130}
 };
 
-// Generate unit stats UI
+// ─── Battle config (teams → players → armies) ───────────
+let nextId = 1;
+function makeDiv(){ const d={}; unitTypes.forEach(u=>d[u]=0); return d; }
+function makeArmy(name,div){ return {id:'a'+(nextId++), name:name||'Army', division:div||makeDiv()}; }
+function makePlayer(name,armies){ return {id:'p'+(nextId++), name:name||'Player', armies:armies||[makeArmy('Army 1')]}; }
+function makeTeam(id,name,color,players){ return {id, name, color, players:players||[makePlayer('Player 1')]}; }
+
+let battleConfig = {
+  teams: [
+    makeTeam('team1','Team 1','#3b82f6',[makePlayer('Player 1',[makeArmy('Army 1',{...makeDiv(),warrior:850,archer:150})])]),
+    makeTeam('team2','Team 2','#ef4444',[makePlayer('Player 1',[makeArmy('Army 1',{...makeDiv(),warrior:1000})])])
+  ]
+};
+
+let activeTeamIdx = 0;
+
+// ─── Unit stats UI (unchanged) ─────────────────────────
 function generateUnitStatsUI(){
-  const grid = $("unit_stats_grid");
-  grid.innerHTML = '';
-  unitTypes.forEach(unitType => {
-    const panel = document.createElement('div');
-    panel.className = 'unit-panel';
-    const displayName = unitDisplayNames[unitType];
-    panel.innerHTML = `
-      <h4>${displayName}</h4>
-      <label>Skirmish Attack</label><input id="${unitType}_sa" type="number" step="0.1" value="${defaultStats[unitType].skirmish_attack}">
-      <label>Skirmish Defence</label><input id="${unitType}_sd" type="number" step="0.1" value="${defaultStats[unitType].skirmish_defence}">
-      <label>Melee Attack</label><input id="${unitType}_ma" type="number" step="0.1" value="${defaultStats[unitType].melee_attack}">
-      <label>Melee Defence</label><input id="${unitType}_md" type="number" step="0.1" value="${defaultStats[unitType].melee_defence}">
-      <label>Pursuit</label><input id="${unitType}_pu" type="number" step="0.1" value="${defaultStats[unitType].pursuit}">
-      <label>Morale /100</label><input id="${unitType}_mo" type="number" step="0.1" value="${defaultStats[unitType].morale_per_100}">
-    `;
-    grid.appendChild(panel);
+  const grid=$("unit_stats_grid"); grid.innerHTML='';
+  unitTypes.forEach(ut=>{
+    const p=document.createElement('div'); p.className='unit-panel';
+    p.innerHTML=`<h4>${unitDisplayNames[ut]}</h4>
+      <label>Skirmish Attack</label><input id="${ut}_sa" type="number" step="0.1" value="${defaultStats[ut].skirmish_attack}">
+      <label>Skirmish Defence</label><input id="${ut}_sd" type="number" step="0.1" value="${defaultStats[ut].skirmish_defence}">
+      <label>Melee Attack</label><input id="${ut}_ma" type="number" step="0.1" value="${defaultStats[ut].melee_attack}">
+      <label>Melee Defence</label><input id="${ut}_md" type="number" step="0.1" value="${defaultStats[ut].melee_defence}">
+      <label>Pursuit</label><input id="${ut}_pu" type="number" step="0.1" value="${defaultStats[ut].pursuit}">
+      <label>Morale /100</label><input id="${ut}_mo" type="number" step="0.1" value="${defaultStats[ut].morale_per_100}">`;
+    grid.appendChild(p);
   });
 }
 
-// Generate divisions table
-function generateDivisionsTable(){
-  const tbody = $("divisions_tbody");
-  tbody.innerHTML = '';
-  unitTypes.forEach(unitType => {
-    const tr = document.createElement('tr');
-    const displayName = unitDisplayNames[unitType];
-    tr.innerHTML = `
-      <td>${displayName}</td>
-      <td><input id="A_${unitType}" type="number" step="10" value="0" class="div-input"></td>
-      <td><input id="B_${unitType}" type="number" step="10" value="0" class="div-input"></td>
-    `;
-    tbody.appendChild(tr);
+// ─── Team / Player / Army UI ────────────────────────────
+function switchTeam(idx){
+  activeTeamIdx=idx;
+  $("tab_team1").className='team-tab'+(idx===0?' active-t1':'');
+  $("tab_team2").className='team-tab'+(idx===1?' active-t2':'');
+  renderTeamContent();
+}
+
+function renderTeamContent(){
+  const team=battleConfig.teams[activeTeamIdx];
+  const el=$("team_content"); el.innerHTML='';
+  team.players.forEach((player,pi)=>{
+    const sec=document.createElement('div'); sec.className='player-section';
+    let html=`<div class="player-header">
+      <span style="font-size:11px;color:${team.color}">👤</span>
+      <input type="text" value="${player.name}" onchange="battleConfig.teams[${activeTeamIdx}].players[${pi}].name=this.value" style="border-color:${team.color}40">
+      <button class="sm warn" onclick="removePlayer(${pi})" title="Remove player">✕</button>
+    </div>`;
+    player.armies.forEach((army,ai)=>{
+      html+=`<div class="army-card">
+        <div class="army-header">
+          <span style="font-size:10px">⚔</span>
+          <input type="text" value="${army.name}" onchange="battleConfig.teams[${activeTeamIdx}].players[${pi}].armies[${ai}].name=this.value" style="font-size:12px">
+          <span class="sub mono" id="army_total_${pi}_${ai}">0</span>
+          <button class="sm warn" onclick="removeArmy(${pi},${ai})" title="Remove army">✕</button>
+        </div>
+        <div class="army-units">`;
+      unitTypes.forEach(ut=>{
+        const val=army.division[ut]||0;
+        html+=`<div class="army-unit"><label>${unitShortNames[ut]}</label><input type="number" step="10" value="${val}" onchange="setUnit(${pi},${ai},'${ut}',this.value)"></div>`;
+      });
+      html+=`</div></div>`;
+    });
+    html+=`<button class="sm green" onclick="addArmy(${pi})" style="margin-top:4px">+ Add Army</button>`;
+    sec.innerHTML=html;
+    el.appendChild(sec);
   });
-  // Set default values for warrior and archer
-  $("A_warrior").value = 850;
-  $("A_archer").value = 150;
-  $("B_warrior").value = 1000;
-  $("B_archer").value = 0;
+  const addBtn=document.createElement('button');
+  addBtn.className='sm alt'; addBtn.style.marginTop='8px';
+  addBtn.textContent='+ Add Player'; addBtn.onclick=()=>addPlayer();
+  el.appendChild(addBtn);
   updateTotals();
 }
 
-// Update division totals
+function setUnit(pi,ai,ut,val){
+  battleConfig.teams[activeTeamIdx].players[pi].armies[ai].division[ut]=parseFloat(val)||0;
+  updateTotals();
+}
+function addPlayer(){ battleConfig.teams[activeTeamIdx].players.push(makePlayer('Player '+(battleConfig.teams[activeTeamIdx].players.length+1))); renderTeamContent(); }
+function removePlayer(pi){ if(battleConfig.teams[activeTeamIdx].players.length<=1){alert('At least one player per team');return;} battleConfig.teams[activeTeamIdx].players.splice(pi,1); renderTeamContent(); }
+function addArmy(pi){ battleConfig.teams[activeTeamIdx].players[pi].armies.push(makeArmy('Army '+(battleConfig.teams[activeTeamIdx].players[pi].armies.length+1))); renderTeamContent(); }
+function removeArmy(pi,ai){ if(battleConfig.teams[activeTeamIdx].players[pi].armies.length<=1){alert('At least one army per player');return;} battleConfig.teams[activeTeamIdx].players[pi].armies.splice(ai,1); renderTeamContent(); }
+
 function updateTotals(){
-  let aTotal = 0, bTotal = 0;
-  unitTypes.forEach(unitType => {
-    aTotal += toNum($(`A_${unitType}`)) || 0;
-    bTotal += toNum($(`B_${unitType}`)) || 0;
+  battleConfig.teams.forEach((team,ti)=>{
+    let t=0;
+    team.players.forEach(p=>p.armies.forEach(a=>{
+      let at=0; unitTypes.forEach(ut=>at+=(a.division[ut]||0)); t+=at;
+    }));
+    $(`total_t${ti+1}`).textContent=t.toFixed(0);
   });
-  $("A_total").textContent = aTotal.toFixed(0);
-  $("B_total").textContent = bTotal.toFixed(0);
+  // Update per-army totals if visible
+  const team=battleConfig.teams[activeTeamIdx];
+  team.players.forEach((p,pi)=>p.armies.forEach((a,ai)=>{
+    const el=$(`army_total_${pi}_${ai}`);
+    if(el){ let t=0; unitTypes.forEach(ut=>t+=(a.division[ut]||0)); el.textContent=t.toFixed(0); }
+  }));
 }
 
+// ─── Pool armies into aggregate division per team ───────
+function poolTeam(teamIdx){
+  const div=makeDiv();
+  battleConfig.teams[teamIdx].players.forEach(p=>p.armies.forEach(a=>{
+    unitTypes.forEach(ut=>{ div[ut]+=(a.division[ut]||0); });
+  }));
+  return div;
+}
+
+// ─── Distribute casualties proportionally to armies ─────
+function distributeResults(teamIdx, initialDiv, finalDiv){
+  const team=battleConfig.teams[teamIdx];
+  const initTotal=total(initialDiv);
+  const results=[];
+  team.players.forEach(player=>{
+    const playerArmies=[];
+    player.armies.forEach(army=>{
+      const armyInit=total(army.division);
+      const share=initTotal>0?armyInit/initTotal:0;
+      const armyResults={id:army.id, name:army.name, playerName:player.name, division:{}, initialTotal:armyInit, finalTotal:0};
+      unitTypes.forEach(ut=>{
+        const init=army.division[ut]||0;
+        const teamUnitInit=initialDiv[ut]||0;
+        const teamUnitFinal=finalDiv[ut]||0;
+        const unitShare=teamUnitInit>0?init/teamUnitInit:0;
+        const finalCount=teamUnitFinal*unitShare;
+        armyResults.division[ut]={initial:init, final:Math.max(0,finalCount), lost:Math.max(0,init-finalCount)};
+        armyResults.finalTotal+=Math.max(0,finalCount);
+      });
+      playerArmies.push(armyResults);
+    });
+    results.push({id:player.id, name:player.name, armies:playerArmies});
+  });
+  return results;
+}
+
+// ─── Core simulation (IDENTICAL to original) ────────────
 function getStats(){
-  const stats = {};
-  unitTypes.forEach(unitType => {
-    stats[unitType] = {
-      skirmish_attack: toNum($(`${unitType}_sa`)),
-      skirmish_defence: toNum($(`${unitType}_sd`)),
-      melee_attack: toNum($(`${unitType}_ma`)),
-      melee_defence: toNum($(`${unitType}_md`)),
-      pursuit: toNum($(`${unitType}_pu`)),
-      morale_per_100: toNum($(`${unitType}_mo`))
-    };
+  const stats={};
+  unitTypes.forEach(ut=>{
+    stats[ut]={skirmish_attack:toNum($(`${ut}_sa`)),skirmish_defence:toNum($(`${ut}_sd`)),melee_attack:toNum($(`${ut}_ma`)),melee_defence:toNum($(`${ut}_md`)),pursuit:toNum($(`${ut}_pu`)),morale_per_100:toNum($(`${ut}_mo`))};
   });
   return stats;
 }
-
-function getDivs(){
-  const A = {}, B = {};
-  unitTypes.forEach(unitType => {
-    A[unitType] = toNum($(`A_${unitType}`)) || 0;
-    B[unitType] = toNum($(`B_${unitType}`)) || 0;
-  });
-  return {A, B};
-}
-
 function getParams(){
   return {skirmish_ticks:toNum($("p_skirm")),pursuit_ticks:toNum($("p_purs")),base_casualty_rate:toNum($("p_cas")),morale_per_casualty:toNum($("p_morc")),advantage_morale_tick:toNum($("p_adv")),break_pct:toNum($("p_break_pct")),rng_variance:toNum($("p_rng"))/100};
 }
-
-function total(div){
-  let sum = 0;
-  for(const unitType in div){
-    sum += div[unitType] || 0;
-  }
-  return Math.max(0, sum);
-}
-
-function morale(div, stats){
-  let totalMorale = 0;
-  for(const unitType in div){
-    const count = div[unitType] || 0;
-    const unitStat = stats[unitType];
-    if(unitStat){
-      totalMorale += per100(count) * unitStat.morale_per_100;
-    }
-  }
-  return totalMorale;
-}
-
-function phaseStats(division, stats, phase){
+function total(div){ let s=0; for(const ut in div) s+=(div[ut]||0); return Math.max(0,s); }
+function morale(div,stats){ let m=0; for(const ut in div){ const c=div[ut]||0; const s=stats[ut]; if(s) m+=per100(c)*s.morale_per_100; } return m; }
+function phaseStats(div,stats,phase){
   let EA=0,ED=0,P=0;
-  for(const unitType in division){
-    const count = division[unitType] || 0;
-    const c100 = per100(count);
-    const s = stats[unitType];
-    if(!s) continue;
-    if(phase==='skirmish'){EA+=c100*s.skirmish_attack; ED+=c100*s.skirmish_defence;}
-    else if(phase==='melee'){EA+=c100*s.melee_attack; ED+=c100*s.melee_defence;}
+  for(const ut in div){ const c=div[ut]||0; const c100=per100(c); const s=stats[ut]; if(!s)continue;
+    if(phase==='skirmish'){EA+=c100*s.skirmish_attack;ED+=c100*s.skirmish_defence;}
+    else if(phase==='melee'){EA+=c100*s.melee_attack;ED+=c100*s.melee_defence;}
     P+=c100*s.pursuit;
   }
-  return {EA:Math.max(0.1,EA), ED:Math.max(0.1,ED), P:Math.max(0,P)};
+  return {EA:Math.max(0.1,EA),ED:Math.max(0.1,ED),P:Math.max(0,P)};
 }
+function applyCasualties(div,losses){ const s=total(div); if(s<=0||losses<=0)return; for(const ut in div){ const c=div[ut]||0; div[ut]=Math.max(0,c-losses*(c/s)); } }
 
-function applyCasualties(div, losses){
-  const s=total(div); if(s<=0||losses<=0) return;
-  for(const unitType in div){
-    const count = div[unitType] || 0;
-    const share = count / s;
-    div[unitType] = Math.max(0, count - losses * share);
-  }
-}
-
-function simulate(Ain,Bin, stats, p){
-  const A={...Ain}, B={...Bin};
-  let mA=morale(A,stats), mB=morale(B,stats);
-  const mA0=mA, mB0=mB;
-  const tA = Math.max(0, (p.break_pct||20)/100 * mA0);
-  const tB = Math.max(0, (p.break_pct||20)/100 * mB0);
-  let brokeA=false, brokeB=false;
-
-  const tl=[]; let tick=0;
+function simulate(Ain,Bin,stats,p){
+  const A={...Ain},B={...Bin};
+  let mA=morale(A,stats),mB=morale(B,stats);
+  const mA0=mA,mB0=mB;
+  const tA=Math.max(0,(p.break_pct||20)/100*mA0);
+  const tB=Math.max(0,(p.break_pct||20)/100*mB0);
+  let brokeA=false,brokeB=false;
+  const tl=[];let tick=0;
   function step(phase){
-    const SA=phaseStats(A,stats,phase), SB=phaseStats(B,stats,phase);
-    const sA=total(A)/100, sB=total(B)/100;
-    const rA=SA.EA/SB.ED, rB=SB.EA/SA.ED;
-    const nA=1+(Math.random()*2-1)*p.rng_variance, nB=1+(Math.random()*2-1)*p.rng_variance;
+    const SA=phaseStats(A,stats,phase),SB=phaseStats(B,stats,phase);
+    const sA=total(A)/100,sB=total(B)/100;
+    const rA=SA.EA/SB.ED,rB=SB.EA/SA.ED;
+    const nA=1+(Math.random()*2-1)*p.rng_variance,nB=1+(Math.random()*2-1)*p.rng_variance;
     const lossB=p.base_casualty_rate*sA*rA*nA;
     const lossA=p.base_casualty_rate*sB*rB*nB;
-    applyCasualties(A,lossA); applyCasualties(B,lossB);
-    mB -= p.morale_per_casualty*lossB + p.advantage_morale_tick*Math.max(0,rA-1);
-    mA -= p.morale_per_casualty*lossA + p.advantage_morale_tick*Math.max(0,rB-1);
+    applyCasualties(A,lossA);applyCasualties(B,lossB);
+    mB-=p.morale_per_casualty*lossB+p.advantage_morale_tick*Math.max(0,rA-1);
+    mA-=p.morale_per_casualty*lossA+p.advantage_morale_tick*Math.max(0,rB-1);
     tick++;
     tl.push({tick,phase,A_troops:total(A),B_troops:total(B),A_morale:mA,B_morale:mB,AtoB:lossB,BtoA:lossA,Aratio:rA,Bratio:rB});
   }
-  // Skirmish
-  for(let i=0;i<p.skirmish_ticks;i++){
-    if(total(A)<=0||total(B)<=0||mA<=tA||mB<=tB) break;
-    step('skirmish');
-  }
-  // Melee until break
+  for(let i=0;i<p.skirmish_ticks;i++){ if(total(A)<=0||total(B)<=0||mA<=tA||mB<=tB)break; step('skirmish'); }
   let guard=0;
-  while(total(A)>0 && total(B)>0 && mA>tA && mB>tB){
-    step('melee'); if(++guard>5000) break;
-  }
-  if(mA<=tA && total(A)>0) brokeA=true;
-  if(mB<=tB && total(B)>0) brokeB=true;
-
+  while(total(A)>0&&total(B)>0&&mA>tA&&mB>tB){ step('melee'); if(++guard>5000)break; }
+  if(mA<=tA&&total(A)>0)brokeA=true;
+  if(mB<=tB&&total(B)>0)brokeB=true;
   let winner='draw';
-  if((mA<=tA||total(A)<=0)&&(mB<=tB||total(B)<=0)) winner='draw';
-  else if(mA<=tA||total(A)<=0) winner='B';
-  else if(mB<=tB||total(B)<=0) winner='A';
-  else winner = mA>mB? 'A' : (mB>mA? 'B' : (total(A)>total(B)? 'A' : (total(B)>total(A)? 'B' : 'draw')));
-
-  // Pursuit
-  if((winner==='A'||winner==='B') && p.pursuit_ticks>0){
+  if((mA<=tA||total(A)<=0)&&(mB<=tB||total(B)<=0))winner='draw';
+  else if(mA<=tA||total(A)<=0)winner='B';
+  else if(mB<=tB||total(B)<=0)winner='A';
+  else winner=mA>mB?'A':(mB>mA?'B':(total(A)>total(B)?'A':(total(B)>total(A)?'B':'draw')));
+  if((winner==='A'||winner==='B')&&p.pursuit_ticks>0){
     for(let i=0;i<p.pursuit_ticks;i++){
-      const SA=phaseStats(A,stats,'melee');
-      const SB=phaseStats(B,stats,'melee');
+      const SA=phaseStats(A,stats,'melee'),SB=phaseStats(B,stats,'melee');
       const base=0.25;
-      if(winner==='A'){
-        const lossB=base*Math.max(0,SA.P)/Math.max(1,total(B)/100);
-        applyCasualties(B,lossB); mB -= p.morale_per_casualty*lossB;
-        tl.push({tick:++tick,phase:'pursuit',A_troops:total(A),B_troops:total(B),A_morale:mA,B_morale:mB,AtoB:lossB,BtoA:0,Aratio:NaN,Bratio:NaN});
-      } else {
-        const lossA=base*Math.max(0,SB.P)/Math.max(1,total(A)/100);
-        applyCasualties(A,lossA); mA -= p.morale_per_casualty*lossA;
-        tl.push({tick:++tick,phase:'pursuit',A_troops:total(A),B_troops:total(B),A_morale:mA,B_morale:mB,AtoB:0,BtoA:lossA,Aratio:NaN,Bratio:NaN});
-      }
-      if(total(A)<=0||total(B)<=0) { }
+      if(winner==='A'){ const lossB=base*Math.max(0,SA.P)/Math.max(1,total(B)/100); applyCasualties(B,lossB); mB-=p.morale_per_casualty*lossB; tl.push({tick:++tick,phase:'pursuit',A_troops:total(A),B_troops:total(B),A_morale:mA,B_morale:mB,AtoB:lossB,BtoA:0,Aratio:NaN,Bratio:NaN}); }
+      else { const lossA=base*Math.max(0,SB.P)/Math.max(1,total(A)/100); applyCasualties(A,lossA); mA-=p.morale_per_casualty*lossA; tl.push({tick:++tick,phase:'pursuit',A_troops:total(A),B_troops:total(B),A_morale:mA,B_morale:mB,AtoB:0,BtoA:lossA,Aratio:NaN,Bratio:NaN}); }
+      if(total(A)<=0||total(B)<=0){}
     }
   }
-  const sA=total(A), sB=total(B);
-  const summary = {winner, ticks:tick,
-    final_A_total:sA.toFixed(2), final_B_total:sB.toFixed(2),
-    final_A_morale:mA.toFixed(2), final_B_morale:mB.toFixed(2),
-    final_A_troops:{...A}, final_B_troops:{...B},
-    break_pct:(p.break_pct||0), tA_value:tA, tB_value:tB,
-    brokeA, brokeB
-  };
-  return {timeline:tl, summary};
+  return {timeline:tl, summary:{winner,ticks:tick,
+    final_A_total:total(A).toFixed(2),final_B_total:total(B).toFixed(2),
+    final_A_morale:mA.toFixed(2),final_B_morale:mB.toFixed(2),
+    final_A_troops:{...A},final_B_troops:{...B},
+    break_pct:(p.break_pct||0),tA_value:tA,tB_value:tB,brokeA,brokeB}};
 }
 
+// ─── Rendering ──────────────────────────────────────────
 function renderTable(rows){
-  const tbody=$("tbl").querySelector('tbody');
-  tbody.innerHTML='';
+  const tbody=$("tbl").querySelector('tbody'); tbody.innerHTML='';
   const fmt=x=>Number.isFinite(x)?x.toFixed(2):'—';
   for(const r of rows){
     const tr=document.createElement('tr');
-    tr.innerHTML=`<td>${r.tick}</td><td>${r.phase}</td>
-      <td>${fmt(r.A_troops)}</td><td>${fmt(r.B_troops)}</td>
-      <td>${fmt(r.A_morale)}</td><td>${fmt(r.B_morale)}</td>
-      <td>${fmt(r.AtoB||0)}</td><td>${fmt(r.BtoA||0)}</td>
-      <td>${fmt(r.Aratio)}</td><td>${fmt(r.Bratio)}</td>`;
+    tr.innerHTML=`<td>${r.tick}</td><td>${r.phase}</td><td>${fmt(r.A_troops)}</td><td>${fmt(r.B_troops)}</td><td>${fmt(r.A_morale)}</td><td>${fmt(r.B_morale)}</td><td>${fmt(r.AtoB||0)}</td><td>${fmt(r.BtoA||0)}</td><td>${fmt(r.Aratio)}</td><td>${fmt(r.Bratio)}</td>`;
     tbody.appendChild(tr);
   }
 }
 
 function renderSummary(s){
-  $("k_winner").textContent=s.winner.toUpperCase();
+  const winLabel=s.winner==='A'?battleConfig.teams[0].name:(s.winner==='B'?battleConfig.teams[1].name:'Draw');
+  $("k_winner").textContent=winLabel;
+  $("k_winner").style.color=s.winner==='A'?'#93c5fd':(s.winner==='B'?'#fca5a5':'#fbbf24');
   $("k_ticks").textContent=s.ticks;
-  $("k_A").textContent=`${s.final_A_total} / ${s.final_A_morale}`;
-  $("k_B").textContent=`${s.final_B_total} / ${s.final_B_morale}`;
-  const bi=$("break_info"); if(bi){ const who=(s.brokeA&&s.brokeB)?'both':(s.brokeA?'A':(s.brokeB?'B':'none')); bi.textContent=`Break at ${s.break_pct}% → A t=${Number(s.tA_value).toFixed(0)}, B t=${Number(s.tB_value).toFixed(0)} | Rout: ${who}`; }
+  $("k_t1").textContent=`${s.final_A_total} / ${s.final_A_morale}`;
+  $("k_t2").textContent=`${s.final_B_total} / ${s.final_B_morale}`;
+  const bi=$("break_info");
+  if(bi){ const who=(s.brokeA&&s.brokeB)?'both':(s.brokeA?'T1':(s.brokeB?'T2':'none')); bi.textContent=`Break at ${s.break_pct}% → T1 t=${Number(s.tA_value).toFixed(0)}, T2 t=${Number(s.tB_value).toFixed(0)} | Rout: ${who}`; }
+}
+
+function renderDrillDown(t1Results,t2Results,initT1,initT2,summary){
+  const el=$("drill_down"); el.innerHTML='';
+  const teams=[{results:t1Results,init:total(initT1),final:parseFloat(summary.final_A_total),color:'#3b82f6',name:battleConfig.teams[0].name},
+               {results:t2Results,init:total(initT2),final:parseFloat(summary.final_B_total),color:'#ef4444',name:battleConfig.teams[1].name}];
+  teams.forEach(team=>{
+    const lost=team.init-team.final;
+    const pct=team.init>0?(lost/team.init*100):0;
+    let html=`<div class="drill-team" style="border-color:${team.color}40">
+      <div style="font-weight:800;color:${team.color};font-size:13px">${team.name} — ${Math.round(team.init)} → ${Math.round(team.final)} <span style="color:#f87171">(${lost>0?'-':''}${Math.round(lost)})</span></div>`;
+    team.results.forEach(player=>{
+      const pInit=player.armies.reduce((s,a)=>s+a.initialTotal,0);
+      const pFinal=player.armies.reduce((s,a)=>s+a.finalTotal,0);
+      const pLost=pInit-pFinal;
+      const pPct=pInit>0?(pLost/pInit*100):0;
+      const share=team.init>0?Math.round(pInit/team.init*100):0;
+      html+=`<div class="drill-player">
+        <div style="font-weight:700;font-size:12px">👤 ${player.name} <span class="sub">${share}% of force</span> — ${Math.round(pInit)} → ${Math.round(pFinal)} <span style="color:#f87171">(-${Math.round(pLost)})</span> <span class="sub">${pPct.toFixed(0)}% loss</span></div>`;
+      player.armies.forEach(army=>{
+        const aLost=army.initialTotal-army.finalTotal;
+        const aPct=army.initialTotal>0?(aLost/army.initialTotal*100):0;
+        const sev=army.finalTotal<=0?'sev-dead':aPct>30?'sev-red':aPct>10?'sev-amber':'sev-green';
+        html+=`<div class="drill-army">
+          <span style="font-weight:600">${army.name}</span>
+          <span class="${sev}" style="margin-left:8px">${Math.round(army.initialTotal)} → ${Math.round(army.finalTotal)} (-${Math.round(aLost)}) ${aPct.toFixed(0)}% loss${army.finalTotal<=0?' 💀':''}</span>
+        </div>`;
+      });
+      html+=`</div>`;
+    });
+    html+=`</div>`;
+    el.innerHTML+=html;
+  });
 }
 
 function lossesByPhase(tl){
@@ -414,13 +469,13 @@ function lossesByPhase(tl){
     const seg=tl.filter(x=>x.phase===ph);
     const lossA=seg.reduce((a,b)=>a+(b.BtoA||0),0);
     const lossB=seg.reduce((a,b)=>a+(b.AtoB||0),0);
-    const end=seg.length? seg[seg.length-1] : null;
-    return {ph, lossA, lossB, survA:end? end.A_troops: NaN, survB:end? end.B_troops: NaN};
+    const end=seg.length?seg[seg.length-1]:null;
+    return {ph,lossA,lossB,survA:end?end.A_troops:NaN,survB:end?end.B_troops:NaN};
   });
   const totalA=tl.reduce((a,b)=>a+(b.BtoA||0),0);
   const totalB=tl.reduce((a,b)=>a+(b.AtoB||0),0);
   const last=tl[tl.length-1]||{A_troops:0,B_troops:0};
-  let html='<table><thead><tr><th>Phase</th><th>A losses</th><th>B losses</th><th>A survivors</th><th>B survivors</th></tr></thead><tbody>';
+  let html='<table><thead><tr><th>Phase</th><th>T1 losses</th><th>T2 losses</th><th>T1 survivors</th><th>T2 survivors</th></tr></thead><tbody>';
   for(const r of rows){
     html+=`<tr><td>${r.ph}</td><td style="color:#2d9cff">${r.lossA.toFixed(1)}</td><td style="color:#ff5d5d">${r.lossB.toFixed(1)}</td><td style="color:#2d9cff">${Number.isFinite(r.survA)?r.survA.toFixed(1):'—'}</td><td style="color:#ff5d5d">${Number.isFinite(r.survB)?r.survB.toFixed(1):'—'}</td></tr>`;
   }
@@ -428,196 +483,135 @@ function lossesByPhase(tl){
   $("losses").innerHTML=html;
 }
 
-function plot(canvas, series, timeline){
-  if(!canvas) return; const ctx=canvas.getContext('2d'); if(!ctx) return;
-  const w=canvas.width=canvas.clientWidth*2, h=canvas.height=canvas.clientHeight*2;
-  ctx.clearRect(0,0,w,h); ctx.save(); ctx.translate(48,10); const W=w-76, H=h-40;
-  const N=timeline.length||1; const sx=x=> (x-1)/(N-1||1)*W;
+function plot(canvas,series,timeline){
+  if(!canvas)return;const ctx=canvas.getContext('2d');if(!ctx)return;
+  const w=canvas.width=canvas.clientWidth*2,h=canvas.height=canvas.clientHeight*2;
+  ctx.clearRect(0,0,w,h);ctx.save();ctx.translate(48,10);const W=w-76,H=h-40;
+  const N=timeline.length||1;const sx=x=>(x-1)/(N-1||1)*W;
   const troopsAll=[...series.A_troops,...series.B_troops].filter(Number.isFinite);
   const moraleAll=[...series.A_morale,...series.B_morale].filter(Number.isFinite);
-  const tMin=Math.min(...troopsAll,0), tMax=Math.max(...troopsAll,1);
-  const mMin=Math.min(...moraleAll,0), mMax=Math.max(...moraleAll,1);
-  const syT=y=> H-(y-tMin)/(tMax-tMin||1)*H; const syM=y=> H-(y-mMin)/(mMax-mMin||1)*H;
-  ctx.fillStyle='#0f141b'; ctx.fillRect(0,0,W,H);
+  const tMin=Math.min(...troopsAll,0),tMax=Math.max(...troopsAll,1);
+  const mMin=Math.min(...moraleAll,0),mMax=Math.max(...moraleAll,1);
+  const syT=y=>H-(y-tMin)/(tMax-tMin||1)*H;const syM=y=>H-(y-mMin)/(mMax-mMin||1)*H;
+  ctx.fillStyle='#0f141b';ctx.fillRect(0,0,W,H);
   if(timeline.length){
-    const bands=[]; let s=0, cur=timeline[0].phase;
-    for(let i=1;i<timeline.length;i++){ if(timeline[i].phase!==cur){ bands.push({ph:cur,s:s+1,e:i}); s=i; cur=timeline[i].phase; } }
+    const bands=[];let s=0,cur=timeline[0].phase;
+    for(let i=1;i<timeline.length;i++){if(timeline[i].phase!==cur){bands.push({ph:cur,s:s+1,e:i});s=i;cur=timeline[i].phase;}}
     bands.push({ph:cur,s:s+1,e:timeline.length});
-    for(const b of bands){ const x0=sx(b.s), x1=sx(b.e); let c='rgba(154,163,178,0.14)'; if(b.ph==='skirmish') c='rgba(45,156,255,0.16)'; else if(b.ph==='pursuit') c='rgba(255,93,93,0.16)'; ctx.fillStyle=c; ctx.fillRect(x0,0,Math.max(1,x1-x0),H); ctx.fillStyle='#cfd6e1'; ctx.font='bold 16px system-ui'; ctx.textAlign='center'; ctx.fillText(b.ph.charAt(0).toUpperCase()+b.ph.slice(1), x0+(x1-x0)/2, 6); }
+    for(const b of bands){const x0=sx(b.s),x1=sx(b.e);let c='rgba(154,163,178,0.14)';if(b.ph==='skirmish')c='rgba(45,156,255,0.16)';else if(b.ph==='pursuit')c='rgba(255,93,93,0.16)';ctx.fillStyle=c;ctx.fillRect(x0,0,Math.max(1,x1-x0),H);ctx.fillStyle='#cfd6e1';ctx.font='bold 16px system-ui';ctx.textAlign='center';ctx.fillText(b.ph.charAt(0).toUpperCase()+b.ph.slice(1),x0+(x1-x0)/2,6);}
   }
-  ctx.strokeStyle='#202733'; ctx.lineWidth=1; for(let i=0;i<=5;i++){ const y=i*(H/5); ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
-  for(let i=0;i<=10;i++){ const x=i*(W/10); ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
-  ctx.strokeStyle='#2c3545'; ctx.lineWidth=2; ctx.strokeRect(0,0,W,H);
-  ctx.fillStyle='#a7b0bd'; ctx.font='12px system-ui'; ctx.textAlign='right'; ctx.textBaseline='middle';
-  for(let i=0;i<=4;i++){ const v=tMin+(tMax-tMin)*i/4; const y=syT(v); ctx.fillText(Math.round(v), -6, y); }
-  ctx.fillText('Troops', -6, -6);
-  ctx.textAlign='left'; for(let i=0;i<=4;i++){ const v=mMin+(mMax-mMin)*i/4; const y=syM(v); ctx.fillText(Math.round(v), W+6, y); }
-  ctx.fillText('Morale', W+6, -6);
-  const draw=(arr,sy,col)=>{ if(!arr.length) return; ctx.beginPath(); ctx.lineWidth=3; ctx.strokeStyle=col; ctx.moveTo(sx(1), sy(arr[0])); for(let i=1;i<arr.length;i++){ ctx.lineTo(sx(i+1), sy(arr[i])); } ctx.stroke(); };
-  draw(series.A_morale, syM, '#6fb3ff'); draw(series.B_morale, syM, '#8b0000');
-  draw(series.A_troops, syT, '#2d9cff'); draw(series.B_troops, syT, '#ff5d5d');
+  ctx.strokeStyle='#202733';ctx.lineWidth=1;for(let i=0;i<=5;i++){const y=i*(H/5);ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+  for(let i=0;i<=10;i++){const x=i*(W/10);ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+  ctx.strokeStyle='#2c3545';ctx.lineWidth=2;ctx.strokeRect(0,0,W,H);
+  ctx.fillStyle='#a7b0bd';ctx.font='12px system-ui';ctx.textAlign='right';ctx.textBaseline='middle';
+  for(let i=0;i<=4;i++){const v=tMin+(tMax-tMin)*i/4;const y=syT(v);ctx.fillText(Math.round(v),-6,y);}
+  ctx.fillText('Troops',-6,-6);
+  ctx.textAlign='left';for(let i=0;i<=4;i++){const v=mMin+(mMax-mMin)*i/4;const y=syM(v);ctx.fillText(Math.round(v),W+6,y);}
+  ctx.fillText('Morale',W+6,-6);
+  const draw=(arr,sy,col)=>{if(!arr.length)return;ctx.beginPath();ctx.lineWidth=3;ctx.strokeStyle=col;ctx.moveTo(sx(1),sy(arr[0]));for(let i=1;i<arr.length;i++){ctx.lineTo(sx(i+1),sy(arr[i]));}ctx.stroke();};
+  draw(series.A_morale,syM,'#6fb3ff');draw(series.B_morale,syM,'#8b0000');
+  draw(series.A_troops,syT,'#2d9cff');draw(series.B_troops,syT,'#ff5d5d');
   ctx.restore();
 }
 
 function toCSV(tl){
   const cols=["tick","phase","A_troops","B_troops","A_morale","B_morale","AtoB","BtoA","Aratio","Bratio"];
-  return [cols.join(','), ...tl.map(r=>cols.map(k=> (Number.isFinite(r[k])? (r[k].toFixed? r[k].toFixed(4): r[k]) : '') ).join(','))].join('\n');
+  return [cols.join(','),...tl.map(r=>cols.map(k=>(Number.isFinite(r[k])?(r[k].toFixed?r[k].toFixed(4):r[k]):'')).join(','))].join('\n');
 }
 
+// ─── Run battle ─────────────────────────────────────────
 function run(){
-  console.clear(); $("tbl").querySelector('tbody').innerHTML='';
-  const stats=getStats(); const {A,B}=getDivs(); const p=getParams();
-  const {timeline, summary}=simulate(A,B,stats,p);
-  renderTable(timeline); renderSummary(summary);
+  console.clear();$("tbl").querySelector('tbody').innerHTML='';
+  const stats=getStats();const p=getParams();
+  const t1Div=poolTeam(0);const t2Div=poolTeam(1);
+  const t1Init={...t1Div};const t2Init={...t2Div};
+  const {timeline,summary}=simulate(t1Div,t2Div,stats,p);
+  renderTable(timeline);renderSummary(summary);
+  const t1Results=distributeResults(0,t1Init,summary.final_A_troops);
+  const t2Results=distributeResults(1,t2Init,summary.final_B_troops);
+  renderDrillDown(t1Results,t2Results,t1Init,t2Init,summary);
   const s={A_morale:timeline.map(r=>r.A_morale),B_morale:timeline.map(r=>r.B_morale),A_troops:timeline.map(r=>r.A_troops),B_troops:timeline.map(r=>r.B_troops)};
-  plot($("chart1"), s, timeline); lossesByPhase(timeline);
-  window.__timeline=timeline;
+  plot($("chart1"),s,timeline);lossesByPhase(timeline);
+  window.__timeline=timeline;window.__t1Results=t1Results;window.__t2Results=t2Results;
 }
 
-// Initialize UI
+// ─── Initialize ─────────────────────────────────────────
 generateUnitStatsUI();
-generateDivisionsTable();
-
-// Wire up division input listeners
-unitTypes.forEach(unitType => {
-  $(`A_${unitType}`).addEventListener('input', updateTotals);
-  $(`B_${unitType}`).addEventListener('input', updateTotals);
-});
+renderTeamContent();
 
 $("p_rng").addEventListener('input',()=>$("rng_label").textContent=$("p_rng").value);
-$("run").addEventListener('click', run);
-$("reset").addEventListener('click', ()=>location.reload());
-$("clear").addEventListener('click', ()=>{ $("tbl").querySelector('tbody').innerHTML=''; ["k_winner","k_ticks","k_A","k_B"].forEach(id=>$(id).textContent='—'); const c=$("chart1"); if(c){const x=c.getContext('2d'); x&&x.clearRect(0,0,c.width,c.height);} $("losses").innerHTML='';});
-$("csv").addEventListener('click',()=>{const tl=window.__timeline||[]; if(!tl.length){alert('Run a battle first.');return;} const blob=new Blob([toCSV(tl)],{type:'text/csv;charset=utf-8;'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='battle_timeline.csv'; a.click(); setTimeout(()=>URL.revokeObjectURL(url),400);});
+$("run").addEventListener('click',run);
+$("reset").addEventListener('click',()=>location.reload());
+$("clear").addEventListener('click',()=>{$("tbl").querySelector('tbody').innerHTML='';["k_winner","k_ticks","k_t1","k_t2"].forEach(id=>$(id).textContent='—');const c=$("chart1");if(c){const x=c.getContext('2d');x&&x.clearRect(0,0,c.width,c.height);}$("losses").innerHTML='';$("drill_down").innerHTML='';});
+$("csv").addEventListener('click',()=>{const tl=window.__timeline||[];if(!tl.length){alert('Run a battle first.');return;}const blob=new Blob([toCSV(tl)],{type:'text/csv;charset=utf-8;'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='battle_timeline.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),400);});
 
-$("load_tested").addEventListener('click', ()=>{
-  unitTypes.forEach(unitType => {
-    const def = defaultStats[unitType];
-    $(`${unitType}_sa`).value = def.skirmish_attack;
-    $(`${unitType}_sd`).value = def.skirmish_defence;
-    $(`${unitType}_ma`).value = def.melee_attack;
-    $(`${unitType}_md`).value = def.melee_defence;
-    $(`${unitType}_pu`).value = def.pursuit;
-    $(`${unitType}_mo`).value = def.morale_per_100;
+$("load_tested").addEventListener('click',()=>{
+  unitTypes.forEach(ut=>{
+    const def=defaultStats[ut];
+    $(`${ut}_sa`).value=def.skirmish_attack;$(`${ut}_sd`).value=def.skirmish_defence;
+    $(`${ut}_ma`).value=def.melee_attack;$(`${ut}_md`).value=def.melee_defence;
+    $(`${ut}_pu`).value=def.pursuit;$(`${ut}_mo`).value=def.morale_per_100;
   });
 });
 
-$("update_game_stats").addEventListener('click', ()=>{
-  const stats = getStats();
-  const battleParams = {
-    skirmish_ticks: toNum($("p_skirm")),
-    pursuit_ticks: toNum($("p_purs")),
-    base_casualty_rate: toNum($("p_cas")),
-    morale_per_casualty: toNum($("p_morc")),
-    advantage_morale_tick: toNum($("p_adv")),
-    break_pct: toNum($("p_break_pct")),
-    rng_variance: toNum($("p_rng")) / 100
-  };
-  const divisions = getDivs();
-  let confirmMsg = 'This will update the unit stats, battle parameters, and divisions used in game missions.\n\n';
-  unitTypes.forEach(unitType => {
-    const s = stats[unitType];
-    confirmMsg += `${unitDisplayNames[unitType]}: SA=${s.skirmish_attack}, SD=${s.skirmish_defence}, MA=${s.melee_attack}, MD=${s.melee_defence}, P=${s.pursuit}, M=${s.morale_per_100}\n`;
-  });
-  confirmMsg += `\nBattle Params: Skirmish=${battleParams.skirmish_ticks}, Pursuit=${battleParams.pursuit_ticks}, Casualty=${battleParams.base_casualty_rate}, Break=${battleParams.break_pct}%\n\nContinue?`;
-  const confirmed = confirm(confirmMsg);
-  if(confirmed){
-    localStorage.setItem('gameUnitStats', JSON.stringify(stats));
-    localStorage.setItem('gameBattleParams', JSON.stringify(battleParams));
-    localStorage.setItem('gameDivisions', JSON.stringify(divisions));
-    window.dispatchEvent(new CustomEvent('unitStatsUpdated', { detail: { stats, battleParams, divisions } }));
-    alert('Unit stats, battle parameters, and divisions updated! The game will use these values for future battles.');
+$("update_game_stats").addEventListener('click',()=>{
+  const stats=getStats();
+  const battleParams={skirmish_ticks:toNum($("p_skirm")),pursuit_ticks:toNum($("p_purs")),base_casualty_rate:toNum($("p_cas")),morale_per_casualty:toNum($("p_morc")),advantage_morale_tick:toNum($("p_adv")),break_pct:toNum($("p_break_pct")),rng_variance:toNum($("p_rng"))/100};
+  let msg='Update game unit stats and battle parameters?\n\n';
+  unitTypes.forEach(ut=>{const s=stats[ut];msg+=`${unitDisplayNames[ut]}: SA=${s.skirmish_attack}, MA=${s.melee_attack}, P=${s.pursuit}\n`;});
+  msg+=`\nParams: Skirmish=${battleParams.skirmish_ticks}, Pursuit=${battleParams.pursuit_ticks}, Casualty=${battleParams.base_casualty_rate}, Break=${battleParams.break_pct}%`;
+  if(confirm(msg)){
+    localStorage.setItem('gameUnitStats',JSON.stringify(stats));
+    localStorage.setItem('gameBattleParams',JSON.stringify(battleParams));
+    window.dispatchEvent(new CustomEvent('unitStatsUpdated',{detail:{stats,battleParams}}));
+    alert('Updated! Game will use these values for future battles.');
   }
 });
 
-// Load saved values on page load
+// Load saved values
 (function(){
-  const savedStats = localStorage.getItem('gameUnitStats');
-  if(savedStats){
-    try{
-      const stats = JSON.parse(savedStats);
-      unitTypes.forEach(unitType => {
-        if(stats[unitType]){
-          $(`${unitType}_sa`).value = stats[unitType].skirmish_attack;
-          $(`${unitType}_sd`).value = stats[unitType].skirmish_defence;
-          $(`${unitType}_ma`).value = stats[unitType].melee_attack;
-          $(`${unitType}_md`).value = stats[unitType].melee_defence;
-          $(`${unitType}_pu`).value = stats[unitType].pursuit;
-          $(`${unitType}_mo`).value = stats[unitType].morale_per_100;
-        }
-      });
-    }catch(e){
-      console.warn('Failed to load saved unit stats:', e);
-    }
-  }
-  const savedParams = localStorage.getItem('gameBattleParams');
-  if(savedParams){
-    try{
-      const params = JSON.parse(savedParams);
-      $("p_skirm").value = params.skirmish_ticks;
-      $("p_purs").value = params.pursuit_ticks;
-      $("p_cas").value = params.base_casualty_rate;
-      $("p_morc").value = params.morale_per_casualty;
-      $("p_adv").value = params.advantage_morale_tick;
-      $("p_break_pct").value = params.break_pct;
-      $("p_rng").value = params.rng_variance * 100;
-      $("rng_label").textContent = Math.round(params.rng_variance * 100);
-    }catch(e){
-      console.warn('Failed to load saved battle params:', e);
-    }
-  }
-  const savedDivs = localStorage.getItem('gameDivisions');
-  if(savedDivs){
-    try{
-      const divs = JSON.parse(savedDivs);
-      unitTypes.forEach(unitType => {
-        if(divs.A && divs.A[unitType] !== undefined) $(`A_${unitType}`).value = divs.A[unitType];
-        if(divs.B && divs.B[unitType] !== undefined) $(`B_${unitType}`).value = divs.B[unitType];
-      });
-      updateTotals();
-    }catch(e){
-      console.warn('Failed to load saved divisions:', e);
-    }
-  }
+  const savedStats=localStorage.getItem('gameUnitStats');
+  if(savedStats){try{const stats=JSON.parse(savedStats);unitTypes.forEach(ut=>{if(stats[ut]){$(`${ut}_sa`).value=stats[ut].skirmish_attack;$(`${ut}_sd`).value=stats[ut].skirmish_defence;$(`${ut}_ma`).value=stats[ut].melee_attack;$(`${ut}_md`).value=stats[ut].melee_defence;$(`${ut}_pu`).value=stats[ut].pursuit;$(`${ut}_mo`).value=stats[ut].morale_per_100;}});}catch(e){}}
+  const savedParams=localStorage.getItem('gameBattleParams');
+  if(savedParams){try{const p=JSON.parse(savedParams);$("p_skirm").value=p.skirmish_ticks;$("p_purs").value=p.pursuit_ticks;$("p_cas").value=p.base_casualty_rate;$("p_morc").value=p.morale_per_casualty;$("p_adv").value=p.advantage_morale_tick;$("p_break_pct").value=p.break_pct;$("p_rng").value=p.rng_variance*100;$("rng_label").textContent=Math.round(p.rng_variance*100);}catch(e){}}
 })();
 
-plot($("chart1"), {A_morale:[],B_morale:[],A_troops:[],B_troops:[]}, []);
+plot($("chart1"),{A_morale:[],B_morale:[],A_troops:[],B_troops:[]},[]);
 
-// Self‑tests
+// ─── Self-tests ─────────────────────────────────────────
 function selfTests(){
-  const out=[]; const ok=m=>out.push('✅ '+m); const no=(m,e)=>out.push('❌ '+m+': '+e);
-  try{ if(!$("chart1")) throw new Error('missing #chart1'); ok('Canvas present'); }catch(e){ no('Canvas present', e.message); }
-  try{ 
-    const testDiv = {};
-    unitTypes.forEach(ut => testDiv[ut] = 100);
-    const {timeline,summary}=simulate(testDiv,testDiv, getStats(), getParams()); 
-    if(!timeline.length) throw new Error('no ticks'); 
-    ok('Battle produced timeline'); 
-    if(!summary||!summary.winner) throw new Error('no summary'); 
-    ok('Summary valid'); 
-  }catch(e){ no('Simulation', e.message); }
-  try{ const tl=[{phase:'skirmish',A_troops:1000,B_troops:1000},{phase:'melee',A_troops:900,B_troops:950},{phase:'pursuit',A_troops:880,B_troops:900}]; lossesByPhase(tl); ok('Loss table from mock timeline'); }catch(e){ no('Loss table', e.message); }
-  try{ plot($("chart1"), {A_morale:[1,2,3],B_morale:[1,2,1],A_troops:[1000,900,800],B_troops:[1000,950,940]}, [{phase:'skirmish'},{phase:'melee'},{phase:'pursuit'}]); ok('Plot executed'); }catch(e){ no('Plot', e.message); }
-  try{ 
-    const p=getParams(); p.break_pct=50; 
-    const testDiv = {};
-    unitTypes.forEach(ut => testDiv[ut] = 100);
-    const r=simulate(testDiv,testDiv, getStats(), p); 
-    const hasP=r.timeline.some(x=>x.phase==='pursuit'); 
-    if(!hasP) throw new Error('no pursuit with 50% break'); 
-    ok('Pursuit appears with higher break %'); 
-  }catch(e){ no('Pursuit test', e.message); }
-  try{ 
-    const p=getParams(); p.break_pct=60; 
-    const testDiv = {};
-    unitTypes.forEach(ut => testDiv[ut] = 100);
-    const r=simulate(testDiv,testDiv, getStats(), p); 
-    if(typeof r.summary.brokeA!=="boolean"||typeof r.summary.brokeB!=="boolean") throw new Error('flags missing'); 
-    ok('Rout flags present'); 
-  }catch(e){ no('Rout flags', e.message); }
-  $("tests_card").style.display='block'; $("test_out").innerHTML=out.join('<br>');
+  const out=[];const ok=m=>out.push('✅ '+m);const no=(m,e)=>out.push('❌ '+m+': '+e);
+  try{if(!$("chart1"))throw new Error('missing');ok('Canvas present');}catch(e){no('Canvas',e.message);}
+  try{
+    const d=makeDiv();unitTypes.forEach(ut=>d[ut]=100);
+    const {timeline,summary}=simulate(d,{...d},getStats(),getParams());
+    if(!timeline.length)throw new Error('no ticks');ok('Simulation produced timeline');
+    if(!summary||!summary.winner)throw new Error('no summary');ok('Summary valid');
+  }catch(e){no('Simulation',e.message);}
+  try{
+    const t1=poolTeam(0);const t2=poolTeam(1);
+    if(total(t1)<=0)throw new Error('T1 empty');
+    ok('Team 1 pool: '+total(t1).toFixed(0)+' troops');
+    ok('Team 2 pool: '+total(t2).toFixed(0)+' troops');
+  }catch(e){no('Pooling',e.message);}
+  try{
+    const d=makeDiv();d.warrior=500;d.archer=200;const init={...d};
+    const fin=makeDiv();fin.warrior=300;fin.archer=150;
+    const bc=battleConfig;
+    // Temporarily add a second army to test distribution
+    const origArmies=bc.teams[0].players[0].armies;
+    bc.teams[0].players[0].armies=[makeArmy('Test1',{...makeDiv(),warrior:300,archer:100}),makeArmy('Test2',{...makeDiv(),warrior:200,archer:100})];
+    const res=distributeResults(0,init,fin);
+    bc.teams[0].players[0].armies=origArmies;
+    if(!res.length)throw new Error('empty');
+    const totalFinal=res[0].armies.reduce((s,a)=>s+a.finalTotal,0);
+    ok('Distribution: '+res[0].armies.map(a=>a.name+':'+Math.round(a.finalTotal)).join(', '));
+  }catch(e){no('Distribution',e.message);}
+  try{const p=getParams();p.break_pct=50;const d=makeDiv();unitTypes.forEach(ut=>d[ut]=100);const r=simulate(d,{...d},getStats(),p);const hasP=r.timeline.some(x=>x.phase==='pursuit');if(!hasP)throw new Error('no pursuit');ok('Pursuit with 50% break');}catch(e){no('Pursuit',e.message);}
+  try{const p=getParams();p.break_pct=60;const d=makeDiv();unitTypes.forEach(ut=>d[ut]=100);const r=simulate(d,{...d},getStats(),p);if(typeof r.summary.brokeA!=='boolean')throw new Error('flags missing');ok('Rout flags present');}catch(e){no('Rout flags',e.message);}
+  $("tests_card").style.display='block';$("test_out").innerHTML=out.join('<br>');
 }
-$("tests").addEventListener('click', selfTests);
+$("tests").addEventListener('click',selfTests);
 </script>
 </body>
 </html>

@@ -1,5 +1,6 @@
 /**
- * FortressMarker — HTML overlay positioned at a province center on the map.
+ * FortressMarker — HTML overlay showing fortress status on the map.
+ * Displays: icon, HP bar, garrison count, battle alert.
  */
 
 import React from 'react';
@@ -8,9 +9,22 @@ interface Props {
   screenX: number;
   screenY: number;
   label?: string;
+  fortHP?: number;
+  maxFortHP?: number;
+  garrisonCount?: number;
+  wasAttacked?: boolean;
 }
 
-export const FortressMarker: React.FC<Props> = ({ screenX, screenY, label }) => {
+export const FortressMarker: React.FC<Props> = ({
+  screenX, screenY, label,
+  fortHP, maxFortHP, garrisonCount, wasAttacked,
+}) => {
+  const hpPercent = (maxFortHP && maxFortHP > 0)
+    ? Math.max(0, Math.min(100, ((fortHP ?? maxFortHP) / maxFortHP) * 100))
+    : 100;
+
+  const hpColor = hpPercent >= 60 ? '#22c55e' : hpPercent >= 30 ? '#eab308' : '#ef4444';
+
   return (
     <div
       className="absolute pointer-events-none z-30"
@@ -21,10 +35,35 @@ export const FortressMarker: React.FC<Props> = ({ screenX, screenY, label }) => 
       }}
     >
       <div className="flex flex-col items-center">
-        <div className="text-2xl drop-shadow-lg">🏰</div>
+        {/* Fortress icon with optional battle alert */}
+        <div className="relative">
+          <div className="text-2xl drop-shadow-lg">🏰</div>
+          {wasAttacked && (
+            <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-pulse border border-red-300" />
+          )}
+        </div>
+
+        {/* HP bar */}
+        {maxFortHP != null && maxFortHP > 0 && (
+          <div className="w-12 h-1 bg-slate-700 rounded-full mt-0.5 overflow-hidden">
+            <div
+              className="h-full rounded-full transition-all duration-300"
+              style={{ width: `${hpPercent}%`, backgroundColor: hpColor }}
+            />
+          </div>
+        )}
+
+        {/* Label */}
         {label && (
           <div className="text-amber-300 text-[10px] font-bold bg-slate-900/80 px-1.5 py-0.5 rounded mt-0.5 whitespace-nowrap">
             {label}
+          </div>
+        )}
+
+        {/* Garrison count */}
+        {garrisonCount != null && garrisonCount > 0 && (
+          <div className="text-[9px] text-slate-300 bg-slate-800/90 px-1 py-0.5 rounded mt-0.5 whitespace-nowrap">
+            ⚔️ {garrisonCount} troops
           </div>
         )}
       </div>
