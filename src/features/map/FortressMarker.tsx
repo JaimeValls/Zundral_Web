@@ -12,12 +12,13 @@ interface Props {
   fortHP?: number;
   maxFortHP?: number;
   garrisonCount?: number;
+  deployedCount?: number;
   wasAttacked?: boolean;
 }
 
 export const FortressMarker: React.FC<Props> = ({
   screenX, screenY, label,
-  fortHP, maxFortHP, garrisonCount, wasAttacked,
+  fortHP, maxFortHP, garrisonCount, deployedCount, wasAttacked,
 }) => {
   const hpPercent = (maxFortHP && maxFortHP > 0)
     ? Math.max(0, Math.min(100, ((fortHP ?? maxFortHP) / maxFortHP) * 100))
@@ -60,12 +61,17 @@ export const FortressMarker: React.FC<Props> = ({
           </div>
         )}
 
-        {/* Garrison count */}
-        {garrisonCount != null && garrisonCount > 0 && (
-          <div className="text-[9px] text-slate-300 bg-slate-800/90 px-1 py-0.5 rounded mt-0.5 whitespace-nowrap">
-            ⚔️ {garrisonCount} troops
+        {/* Troop counts — garrison + deployed */}
+        {(garrisonCount != null && garrisonCount > 0) || (deployedCount != null && deployedCount > 0) ? (
+          <div className="text-[9px] bg-slate-800/90 px-1.5 py-0.5 rounded mt-0.5 whitespace-nowrap flex items-center gap-1.5">
+            {garrisonCount != null && garrisonCount > 0 && (
+              <span className="text-slate-300">🏰 {garrisonCount}</span>
+            )}
+            {deployedCount != null && deployedCount > 0 && (
+              <span className="text-emerald-400">⚔ {deployedCount}</span>
+            )}
           </div>
-        )}
+        ) : null}
       </div>
     </div>
   );

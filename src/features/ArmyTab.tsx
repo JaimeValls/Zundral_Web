@@ -529,6 +529,35 @@ export default function ArmyTab({
               );
             })()}
 
+            {/* -------- SECTION 6: DESTROYED ARMIES -------- */}
+            {(() => {
+              const destroyed = banners.filter(b => b.status === 'destroyed');
+              if (destroyed.length === 0) return null;
+              return (
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-red-500 text-sm">💀</span>
+                    <span className="text-[10px] text-red-500 font-semibold uppercase tracking-wide">Destroyed</span>
+                    <span className="text-[9px] text-slate-600">({destroyed.length})</span>
+                  </div>
+                  {destroyed.map(b => (
+                    <div key={b.id} className="rounded-lg border border-red-900/40 bg-red-950/20 p-3 mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-red-500">💀</span>
+                        <span className="text-xs font-semibold text-red-300 line-through">{b.name}</span>
+                        <span className="text-[9px] px-1.5 py-0.5 bg-red-900/50 border border-red-800 rounded text-red-400 font-bold uppercase">Destroyed</span>
+                      </div>
+                      <div className="text-[10px] text-slate-500 mt-1 ml-6">
+                        {b.destroyedTurn != null && <span>Turn {b.destroyedTurn}</span>}
+                        {b.destroyedInProvince && <span> · Province {b.destroyedInProvince}</span>}
+                        {b.destroyedByEnemy && <span> · by <span className="text-red-400">{b.destroyedByEnemy}</span></span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+
             {/* Summary footer */}
             {onMission.length === 0 && inTransit.length === 0 && stationed.length === 0 && inTraining.length === 0 && !expeditions?.some(e => e.fortress?.lastBattle || e.mapState?.fieldBattleResults?.length) && (
               <div className="rounded-lg border border-dashed border-slate-800 bg-slate-900 p-6 text-center">

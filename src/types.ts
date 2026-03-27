@@ -193,6 +193,7 @@ export type Mission = {
   elapsed: number;     // Seconds progressed
   enemyComposition?: Division | { warrior?: number; archer?: number };
   battleResult?: BattleResult;
+  fieldBattleResult?: FieldBattleResult;
   bannerXP?: {
     bannerId: number;
     bannerName: string;
@@ -338,6 +339,14 @@ export type SiegeBattleResult = {
   attackerComposition?: BattleSquadEntry[];
   defenderComposition?: BattleSquadEntry[];
   battleTakeaway?: string;
+  garrisonArmies?: SiegeGarrisonArmy[];
+};
+
+export type SiegeGarrisonArmy = {
+  bannerId: number;
+  bannerName: string;
+  initialTroops: number;
+  finalTroops: number;
 };
 
 export type FieldBattlePlayerArmy = {
@@ -449,7 +458,7 @@ export type ExpeditionLogEntry = {
   id: string;                    // unique key (e.g. "log_{turn}_{index}")
   turn: number;
   type: 'hostile_detected' | 'battle_resolved' | 'army_destroyed'
-      | 'mission_completed' | 'fortress_attacked' | 'fortress_damaged';
+      | 'mission_completed' | 'mission_failed' | 'fortress_attacked' | 'fortress_damaged';
   text: string;                  // short readable message
   provinceId?: string;           // for camera focus
   battleResultId?: string;       // links to FieldBattleResult.id for "open report"
@@ -472,4 +481,5 @@ export interface ExpeditionMapState {
   completedExpeditionMissionIds?: number[];  // IDs completed THIS turn (for reward popup)
   expeditionLog?: ExpeditionLogEntry[];     // event log entries (newest first)
   battleAftermath?: Record<string, number>; // provinceId → turnsRemaining (3,2,1) for VFX decay
+  pendingSiegeBattle?: SiegeBattleResult & { enemyName: string }; // siege result for popup display
 }

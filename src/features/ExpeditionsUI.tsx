@@ -45,6 +45,7 @@ export interface ExpeditionsUIProps {
   /** Run battle, apply casualties, update parent state. Returns destroyed banner IDs or null on error. */
   onRunBattle: (expeditionId: string) => { result: SiegeBattleResult; destroyedBanners: number[] } | null;
   onShowResourceError?: (msg: string) => void;
+  onRequestReinforcement?: (bannerId: number) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -72,6 +73,7 @@ export default function ExpeditionsUI({
   onClaimExpeditionReward,
   onRunBattle,
   onShowResourceError,
+  onRequestReinforcement,
 }: ExpeditionsUIProps) {
   const [battleLoading, setBattleLoading] = useState<{ expeditionId: string; progress: number } | null>(null);
   const [battleError, setBattleError] = useState<{ expeditionId: string; message: string } | null>(null);
@@ -268,6 +270,7 @@ export default function ExpeditionsUI({
                         onClearArmyOrder={(bannerId) => onClearArmyOrder(exp.expeditionId, bannerId)}
                         onExecuteTurn={() => onExecuteTurn(exp.expeditionId)}
                         onClaimExpeditionReward={(missionId) => onClaimExpeditionReward(exp.expeditionId, missionId)}
+                        onRequestReinforcement={onRequestReinforcement}
                       />
                     </div>
 
@@ -280,6 +283,7 @@ export default function ExpeditionsUI({
                         battle_resolved: 'text-amber-300',
                         army_destroyed: 'text-red-500',
                         mission_completed: 'text-emerald-400',
+                        mission_failed: 'text-orange-400 font-bold',
                         fortress_attacked: 'text-red-400 font-bold',
                         fortress_damaged: 'text-red-500 font-bold',
                       };
@@ -288,6 +292,7 @@ export default function ExpeditionsUI({
                         battle_resolved: '⚔️',
                         army_destroyed: '💀',
                         mission_completed: '⭐',
+                        mission_failed: '❌',
                         fortress_attacked: '🏰',
                         fortress_damaged: '🏚️',
                       };
@@ -374,6 +379,41 @@ export default function ExpeditionsUI({
                                   );
                                 })}
                               </div>
+                              {/* Per-army garrison breakdown (only when 2+ armies) */}
+                              {battle.garrisonArmies && battle.garrisonArmies.length > 1 && (
+                                <div className="bg-blue-950/30 border border-blue-800/30 rounded px-2 py-1.5 mt-1.5">
+                                  <div className="text-[9px] text-blue-300 uppercase font-bold mb-1">Garrison Armies</div>
+                                  {battle.garrisonArmies.map((a, i) => {
+                                    const lost = a.initialTroops - a.finalTroops;
+                                    const pct = a.initialTroops > 0 ? lost / a.initialTroops : 0;
+                                    const totalInit = battle.garrisonArmies!.reduce((s, x) => s + x.initialTroops, 0);
+                                    const share = totalInit > 0 ? Math.round((a.initialTroops / totalInit) * 100) : 100;
+                                    const severity = a.finalTroops === 0 ? 'text-red-500 font-bold'
+                                      : pct > 0.3 ? 'text-red-400'
+                                      : pct > 0.1 ? 'text-amber-400'
+                                      : 'text-emerald-400';
+                                    return (
+                                      <div key={i} className="flex justify-between items-center py-0.5">
+                                        <span className="text-slate-300 truncate">
+                                          ⚔️ {a.bannerName}
+                                          <span className="text-slate-500 ml-1 text-[9px]">{share}%</span>
+                                        </span>
+                                        <span className={severity}>
+                                          {Math.round(a.initialTroops)} → {Math.round(a.finalTroops)}
+                                          {lost > 0 && <span className="text-red-400 ml-1">(-{Math.round(lost)})</span>}
+                                          {a.finalTroops === 0 && <span className="ml-1">💀</span>}
+                                        </span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                              {/* Destroyed army callouts */}
+                              {battle.garrisonArmies?.filter(a => a.finalTroops === 0).map((a, i) => (
+                                <span key={`ds${i}`} className="inline-block mt-1 text-[9px] px-1.5 py-0.5 bg-red-950/50 border border-red-800 rounded text-red-400 font-bold">
+                                  💀 {a.bannerName} destroyed
+                                </span>
+                              ))}
                             </div>
                             {/* Wall HP + destroyed callouts */}
                             <div className="mt-2 flex items-center gap-3 text-[10px]">
@@ -386,6 +426,13 @@ export default function ExpeditionsUI({
                                   ☠ Siege force eliminated
                                 </span>
                               )}
+                            </div>
+                            {/* Extended Report toggle button */}
+                            <div className="mt-2 flex justify-center">
+                              <span className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-amber-900/40 hover:bg-amber-800/60 border border-amber-600/50 rounded text-[11px] text-amber-300 font-bold uppercase tracking-wider transition-colors">
+                                📊 Extended Battle Report
+                                <svg className="w-3 h-3 transition-transform [details[open]_&]:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                              </span>
                             </div>
                           </summary>
                           <div className="mt-3">
@@ -504,7 +551,41 @@ export default function ExpeditionsUI({
                                     <div className="text-[10px] text-blue-400 font-semibold uppercase tracking-wider mb-1.5">
                                       Defenders · {formatInt(totalDefenders)}
                                     </div>
-                                    {defComp && defComp.length > 0 ? renderSquadList(defComp, 'text-blue-200') : (
+                                    {/* Per-army breakdown when 2+ garrison armies */}
+                                    {battle.garrisonArmies && battle.garrisonArmies.length > 1 ? (
+                                      <div className="space-y-2">
+                                        {battle.garrisonArmies.map((ga, gi) => {
+                                          const banner = banners.find(b => b.id === ga.bannerId);
+                                          const lost = ga.initialTroops - ga.finalTroops;
+                                          const pct = ga.initialTroops > 0 ? lost / ga.initialTroops : 0;
+                                          const severity = ga.finalTroops === 0 ? 'text-red-500 font-bold'
+                                            : pct > 0.3 ? 'text-red-400'
+                                            : pct > 0.1 ? 'text-amber-400'
+                                            : 'text-emerald-400';
+                                          return (
+                                            <div key={gi}>
+                                              <div className="text-[9px] font-semibold mb-0.5 flex justify-between">
+                                                <span className="text-blue-300/70">⚔️ {ga.bannerName}</span>
+                                                <span className={severity}>
+                                                  {Math.round(ga.initialTroops)} → {Math.round(ga.finalTroops)}
+                                                  {lost > 0 && <span className="text-red-400 ml-1">(-{Math.round(lost)})</span>}
+                                                  {ga.finalTroops === 0 && <span className="ml-1">💀</span>}
+                                                </span>
+                                              </div>
+                                              {banner?.squads && banner.squads.map((sq, si) => (
+                                                <div key={si} className="flex items-center justify-between text-[10px] pl-2">
+                                                  <div className="flex items-center gap-1">
+                                                    <span className="text-[9px]">{['archer', 'skirmisher', 'crossbowman'].includes(sq.type) ? '🏹' : '⚔'}</span>
+                                                    <span className="text-blue-200 capitalize">{sq.type.replace('_', ' ')}</span>
+                                                  </div>
+                                                  <span className="text-blue-200">×{sq.currentSize}</span>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    ) : defComp && defComp.length > 0 ? renderSquadList(defComp, 'text-blue-200') : (
                                       <div className="text-[11px] text-blue-300 space-y-0.5">
                                         <div>⚔ Melee ×{formatInt(battle.initialGarrison.warriors)}</div>
                                         <div>🏹 Ranged ×{formatInt(battle.initialGarrison.archers)}</div>
@@ -535,9 +616,9 @@ export default function ExpeditionsUI({
                                     )}
                                   </div>
 
-                                  <details className="mt-3 pt-3 border-t border-slate-700">
+                                  <details className="mt-3 pt-3 border-t border-slate-700" open>
                                     <summary className="text-slate-400 cursor-pointer hover:text-slate-300 text-[11px] font-semibold">
-                                      ▸ Siege Round Logs ({battle.siegeTimeline.length} rounds)
+                                      ▾ Siege Round Logs ({battle.siegeTimeline.length} rounds)
                                     </summary>
                                     <div className="mt-2 max-h-60 overflow-y-auto">
                                       <table className="w-full text-[10px] border-collapse">
@@ -585,9 +666,9 @@ export default function ExpeditionsUI({
                                     </div>
                                   </details>
 
-                                  <details className="mt-2">
+                                  <details className="mt-2" open>
                                     <summary className="text-slate-400 cursor-pointer hover:text-slate-300 text-[11px] font-semibold">
-                                      ▸ Wall Assault Graph
+                                      ▾ Wall Assault Graph
                                     </summary>
                                     <SiegeGraphCanvas timeline={battle.siegeTimeline} fortHPmax={battle.initialFortHP} initialGarrison={(battle.initialGarrison?.warriors || 0) + (battle.initialGarrison?.archers || 0)} />
                                   </details>
@@ -604,6 +685,50 @@ export default function ExpeditionsUI({
                                 return (
                                   <div className="p-2 rounded-lg bg-slate-800 border border-slate-700">
                                     <div className="font-semibold text-slate-300 mb-2">Inner Defence Battle</div>
+
+                                    {/* Phase Summary Cards (Skirmish/Melee/Pursuit) */}
+                                    {(() => {
+                                      const phases: Record<string, { steps: number; defKilled: number; atkKilled: number }> = {};
+                                      for (const step of battle.innerTimeline) {
+                                        if (!phases[step.phase]) phases[step.phase] = { steps: 0, defKilled: 0, atkKilled: 0 };
+                                        phases[step.phase].steps++;
+                                        phases[step.phase].defKilled += step.killedDefenders;
+                                        phases[step.phase].atkKilled += step.killedAttackers;
+                                      }
+                                      const phaseOrder = ['skirmish', 'melee', 'pursuit'];
+                                      const phaseColors: Record<string, string> = {
+                                        skirmish: 'border-sky-800 bg-sky-950/30',
+                                        melee: 'border-red-800 bg-red-950/30',
+                                        pursuit: 'border-amber-800 bg-amber-950/30',
+                                      };
+                                      const phaseIcons: Record<string, string> = { skirmish: '🏹', melee: '⚔️', pursuit: '🏃' };
+                                      const activePhases = phaseOrder.filter(p => phases[p]);
+                                      if (activePhases.length === 0) return null;
+                                      return (
+                                        <div className={`grid grid-cols-${Math.min(activePhases.length, 3)} gap-2 mb-3`}>
+                                          {activePhases.map(p => {
+                                            const d = phases[p];
+                                            const totalKills = d.defKilled + d.atkKilled;
+                                            const isDecisive = totalKills > 0 && (d.atkKilled / Math.max(totalKills, 1)) > 0.5;
+                                            return (
+                                              <div key={p} className={`rounded-lg border p-2 ${phaseColors[p] || 'border-slate-700 bg-slate-800/30'}`}>
+                                                <div className="text-[9px] uppercase font-bold text-slate-400 mb-1">
+                                                  {phaseIcons[p]} {p} ({d.steps} step{d.steps !== 1 ? 's' : ''})
+                                                </div>
+                                                <div className="flex justify-between text-[10px]">
+                                                  <span className="text-blue-300">Defender losses: <span className="text-red-400 font-semibold">{d.defKilled}</span></span>
+                                                </div>
+                                                <div className="flex justify-between text-[10px]">
+                                                  <span className="text-red-300">Attacker losses: <span className="text-red-400 font-semibold">{d.atkKilled}</span></span>
+                                                </div>
+                                                {isDecisive && <div className="text-[8px] text-amber-400 mt-0.5 font-bold uppercase">Decisive phase</div>}
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      );
+                                    })()}
+
                                     <div className="space-y-1.5 text-[11px] text-slate-300">
                                       <div>
                                         <span className="text-red-300 font-semibold">{formatInt(firstInner.attackers)}</span> attackers engaged the garrison (<span className="text-blue-300">{formatInt(battle.initialGarrison.warriors)}</span> melee, <span className="text-blue-300">{formatInt(battle.initialGarrison.archers)}</span> ranged) inside the fortress.
@@ -625,9 +750,9 @@ export default function ExpeditionsUI({
                                       </div>
                                     </div>
 
-                                    <details className="mt-3 pt-3 border-t border-slate-700">
+                                    <details className="mt-3 pt-3 border-t border-slate-700" open>
                                       <summary className="text-slate-400 cursor-pointer hover:text-slate-300 text-[11px] font-semibold">
-                                        ▸ Battle Step Logs ({battle.innerTimeline.length} steps)
+                                        ▾ Battle Step Logs ({battle.innerTimeline.length} steps)
                                       </summary>
                                       <div className="mt-2 max-h-60 overflow-y-auto">
                                         <table className="w-full text-[10px] border-collapse">
@@ -672,9 +797,9 @@ export default function ExpeditionsUI({
                                       </div>
                                     </details>
 
-                                    <details className="mt-2">
+                                    <details className="mt-2" open>
                                       <summary className="text-slate-400 cursor-pointer hover:text-slate-300 text-[11px] font-semibold">
-                                        ▸ Inner Battle Graph
+                                        ▾ Inner Battle Graph
                                       </summary>
                                       <InnerBattleGraphCanvas timeline={battle.innerTimeline} />
                                     </details>

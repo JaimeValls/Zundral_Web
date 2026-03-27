@@ -19,6 +19,7 @@ import type {
 } from './types';
 import type { ProvinceData } from './types';
 import { findPath } from './features/map/mapUtils';
+import { EXPEDITION_MISSIONS, type ExpeditionMissionDef } from './expeditionMissions';
 import {
   unitCategory, ironCostPerSquad, squadConfig, unitDisplayNames,
   XP_LEVELS,
@@ -773,121 +774,19 @@ export default function ResourceVillageUI() {
     },
   ];
 
-  // ── Expedition 1 Mission Pool (auto-complete on expedition map) ──
-  const EXPEDITION_1_MISSION_POOL: MissionTemplate[] = [
-    {
-      id: 6, missionType: 'expedition',
-      name: 'Break the Southern Blockade',
-      terrain: 'plains',
-      description: 'Enemy forces have erected a blockade on the southern path, disrupting trade and movement. Scouts confirm two warrior squads supported by one shielded unit holding the chokepoint. Expect a firm defensive stance. Break their line, dismantle the barricades, and reopen the route.',
-      duration: 3,
-      enemyComposition: { warrior: 130, archer: 30 }
-    },
-    {
-      id: 7, missionType: 'expedition',
-      name: 'Destroy the War Camp at Red Valley',
-      terrain: 'plains',
-      description: 'A medium-sized war camp has been established in Red Valley, preparing forces for future assaults. Intelligence indicates three warrior squads, one archer squad, and an elite champion overseeing training. Expect organised resistance. Disrupt their preparations and cripple their ability to expand.',
-      duration: 3,
-      enemyComposition: { warrior: 360, archer: 90 }
-    },
-    {
-      id: 10, missionType: 'expedition',
-      name: 'Cleanse the Bandit Warrens',
-      terrain: 'hills',
-      description: 'A network of caves has become the base of a growing bandit force. Intelligence confirms three disorganised squads with mixed weaponry. Expect cramped fighting conditions and opportunistic strikes. Push through the warrens and eliminate their leadership.',
-      duration: 3,
-      enemyComposition: { warrior: 240, archer: 60 }
-    },
-    {
-      id: 11, missionType: 'expedition',
-      name: 'Eliminate the Elite Vanguard',
-      terrain: 'plains',
-      description: 'Enemy commanders have deployed an elite vanguard to probe your defences. Scouts report one elite squad accompanied by two disciplined warrior units. Expect coordinated attacks and higher combat proficiency. Disrupt their advance and send a clear message.',
-      duration: 3,
-      enemyComposition: { warrior: 380, archer: 120 }
-    },
-    {
-      id: 13, missionType: 'expedition',
-      name: 'Assault the Siege Workshop',
-      terrain: 'building',
-      description: 'A hidden workshop is producing siege equipment for future assaults. Intelligence estimates two warrior squads, one engineer squad, and a small archer detachment guarding the site. Expect traps and defensive constructs. Destroy the facility before production escalates.',
-      duration: 3,
-      enemyComposition: { warrior: 480, archer: 120 }
-    },
-    {
-      id: 15, missionType: 'expedition',
-      name: 'Intercept the Supply Caravan',
-      terrain: 'plains',
-      description: 'A heavily guarded caravan is transporting weapons and armour to frontline forces. Intelligence indicates two warrior squads escorting multiple supply wagons. Expect disciplined defence and a mobile formation. Halt the caravan and seize the supplies.',
-      duration: 3,
-      enemyComposition: { warrior: 160, archer: 60 }
-    },
-    {
-      id: 16, missionType: 'expedition',
-      name: 'Break the Ironclad Phalanx',
-      terrain: 'hills',
-      description: 'A highly trained phalanx is blocking a strategic mountain pass. Scouts report one phalanx unit supported by two elite warriors. Expect a strong frontal defence. Flank their formation, break their discipline, and reopen the pass.',
-      duration: 3,
-      enemyComposition: { warrior: 700, archer: 200 }
-    },
-    {
-      id: 17, missionType: 'expedition',
-      name: 'Storm the Fortress of Grey Ridge',
-      terrain: 'hills',
-      description: 'A reinforced enemy fortress dominates Grey Ridge and controls several valleys. Intelligence confirms four warrior squads, two archer squads, and a veteran commander. Expect prolonged resistance. Breach their defences and reclaim the stronghold.',
-      duration: 3,
-      enemyComposition: { warrior: 2000, archer: 500 }
-    },
-    {
-      id: 18, missionType: 'expedition',
-      name: 'Defeat the Beastlord\'s Horde',
-      terrain: 'forest',
-      description: 'A monstrous warlord has assembled a large horde of beasts and fanatics. Scouts estimate three beast packs supported by two frenzied warrior squads. Expect erratic and aggressive assaults. Hold formation and cut through the enemy swarm.',
-      duration: 3,
-      enemyComposition: { warrior: 2400, archer: 800 }
-    },
-    {
-      id: 19, missionType: 'expedition',
-      name: 'Burn the Great Encampment',
-      terrain: 'plains',
-      description: 'A sprawling encampment is hosting large numbers of enemy troops and resources. Intelligence identifies five warrior squads, two archer units, and multiple auxiliary detachments. Expect widespread resistance across several positions. Torch the encampment and disrupt their supply network.',
-      duration: 3,
-      enemyComposition: { warrior: 4000, archer: 1000 }
-    },
-    {
-      id: 21, missionType: 'expedition',
-      name: 'Clear the Ruined Barracks',
-      terrain: 'building',
-      description: 'An abandoned barracks complex has been reoccupied by hostile troops and is now being used as a forward staging point. Scouts report two warrior squads supported by one ranged detachment holding the inner yard. Expect layered resistance through narrow approaches. Clear the complex and deny the enemy a foothold.',
-      duration: 3,
-      enemyComposition: { warrior: 280, archer: 70 }
-    },
-    {
-      id: 22, missionType: 'expedition',
-      name: 'Seize the Broken Gatehouse',
-      terrain: 'building',
-      description: 'A shattered gatehouse on the old frontier road has been fortified again to control local movement. Intelligence confirms three warrior squads and one archer unit entrenched across the upper levels and entry choke points. Expect a disciplined defence from protected positions. Seize the gatehouse and reopen the route.',
-      duration: 3,
-      enemyComposition: { warrior: 420, archer: 80 }
-    },
-    {
-      id: 23, missionType: 'expedition',
-      name: 'Purge the Desecrated Chapel',
-      terrain: 'building',
-      description: 'A once-sacred chapel has been converted into an enemy strongpoint and rally site. Scouts identify three warrior squads, one archer detachment, and a veteran guard unit holding the main hall. Expect stubborn resistance in confined spaces. Purge the chapel and break the enemy hold over the area.',
-      duration: 3,
-      enemyComposition: { warrior: 520, archer: 130 }
-    },
-    {
-      id: 24, missionType: 'expedition',
-      name: 'Break the Hall of Chains',
-      terrain: 'building',
-      description: 'A fortified prison hall is being used to hold captives and stockpile weapons for enemy operations. Intelligence reports four warrior squads supported by one archer unit guarding the central corridors and cell blocks. Expect heavy resistance across multiple interior positions. Break their control and secure the structure.',
-      duration: 3,
-      enemyComposition: { warrior: 760, archer: 140 }
-    },
-  ];
+  // ── Expedition Mission Pool — imported from src/expeditionMissions.ts for easy balancing ──
+  const EXPEDITION_1_MISSION_POOL: MissionTemplate[] = EXPEDITION_MISSIONS.map(def => ({
+    id: def.id,
+    missionType: 'expedition' as const,
+    name: def.name,
+    description: def.description,
+    terrain: def.terrain,
+    duration: 3,
+    enemyComposition: def.enemySquads.reduce((acc, sq) => {
+      acc[sq.type as keyof Division] = (acc[sq.type as keyof Division] || 0) + sq.count;
+      return acc;
+    }, {} as Division),
+  }));
 
   // Helper: randomly select N missions from a specific pool, excluding given IDs
   // The missionType is inherited from the template (already set in each pool)
@@ -3164,6 +3063,13 @@ export default function ResourceVillageUI() {
     const garrisonBannerIds = expedition.fortress.garrison || [];
     const actualGarrison = calculateGarrisonFromBanners(garrisonBannerIds);
 
+    // Snapshot per-banner troops for the report
+    const perBannerInitial = garrisonBannerIds.map(bid => {
+      const banner = banners.find(b => b.id === bid);
+      const total = banner?.squads?.reduce((s, sq) => s + sq.currentSize, 0) ?? 0;
+      return { bannerId: bid, bannerName: banner?.name ?? `Army ${bid}`, initialTroops: total };
+    });
+
     // Use ONLY actual units from banners - if no banners assigned, defenders = 0
     const garrisonArchers = actualGarrison.archers || 0;
     const garrisonWarriors = actualGarrison.warriors || 0;
@@ -3249,6 +3155,7 @@ export default function ResourceVillageUI() {
         attackerComposition: attackerComp,
         defenderComposition: defenderComp,
         battleTakeaway: 'No battle occurred.',
+        garrisonArmies: perBannerInitial.map(a => ({ ...a, finalTroops: a.initialTroops })),
       };
     }
     const lastSiege = siegeTimeline[siegeTimeline.length - 1];
@@ -3342,6 +3249,14 @@ export default function ResourceVillageUI() {
       attackerComposition: attackerComp,
       defenderComposition: defenderComp,
       battleTakeaway,
+      garrisonArmies: (() => {
+        const totalInit = perBannerInitial.reduce((s, a) => s + a.initialTroops, 0);
+        const lossRatio = totalInit > 0 ? (totalInit - finalDefenders) / totalInit : 0;
+        return perBannerInitial.map(a => ({
+          ...a,
+          finalTroops: Math.max(0, Math.round(a.initialTroops * (1 - lossRatio))),
+        }));
+      })(),
     };
   }
 
@@ -3459,13 +3374,14 @@ export default function ResourceVillageUI() {
 
   // Create reinforcement training entry
   function requestReinforcement(bannerId: number, squadId?: number) {
-    if (editingBannerId === bannerId) return; // Hard lock: Cannot reinforce while editing
+    console.log('[REINFORCE] called bannerId=', bannerId, 'squadId=', squadId, 'editingBannerId=', editingBannerId);
+    if (editingBannerId === bannerId) { console.log('[REINFORCE] blocked: editing'); return; }
 
     const banner = banners.find(b => b.id === bannerId);
-    if (!banner) return;
+    if (!banner) { console.log('[REINFORCE] blocked: banner not found'); return; }
 
     // Guard: Don't allow reinforcing destroyed banners
-    if (banner.status === 'destroyed') return;
+    if (banner.status === 'destroyed') { console.log('[REINFORCE] blocked: destroyed'); return; }
 
     // Ensure banner has squads initialized
     let bannerWithSquads = banner;
@@ -7383,41 +7299,196 @@ Safe recruits (unassigned people): ${freePop}`;
                   return dest ? { ...e, provinceId: dest } : e;
                 });
 
-                // ── Phase 3.5: Check expedition mission completions ──
+                // ── Phase 3.5: Check expedition mission battles (field combat) ──
                 const missionPos = exp.mapState.missionPositions || {};
                 const completedExpMissionIds: number[] = [];
-                const armyProvinceSet = new Set(Object.values(newPositions));
+                let missionBattleIndex = newFieldBattles.length;
+                const missionBannerUpdates = new Map<number, { lossRatio: number; destroyed: boolean; provinceId?: string; enemyName?: string; battleId?: string }>();
                 const updatedExpMissions = (exp.mapState.expeditionMissions || []).map(m => {
                   if (m.status !== 'available') return m;
                   const mProvId = (missionPos as Record<string, string>)[m.id] || (missionPos as Record<string, string>)[String(m.id)];
                   if (!mProvId) return m;
 
-                  // Check if any player army arrived at this province
-                  if (!armyProvinceSet.has(mProvId)) return m;
+                  // Find ALL player banners at this mission's province (check newPositions + currentPositions)
+                  const allPositions = new Map<number, string>();
+                  for (const [bidStr, prov] of Object.entries(currentPositions)) allPositions.set(Number(bidStr), prov);
+                  for (const [bidStr, prov] of Object.entries(newPositions)) allPositions.set(Number(bidStr), prov);
+                  const bannersAtProvince = Array.from(allPositions.entries())
+                    .filter(([, prov]) => prov === mProvId)
+                    .map(([bid]) => banners.find(b => b.id === bid))
+                    .filter((b): b is Banner => !!b && !destroyedPlayerIds.has(b.id) && b.status !== 'destroyed');
+                  if (bannersAtProvince.length === 0) return m;
 
-                  // Auto-complete: compute rewards using existing generateMissionRewards()
-                  const enemyTotal = ((m.enemyComposition as any)?.warrior || 0) + ((m.enemyComposition as any)?.archer || 0);
-                  const { tier, rewards } = generateMissionRewards(enemyTotal);
-                  completedExpMissionIds.push(m.id);
-                  newLogEntries.push({
-                    id: `log_${newTurnNumber}_${logIdx++}`,
-                    turn: newTurnNumber, type: 'mission_completed',
-                    text: `Mission complete: ${m.name}`,
+                  // Build mock EnemyArmy from mission definition
+                  const missionDef = EXPEDITION_MISSIONS.find(d => d.id === m.id);
+                  const enemySquads = missionDef
+                    ? missionDef.enemySquads.map(sq => ({ type: sq.type, count: Math.ceil(sq.count / 10) }))
+                    : Object.entries(m.enemyComposition || {}).map(([type, count]) => ({ type, count: Math.ceil((count as number) / 10) }));
+                  const enemyTotal = missionDef
+                    ? missionDef.enemySquads.reduce((s, sq) => s + sq.count, 0)
+                    : Object.values(m.enemyComposition || {}).reduce((s, v) => s + (v as number), 0);
+
+                  const mockEnemy: EnemyArmy = {
+                    id: -(m.id * 1000 + newTurnNumber),
+                    templateId: `mission_${m.id}`,
+                    name: m.name,
+                    squads: enemySquads,
                     provinceId: mProvId,
-                  });
-                  dbg.log(`[EXPEDITION-MISSION] "${m.name}" auto-completed at ${mProvId} (tier: ${tier})`);
-
-                  return {
-                    ...m,
-                    status: 'completedRewardsPending' as const,
-                    rewards,
-                    rewardTier: tier,
+                    totalTroops: enemyTotal,
+                    spawnTurn: newTurnNumber,
+                    status: 'marching' as const,
                   };
+
+                  // Run field battle
+                  try {
+                    const battleResult = runMergedBattle(bannersAtProvince, [mockEnemy], mProvId, newTurnNumber, missionBattleIndex++);
+                    newFieldBattles.push(battleResult);
+
+                    // Collect casualty data for setBanners() call after the loop
+                    if (battleResult.playerArmies) {
+                      for (const pa of battleResult.playerArmies) {
+                        if (pa.finalTroops <= 0) {
+                          missionBannerUpdates.set(pa.bannerId, { lossRatio: 1, destroyed: true, provinceId: mProvId, enemyName: m.name, battleId: battleResult.id });
+                          destroyedPlayerIds.add(pa.bannerId);
+                        } else {
+                          const lossRatio = pa.initialTroops > 0 ? (pa.initialTroops - pa.finalTroops) / pa.initialTroops : 0;
+                          if (lossRatio > 0) {
+                            missionBannerUpdates.set(pa.bannerId, { lossRatio, destroyed: false });
+                          }
+                        }
+                      }
+                    }
+
+                    if (battleResult.outcome === 'player_wins') {
+                      // Player wins — complete mission with rewards
+                      const { tier, rewards } = generateMissionRewards(enemyTotal);
+                      completedExpMissionIds.push(m.id);
+                      newLogEntries.push({
+                        id: `log_${newTurnNumber}_${logIdx++}`,
+                        turn: newTurnNumber, type: 'mission_completed',
+                        text: `Mission complete: ${m.name} — Victory!`,
+                        provinceId: mProvId,
+                      });
+                      dbg.log(`[EXPEDITION-MISSION] "${m.name}" VICTORY at ${mProvId} (tier: ${tier})`);
+                      return {
+                        ...m,
+                        status: 'completedRewardsPending' as const,
+                        rewards,
+                        rewardTier: tier,
+                        fieldBattleResult: battleResult,
+                      };
+                    } else {
+                      // Player loses or draw — mission stays available, army took casualties
+                      newLogEntries.push({
+                        id: `log_${newTurnNumber}_${logIdx++}`,
+                        turn: newTurnNumber, type: 'mission_failed',
+                        text: `Mission failed: ${m.name} — forces repelled!`,
+                        provinceId: mProvId,
+                      });
+                      dbg.log(`[EXPEDITION-MISSION] "${m.name}" DEFEAT at ${mProvId}`);
+                      // Retreat surviving banners to previous position
+                      for (const pa of battleResult.playerArmies || []) {
+                        if (pa.finalTroops > 0 && currentPositions[pa.bannerId]) {
+                          newPositions[pa.bannerId] = currentPositions[pa.bannerId];
+                        }
+                      }
+                      return { ...m, fieldBattleResult: battleResult };
+                    }
+                  } catch (err) {
+                    dbg.log(`[EXPEDITION-MISSION] Battle error for "${m.name}":`, err);
+                    return m;
+                  }
                 });
 
-                // ── Phase 4: Check fortress arrivals — trigger siege battles ──
+                // Apply mission battle casualties via React state (not direct mutation)
+                if (missionBannerUpdates.size > 0) {
+                  // Remove destroyed banners from map positions
+                  for (const [bid, upd] of missionBannerUpdates.entries()) {
+                    if (upd.destroyed) delete newPositions[bid];
+                  }
+                  setBanners(prev => prev.map(b => {
+                    const upd = missionBannerUpdates.get(b.id);
+                    if (!upd) return b;
+                    if (upd.destroyed) return {
+                      ...b,
+                      status: 'destroyed' as const,
+                      destroyedTurn: newTurnNumber,
+                      destroyedInProvince: upd.provinceId,
+                      destroyedByEnemy: upd.enemyName,
+                      fieldBattleId: upd.battleId,
+                    };
+                    return {
+                      ...b,
+                      squads: (b.squads || []).map(sq => ({
+                        ...sq,
+                        currentSize: Math.max(0, Math.round(sq.currentSize * (1 - upd.lossRatio))),
+                      })),
+                    };
+                  }));
+                }
+
+                // ── Phase 4: Check fortress arrivals — field intercept then siege ──
                 let expeditionFailed = false;
                 let updatedFortress = exp.fortress;
+                let pendingSiegeBattle: (import('./types').SiegeBattleResult & { enemyName: string }) | undefined;
+
+                // 4a: Deployed armies at fortress province intercept enemies in field battle FIRST
+                const deployedAtFortress = Object.entries(newPositions)
+                  .filter(([, prov]) => prov === fortId)
+                  .map(([bidStr]) => Number(bidStr))
+                  .filter(bid => !destroyedPlayerIds.has(bid));
+                const fortressFieldBanners = deployedAtFortress
+                  .map(bid => banners.find(b => b.id === bid))
+                  .filter((b): b is Banner => !!b && b.status !== 'destroyed');
+
+                if (fortressFieldBanners.length > 0) {
+                  for (let i = 0; i < updatedEnemies.length; i++) {
+                    const enemy = updatedEnemies[i];
+                    if (enemy.status !== 'marching' || enemy.provinceId !== fortId) continue;
+
+                    dbg.log(`[FIELD-FORT] Deployed armies intercept "${enemy.name}" at fortress province!`);
+                    const fbResult = runMergedBattle(fortressFieldBanners, [enemy], fortId, newTurnNumber, newFieldBattles.length);
+                    newFieldBattles.push(fbResult);
+
+                    // Apply casualties to player banners
+                    const pAll = fbResult.playerArmies || [fbResult.playerArmy];
+                    for (const pa of pAll) {
+                      const lossRatio = pa.initialTroops > 0 ? (pa.initialTroops - pa.finalTroops) / pa.initialTroops : 0;
+                      if (lossRatio > 0) {
+                        setBanners(prev => prev.map(b => {
+                          if (b.id !== pa.bannerId) return b;
+                          return { ...b, squads: b.squads.map(sq => ({
+                            ...sq, currentSize: Math.max(0, Math.round(sq.currentSize * (1 - lossRatio)))
+                          }))};
+                        }));
+                      }
+                      if (pa.finalTroops <= 0) {
+                        destroyedPlayerIds.add(pa.bannerId);
+                        delete newPositions[pa.bannerId];
+                        setBanners(prev => prev.map(b => b.id !== pa.bannerId ? b : {
+                          ...b, status: 'destroyed' as const, destroyedTurn: newTurnNumber,
+                          destroyedAt: fortId, destroyedBy: enemy.name,
+                        }));
+                      }
+                    }
+
+                    // Apply casualties to enemy
+                    const eAll = fbResult.enemyArmies || [fbResult.enemyArmy];
+                    for (const ea of eAll) {
+                      if (ea.finalTroops <= 0) {
+                        updatedEnemies = updatedEnemies.map((e, idx) =>
+                          idx === i ? { ...e, status: 'destroyed' as const, totalTroops: 0 } : e
+                        );
+                      } else {
+                        updatedEnemies = updatedEnemies.map((e, idx) =>
+                          idx === i ? { ...e, totalTroops: ea.finalTroops } : e
+                        );
+                      }
+                    }
+                  }
+                }
+
+                // 4b: Surviving enemies at fortress trigger siege
                 for (let i = 0; i < updatedEnemies.length; i++) {
                   const enemy = updatedEnemies[i];
                   if (enemy.status !== 'marching' || enemy.provinceId !== fortId) continue;
@@ -7447,6 +7518,9 @@ Safe recruits (unassigned people): ${freePop}`;
                     updatedEnemies = updatedEnemies.map((e, idx) =>
                       idx === i ? { ...e, status: 'destroyed' as const } : e
                     );
+
+                    // Store for popup display
+                    pendingSiegeBattle = { ...result, enemyName: enemy.name };
 
                     const isVictory = result.outcome === 'fortress_holds_walls' || result.outcome === 'fortress_holds_inner';
                     if (!isVictory && result.outcome === 'fortress_falls') {
@@ -7564,6 +7638,7 @@ Safe recruits (unassigned people): ${freePop}`;
                     completedExpeditionMissionIds: completedExpMissionIds,
                     expeditionLog: mergedLog,
                     battleAftermath: aftermath,
+                    pendingSiegeBattle,
                   },
                 };
               }));
@@ -7600,6 +7675,7 @@ Safe recruits (unassigned people): ${freePop}`;
               }));
             }}
             onShowResourceError={(msg) => setToastMessage(msg)}
+            onRequestReinforcement={(bannerId) => requestReinforcement(bannerId)}
             onRunBattle={(expeditionId) => {
               try {
                 const result = runSiegeBattle(expeditionId, 100);

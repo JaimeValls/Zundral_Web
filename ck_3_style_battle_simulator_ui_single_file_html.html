@@ -69,6 +69,30 @@
   .drill-player{margin-left:12px;padding:6px 0;border-bottom:1px solid #1e2430}
   .drill-army{margin-left:24px;padding:3px 0;font-size:11px}
   .sev-green{color:#4ade80}.sev-amber{color:#fbbf24}.sev-red{color:#f87171}.sev-dead{color:#ef4444;font-weight:800}
+  /* Enhanced Report */
+  .er-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+  .er-title{font-size:16px;font-weight:800}
+  .er-context{color:var(--muted);font-size:11px;margin-top:2px}
+  .er-badge{display:inline-block;padding:3px 10px;border-radius:6px;font-size:11px;font-weight:800}
+  .er-badge-win{background:#064e3b;border:1px solid #059669;color:#6ee7b7}
+  .er-badge-lose{background:#450a0a;border:1px solid #dc2626;color:#fca5a5}
+  .er-badge-draw{background:#451a03;border:1px solid #d97706;color:#fde68a}
+  .er-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
+  @media(max-width:900px){.er-grid{grid-template-columns:1fr}}
+  .er-team{background:#0c1016;border:1px solid var(--border);border-radius:10px;padding:10px}
+  .er-team-header{font-weight:800;font-size:13px;margin-bottom:6px}
+  .er-player{margin-left:8px;padding:6px 0;border-bottom:1px solid #1e2430}
+  .er-player-header{font-weight:700;font-size:12px;margin-bottom:4px}
+  .er-army{display:flex;justify-content:space-between;align-items:center;padding:2px 0 2px 16px;font-size:11px}
+  .er-destroyed{display:inline-block;margin:4px 0 0 16px;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:800;background:#450a0a;border:1px solid #991b1b;color:#fca5a5}
+  .er-phases{display:grid;gap:10px;margin-bottom:14px}
+  .er-phase{background:#0c1016;border-radius:10px;padding:10px;border:1px solid var(--border)}
+  .er-phase-title{font-size:11px;font-weight:800;text-transform:uppercase;margin-bottom:4px}
+  .er-phase-row{font-size:11px;color:var(--muted)}
+  .er-decisive{color:#fbbf24;font-size:10px;font-weight:800;margin-top:4px}
+  .er-units{margin-bottom:8px}
+  .er-unit{display:flex;justify-content:space-between;align-items:center;padding:2px 0;font-size:11px}
+  .er-role{display:inline-block;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700;background:#1e2430;color:var(--muted);margin-left:6px}
 </style>
 </head>
 <body>
@@ -175,6 +199,11 @@
   <div class="card" id="tests_card" style="display:none;margin-top:16px">
     <h3>Self‑tests</h3>
     <div id="test_out" class="sub"></div>
+  </div>
+
+  <div class="card" id="enhanced_report" style="display:none;margin-top:16px">
+    <h3>⚔️ Enhanced Battle Report</h3>
+    <div id="er_content"></div>
   </div>
 </div>
 
@@ -532,7 +561,116 @@ function run(){
   renderDrillDown(t1Results,t2Results,t1Init,t2Init,summary);
   const s={A_morale:timeline.map(r=>r.A_morale),B_morale:timeline.map(r=>r.B_morale),A_troops:timeline.map(r=>r.A_troops),B_troops:timeline.map(r=>r.B_troops)};
   plot($("chart1"),s,timeline);lossesByPhase(timeline);
+  renderEnhancedReport(timeline,t1Results,t2Results,t1Init,t2Init,summary);
   window.__timeline=timeline;window.__t1Results=t1Results;window.__t2Results=t2Results;
+}
+
+// ─── Enhanced Battle Report ─────────────────────────────
+function renderEnhancedReport(timeline,t1Results,t2Results,t1Init,t2Init,summary){
+  const el=$("er_content"); el.innerHTML='';
+  $("enhanced_report").style.display='block';
+  const t1Name=battleConfig.teams[0].name, t2Name=battleConfig.teams[1].name;
+  const winLabel=summary.winner==='A'?t1Name:(summary.winner==='B'?t2Name:'Draw');
+  const winClass=summary.winner==='A'?'er-badge-win':(summary.winner==='B'?'er-badge-lose':'er-badge-draw');
+
+  // Phases encountered
+  const phases=['skirmish','melee','pursuit'];
+  const activePhases=phases.filter(ph=>timeline.some(t=>t.phase===ph));
+
+  // ── Section 1: Header ──
+  let html=`<div class="er-header">
+    <div>
+      <div class="er-title">${t1Name} vs ${t2Name}</div>
+      <div class="er-context">${summary.ticks} ticks · ${activePhases.join(' → ')}</div>
+    </div>
+    <span class="er-badge ${winClass}">${summary.winner==='draw'?'DRAW':'VICTORY: '+winLabel}</span>
+  </div>`;
+
+  // ── Section 2: Team Summary Grid ──
+  const teamData=[
+    {name:t1Name,results:t1Results,init:t1Init,finalTotal:parseFloat(summary.final_A_total),color:'#3b82f6',borderColor:'#3b82f640'},
+    {name:t2Name,results:t2Results,init:t2Init,finalTotal:parseFloat(summary.final_B_total),color:'#ef4444',borderColor:'#ef444440'}
+  ];
+  html+=`<div class="er-grid">`;
+  teamData.forEach(team=>{
+    const initTotal=team.results.reduce((s,p)=>s+p.armies.reduce((ss,a)=>ss+a.initialTotal,0),0);
+    const lost=initTotal-team.finalTotal;
+    html+=`<div class="er-team" style="border-color:${team.borderColor}">
+      <div class="er-team-header" style="color:${team.color}">${team.name} — ${Math.round(initTotal)} → ${Math.round(team.finalTotal)} <span style="color:#f87171">(-${Math.round(lost)})</span></div>`;
+    team.results.forEach(player=>{
+      const pInit=player.armies.reduce((s,a)=>s+a.initialTotal,0);
+      const pFinal=player.armies.reduce((s,a)=>s+a.finalTotal,0);
+      const pLost=pInit-pFinal;
+      const share=initTotal>0?Math.round(pInit/initTotal*100):100;
+      html+=`<div class="er-player">
+        <div class="er-player-header">👤 ${player.name} <span style="color:var(--muted);font-size:10px">${share}%</span> — ${Math.round(pInit)} → ${Math.round(pFinal)} <span style="color:#f87171">(-${Math.round(pLost)})</span></div>`;
+      player.armies.forEach(army=>{
+        const aLost=army.initialTotal-army.finalTotal;
+        const aPct=army.initialTotal>0?aLost/army.initialTotal:0;
+        const sev=army.finalTotal<=0?'sev-dead':aPct>0.3?'sev-red':aPct>0.1?'sev-amber':'sev-green';
+        html+=`<div class="er-army">
+          <span>⚔️ ${army.name}</span>
+          <span class="${sev}">${Math.round(army.initialTotal)} → ${Math.round(army.finalTotal)} (-${Math.round(aLost)})${army.finalTotal<=0?' 💀':''}</span>
+        </div>`;
+      });
+      // Destroyed callouts
+      player.armies.filter(a=>a.finalTotal<=0).forEach(a=>{
+        html+=`<div class="er-destroyed">💀 ${a.name} destroyed</div>`;
+      });
+      html+=`</div>`;
+    });
+    html+=`</div>`;
+  });
+  html+=`</div>`;
+
+  // ── Section 3: Phase Summary Cards ──
+  const phaseColors={skirmish:'#1e3a5f',melee:'#1e2430',pursuit:'#4a1c1c'};
+  const phaseBorders={skirmish:'#3b82f6',melee:'#4b5563',pursuit:'#ef4444'};
+  const phaseIcons={skirmish:'🏹',melee:'⚔️',pursuit:'🏃'};
+  const phaseData=activePhases.map(ph=>{
+    const seg=timeline.filter(t=>t.phase===ph);
+    return {ph, ticks:seg.length, lossT1:seg.reduce((s,t)=>s+(t.BtoA||0),0), lossT2:seg.reduce((s,t)=>s+(t.AtoB||0),0)};
+  });
+  const maxKills=Math.max(...phaseData.map(p=>p.lossT1+p.lossT2));
+  const cols=Math.min(activePhases.length,3);
+  html+=`<div class="er-phases" style="grid-template-columns:repeat(${cols},1fr)">`;
+  phaseData.forEach(p=>{
+    const isDecisive=(p.lossT1+p.lossT2)===maxKills&&maxKills>0;
+    html+=`<div class="er-phase" style="background:${phaseColors[p.ph]};border-color:${phaseBorders[p.ph]}">
+      <div class="er-phase-title" style="color:${phaseBorders[p.ph]}">${phaseIcons[p.ph]} ${p.ph} (${p.ticks} ticks)</div>
+      <div class="er-phase-row">${t1Name} losses: <span style="color:#2d9cff">${p.lossT1.toFixed(1)}</span></div>
+      <div class="er-phase-row">${t2Name} losses: <span style="color:#ff5d5d">${p.lossT2.toFixed(1)}</span></div>
+      ${isDecisive?'<div class="er-decisive">★ Decisive phase</div>':''}
+    </div>`;
+  });
+  html+=`</div>`;
+
+  // ── Section 4: Per-Unit Casualty Breakdown ──
+  const unitRoles={warrior:'Melee',militia:'Melee',longsword:'Melee',pikemen:'Melee',light_cavalry:'Melee',heavy_cavalry:'Melee',archer:'Ranged',skirmisher:'Ranged',crossbowmen:'Ranged'};
+  html+=`<div class="er-grid">`;
+  [{name:t1Name,init:t1Init,final:summary.final_A_troops,color:'#3b82f6',borderColor:'#3b82f640'},
+   {name:t2Name,init:t2Init,final:summary.final_B_troops,color:'#ef4444',borderColor:'#ef444440'}].forEach(team=>{
+    html+=`<div class="er-team" style="border-color:${team.borderColor}">
+      <div class="er-team-header" style="color:${team.color}">${team.name} — Per Unit</div>
+      <div class="er-units">`;
+    unitTypes.forEach(ut=>{
+      const ini=team.init[ut]||0;
+      const fin=team.final[ut]||0;
+      if(ini<=0)return;
+      const lost=ini-fin;
+      const pct=ini>0?lost/ini:0;
+      const sev=fin<=0?'sev-dead':pct>0.3?'sev-red':pct>0.1?'sev-amber':'sev-green';
+      const role=unitRoles[ut]||'';
+      html+=`<div class="er-unit">
+        <span>${unitDisplayNames[ut]}<span class="er-role">${role}</span></span>
+        <span class="${sev}">${Math.round(ini)} → ${Math.round(fin)} (-${Math.round(lost)})${fin<=0?' 💀':''}</span>
+      </div>`;
+    });
+    html+=`</div></div>`;
+  });
+  html+=`</div>`;
+
+  el.innerHTML=html;
 }
 
 // ─── Initialize ─────────────────────────────────────────
@@ -542,7 +680,7 @@ renderTeamContent();
 $("p_rng").addEventListener('input',()=>$("rng_label").textContent=$("p_rng").value);
 $("run").addEventListener('click',run);
 $("reset").addEventListener('click',()=>location.reload());
-$("clear").addEventListener('click',()=>{$("tbl").querySelector('tbody').innerHTML='';["k_winner","k_ticks","k_t1","k_t2"].forEach(id=>$(id).textContent='—');const c=$("chart1");if(c){const x=c.getContext('2d');x&&x.clearRect(0,0,c.width,c.height);}$("losses").innerHTML='';$("drill_down").innerHTML='';});
+$("clear").addEventListener('click',()=>{$("tbl").querySelector('tbody').innerHTML='';["k_winner","k_ticks","k_t1","k_t2"].forEach(id=>$(id).textContent='—');const c=$("chart1");if(c){const x=c.getContext('2d');x&&x.clearRect(0,0,c.width,c.height);}$("losses").innerHTML='';$("drill_down").innerHTML='';$("enhanced_report").style.display='none';$("er_content").innerHTML='';});
 $("csv").addEventListener('click',()=>{const tl=window.__timeline||[];if(!tl.length){alert('Run a battle first.');return;}const blob=new Blob([toCSV(tl)],{type:'text/csv;charset=utf-8;'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='battle_timeline.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),400);});
 
 $("load_tested").addEventListener('click',()=>{
