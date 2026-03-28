@@ -20,11 +20,12 @@ export const ArmyMarker: React.FC<Props> = ({ screenX, screenY, armyName, armySi
 
   return (
     <div
-      className="absolute pointer-events-none z-20"
+      className="absolute pointer-events-none"
       style={{
         left: screenX,
         top: screenY,
         transform: 'translate(-50%, -50%)',
+        zIndex: isSelected ? 35 : 30,
       }}
     >
       <div className="flex flex-col items-center">

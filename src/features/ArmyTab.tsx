@@ -455,7 +455,7 @@ export default function ArmyTab({
                             : isFall ? 'bg-red-900/50 text-red-400 border border-red-800'
                             : 'bg-amber-900/50 text-amber-400 border border-amber-800'
                           }`}>
-                            {isVictory ? 'Held' : isFall ? 'Fallen' : 'Stalemate'}
+                            {isVictory ? 'Victory' : isFall ? 'Defeat' : 'Draw'}
                           </span>
                         </summary>
                         <div className="px-3 pb-3 border-t border-slate-700">

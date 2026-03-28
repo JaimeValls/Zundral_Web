@@ -71,27 +71,49 @@ export function useMapInteraction({
   // (same function that sets canvas.width/height, so dimensions are guaranteed to match)
 
   // Mouse wheel zoom (centered on cursor)
+  // Dynamic min scale: map must always fill the container vertically (no vertical gap)
   const handleWheel = useCallback(
     (e: WheelEvent) => {
-      e.preventDefault();
       const container = containerRef.current;
       if (!container) return;
+
+      const containerH = container.clientHeight;
+      const minScale = Math.max(containerH / mapData.mapHeight, 0.15);
+      const isZoomingOut = e.deltaY > 0;
+
+      // At min zoom and trying to zoom out further → let page scroll naturally
+      if (isZoomingOut && viewRef.current.scale <= minScale + 0.001) {
+        return;
+      }
+
+      e.preventDefault();
 
       const [mouseX, mouseY] = getMousePos(e, container);
 
       setView(prev => {
-        const direction = e.deltaY > 0 ? -1 : 1;
-        const newScale = clamp(prev.scale * (1 + direction * ZOOM_FACTOR), MIN_SCALE, MAX_SCALE);
+        const direction = isZoomingOut ? -1 : 1;
+        const newScale = clamp(prev.scale * (1 + direction * ZOOM_FACTOR), minScale, MAX_SCALE);
         const ratio = newScale / prev.scale;
+
+        let newOffsetY = mouseY - (mouseY - prev.offsetY) * ratio;
+
+        // Clamp vertical: map must cover full container height
+        const mapScreenH = mapData.mapHeight * newScale;
+        if (mapScreenH <= containerH) {
+          newOffsetY = (containerH - mapScreenH) / 2;
+        } else {
+          newOffsetY = Math.min(0, newOffsetY);
+          newOffsetY = Math.max(containerH - mapScreenH, newOffsetY);
+        }
 
         return {
           scale: newScale,
           offsetX: mouseX - (mouseX - prev.offsetX) * ratio,
-          offsetY: mouseY - (mouseY - prev.offsetY) * ratio,
+          offsetY: newOffsetY,
         };
       });
     },
-    [containerRef]
+    [containerRef, mapData.mapHeight]
   );
 
   // Mouse down — only process events on the canvas itself (ignore UI overlays)
@@ -113,11 +135,21 @@ export function useMapInteraction({
         const dx = e.clientX - lastMouse.current.x;
         const dy = e.clientY - lastMouse.current.y;
         lastMouse.current = { x: e.clientX, y: e.clientY };
-        setView(prev => ({
-          ...prev,
-          offsetX: prev.offsetX + dx,
-          offsetY: prev.offsetY + dy,
-        }));
+        setView(prev => {
+          const containerH = container.clientHeight;
+          const mapScreenH = mapData.mapHeight * prev.scale;
+          let newOffsetY = prev.offsetY + dy;
+
+          // Clamp vertical: no gap above or below the map
+          if (mapScreenH > containerH) {
+            newOffsetY = Math.min(0, newOffsetY);
+            newOffsetY = Math.max(containerH - mapScreenH, newOffsetY);
+          } else {
+            newOffsetY = (containerH - mapScreenH) / 2;
+          }
+
+          return { ...prev, offsetX: prev.offsetX + dx, offsetY: newOffsetY };
+        });
         return;
       }
 

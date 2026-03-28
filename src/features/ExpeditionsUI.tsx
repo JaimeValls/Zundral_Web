@@ -348,7 +348,7 @@ export default function ExpeditionsUI({
                                 </div>
                               </div>
                               <span className={`text-[10px] px-2 py-0.5 rounded font-bold uppercase ${isHold ? 'bg-emerald-900/50 text-emerald-400 border border-emerald-800' : 'bg-red-900/50 text-red-400 border border-red-800'}`}>
-                                {isHold ? 'Held' : 'Fallen'}
+                                {isHold ? 'Victory' : 'Defeat'}
                               </span>
                             </div>
                             {/* Per-unit summary — squad cards */}
@@ -478,10 +478,10 @@ export default function ExpeditionsUI({
                           const totalAtkLost = battle.initialAttackers - battle.finalAttackers;
 
                           const outcomeInfo = {
-                            fortress_holds_walls: { title: 'Fortress Holds', color: 'text-emerald-400', bg: 'bg-emerald-950/30 border-emerald-900/50' },
-                            fortress_holds_inner: { title: 'Fortress Holds', color: 'text-emerald-400', bg: 'bg-emerald-950/30 border-emerald-900/50' },
-                            fortress_falls: { title: 'Fortress Falls', color: 'text-red-400', bg: 'bg-red-950/30 border-red-900/50' },
-                            stalemate: { title: 'Stalemate', color: 'text-amber-400', bg: 'bg-amber-950/30 border-amber-900/50' },
+                            fortress_holds_walls: { title: 'Victory', color: 'text-emerald-400', bg: 'bg-emerald-950/30 border-emerald-900/50' },
+                            fortress_holds_inner: { title: 'Victory', color: 'text-emerald-400', bg: 'bg-emerald-950/30 border-emerald-900/50' },
+                            fortress_falls: { title: 'Defeat', color: 'text-red-400', bg: 'bg-red-950/30 border-red-900/50' },
+                            stalemate: { title: 'Draw', color: 'text-amber-400', bg: 'bg-amber-950/30 border-amber-900/50' },
                           };
                           const outcome = outcomeInfo[battle.outcome];
 

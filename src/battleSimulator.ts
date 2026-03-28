@@ -377,10 +377,14 @@ export function simulateBattle(
   if (mA <= tA && total(A) > 0) brokeA = true;
   if (mB <= tB && total(B) > 0) brokeB = true;
 
+  // Determine winner — troop elimination always takes priority over morale
   let winner: 'player' | 'enemy' | 'draw' = 'draw';
-  if ((mA <= tA || total(A) <= 0) && (mB <= tB || total(B) <= 0)) winner = 'draw';
-  else if (mA <= tA || total(A) <= 0) winner = 'enemy';
-  else if (mB <= tB || total(B) <= 0) winner = 'player';
+  if (total(A) <= 0 && total(B) <= 0) winner = 'draw';
+  else if (total(A) <= 0) winner = 'enemy';
+  else if (total(B) <= 0) winner = 'player';
+  else if ((mA <= tA || brokeA) && (mB <= tB || brokeB)) winner = 'draw';
+  else if (mA <= tA || brokeA) winner = 'enemy';
+  else if (mB <= tB || brokeB) winner = 'player';
   else winner = mA > mB ? 'player' : mB > mA ? 'enemy' : total(A) > total(B) ? 'player' : total(B) > total(A) ? 'enemy' : 'draw';
 
   // Pursuit phase — only if winner exists AND winner is NOT defending (defenders don't chase)

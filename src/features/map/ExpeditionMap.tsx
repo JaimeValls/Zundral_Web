@@ -716,8 +716,8 @@ const MapView: React.FC<MapViewProps> = ({
               label="Fortress"
               fortHP={currentHP}
               maxFortHP={maxHP}
-              garrisonCount={garrisonCount}
-              deployedCount={deployedAtFort}
+              garrisonCount={deployedAtFort}
+              deployedCount={0}
               wasAttacked={!!fort?.lastBattle}
             />
           );
@@ -823,6 +823,8 @@ const MapView: React.FC<MapViewProps> = ({
           const banner = banners.find(b => b.id === orderingBannerId);
           if (!banner) return null;
           const troops = banner.squads.reduce((s, sq) => s + sq.currentSize, 0);
+          // Don't show orders for destroyed armies
+          if (troops <= 0 || banner.status === 'destroyed') return null;
           const maxTroops = banner.squads.reduce((s, sq) => s + sq.maxSize, 0);
           const isDamaged = troops < maxTroops;
           const missingTroops = maxTroops - troops;
@@ -1200,47 +1202,10 @@ const MapView: React.FC<MapViewProps> = ({
                   </div>
                 )}
 
-                {/* ── Garrison ── */}
-                {garrisonedBanners.length > 0 && (
-                  <div className={`px-2 pb-2 ${deployedBanners.length > 0 ? 'pt-1 border-t border-slate-700/40' : 'pt-1.5'}`}>
-                    <div className="text-[9px] text-slate-500 uppercase tracking-wider font-semibold mb-1 px-0.5">
-                      🏰 Garrison ({garrisonedBanners.length})
-                    </div>
-                    {garrisonedBanners.map(b => {
-                      const troops = b.squads.reduce((s, sq) => s + sq.currentSize, 0);
-                      const gMax = b.squads.reduce((s, sq) => s + sq.maxSize, 0);
-                      const gDamaged = troops < gMax;
-                      const gTraining = b.status === 'training';
-                      const gPaused = !!b.trainingPaused;
-                      const gIcon = gTraining && gPaused ? '⏸' : gTraining ? '🔄' : gDamaged ? '⚠' : null;
-                      const gIconColor = gTraining && gPaused ? 'text-slate-400' : gTraining ? 'text-amber-400' : gDamaged ? 'text-red-400' : '';
-                      const gTip = gTraining && gPaused ? 'Reinforcement paused'
-                        : gTraining ? `Reinforcing: ${b.recruited}/${b.reqPop}`
-                        : gDamaged ? `Needs reinforcement (${gMax - troops} missing)` : '';
-                      return (
-                        <div key={b.id} className="flex items-center justify-between gap-1.5 rounded px-2 py-1 mb-0.5 bg-slate-800/30 border border-slate-700/20">
-                          <div className="flex items-center gap-1.5 truncate flex-1">
-                            <span className="w-2 h-2 rounded-full bg-slate-500 shrink-0" />
-                            <span className="text-[11px] text-slate-300 truncate">{b.name}</span>
-                            {gIcon && (
-                              <span className={`text-[10px] shrink-0 cursor-help ${gIconColor} ${gTraining && !gPaused ? 'animate-pulse' : ''}`} title={gTip}>{gIcon}</span>
-                            )}
-                            <span className="text-[10px] text-slate-500 font-mono shrink-0">{troops}</span>
-                          </div>
-                          <button
-                            onClick={() => setDeployingBannerId(b.id)}
-                            className="px-1.5 py-0.5 bg-emerald-800/70 hover:bg-emerald-700 text-emerald-200 rounded text-[9px] font-semibold border border-emerald-600/40 whitespace-nowrap"
-                          >
-                            Deploy
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
+                {/* Garrison armies are auto-deployed and appear in the deployed list above */}
 
                 {/* Empty state */}
-                {deployedBanners.length === 0 && garrisonedBanners.length === 0 && (
+                {deployedBanners.length === 0 && (
                   <div className="px-3 py-3 text-xs text-slate-500 italic">No armies available</div>
                 )}
               </div>
@@ -1497,17 +1462,17 @@ const MapView: React.FC<MapViewProps> = ({
           const sevClass = (pct: number, dead: boolean) => dead ? 'text-red-500' : pct > 0.3 ? 'text-red-400' : pct > 0.1 ? 'text-amber-400' : 'text-emerald-400';
 
           const icon = isHeld ? '🏰' : '💀';
-          const title = isHeld ? 'F O R T R E S S   H E L D' : isFallen ? 'F O R T R E S S   F A L L E N' : 'S T A L E M A T E';
-          const titleColor = isHeld ? 'text-amber-400' : 'text-red-400';
-          const borderColor = isHeld ? 'border-amber-500/70' : 'border-red-600/70';
+          const title = isHeld ? 'V I C T O R Y' : isFallen ? 'D E F E A T' : 'D R A W';
+          const titleColor = isHeld ? 'text-emerald-400' : 'text-red-400';
+          const borderColor = isHeld ? 'border-emerald-500/70' : 'border-red-600/70';
           const bgGradient = isHeld
             ? 'bg-gradient-to-b from-emerald-950/95 via-slate-900/95 to-slate-900/95'
             : 'bg-gradient-to-b from-red-950/95 via-slate-900/95 to-slate-900/95';
           const btnClass = isHeld
-            ? 'bg-amber-600 hover:bg-amber-500 text-amber-950 border-amber-400/50'
+            ? 'bg-emerald-600 hover:bg-emerald-500 text-emerald-950 border-emerald-400/50'
             : 'bg-red-700 hover:bg-red-600 text-red-100 border-red-500/50';
           const shadowStyle = isHeld
-            ? { boxShadow: '0 0 40px rgba(234,179,8,0.3)' }
+            ? { boxShadow: '0 0 40px rgba(16,185,129,0.3)' }
             : { boxShadow: '0 0 40px rgba(239,68,68,0.3)' };
 
           return (

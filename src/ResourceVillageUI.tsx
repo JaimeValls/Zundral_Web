@@ -2182,7 +2182,7 @@ export default function ResourceVillageUI() {
     const maxCapacity = expedition.fortress.stats?.garrisonCapacity || 1;
     if (currentCount >= maxCapacity) return;
 
-    // Add banner to garrison
+    // Add banner to garrison and auto-deploy to fortress province
     setExpeditions((exps) => exps.map((exp) => {
       if (exp.expeditionId !== expeditionId || !exp.fortress) return exp;
       return {
@@ -2190,7 +2190,11 @@ export default function ResourceVillageUI() {
         fortress: {
           ...exp.fortress,
           garrison: [...(exp.fortress.garrison || []), bannerId]
-        }
+        },
+        mapState: exp.mapState ? {
+          ...exp.mapState,
+          armyPositions: { ...exp.mapState.armyPositions, [bannerId]: exp.mapState.fortressProvinceId },
+        } : exp.mapState,
       };
     }));
 
@@ -3208,6 +3212,7 @@ export default function ResourceVillageUI() {
     // IMPORTANT: Inner battle uses ONLY actual units from banners, NOT Watch Post capacity
     // Watch Post slots do NOT apply in inner battle - they only limit Phase 1 wall archers
     let innerTimeline: BattleResult['timeline'] = [];
+    let innerWinner: 'player' | 'enemy' | 'draw' | null = null;
     if (fortHP <= 0 && remainingAttackers > 0 && (garrisonWarriors + garrisonArchers) > 0) {
       dbg.log('[SIEGE] Starting inner battle with defenders:', { garrisonWarriors, garrisonArchers });
       // Build Division objects for the full morale-aware battle simulator
@@ -3232,6 +3237,7 @@ export default function ResourceVillageUI() {
       // Fortress defenders always use defend stance — garrison never pursues retreating attackers
       const innerResult = simulateBattle(defDiv as any, atkDiv as any, stats, p, undefined, undefined, { playerDefending: true });
       innerTimeline = innerResult.timeline;
+      innerWinner = innerResult.winner;
     } else if (fortHP <= 0 && remainingAttackers > 0) {
       dbg.log('[SIEGE] No inner battle - no defenders from banners');
     }
@@ -3274,9 +3280,10 @@ export default function ResourceVillageUI() {
         const totalGarr = garrisonWarriors + garrisonArchers;
         const wRatio = totalGarr > 0 ? garrisonWarriors / totalGarr : 0.5;
         finalGarrison = { warriors: Math.round(finalDefenders * wRatio), archers: Math.round(finalDefenders * (1 - wRatio)) };
-        if (finalDefenders > 0 && finalAttackers <= 0) {
+        // Use battle winner (accounts for morale breaks / retreats, not just troop counts)
+        if (innerWinner === 'player' || (finalDefenders > 0 && finalAttackers <= 0)) {
           outcome = 'fortress_holds_inner';
-        } else if (finalAttackers > 0 && finalDefenders <= 0) {
+        } else if (innerWinner === 'enemy' || (finalAttackers > 0 && finalDefenders <= 0)) {
           outcome = 'fortress_falls';
         } else {
           outcome = 'stalemate';
@@ -3300,24 +3307,45 @@ export default function ResourceVillageUI() {
     const totalDefMelee = defMeleeSquads.reduce((sum, s) => sum + s.initial, 0);
     const totalDefRanged = defRangedSquads.reduce((sum, s) => sum + s.initial, 0);
 
-    defMeleeSquads.forEach(s => {
-      const proportion = totalDefMelee > 0 ? s.initial / totalDefMelee : 0;
-      s.lost = Math.round(meleeLost * proportion);
-      s.final = Math.max(0, s.initial - s.lost);
-    });
-    defRangedSquads.forEach(s => {
-      const proportion = totalDefRanged > 0 ? s.initial / totalDefRanged : 0;
-      s.lost = Math.round(rangedLost * proportion);
-      s.final = Math.max(0, s.initial - s.lost);
-    });
+    // Distribute losses across squads using running-error accumulator to avoid rounding eating small losses
+    function distributeSquadLosses(squads: typeof defMeleeSquads, totalLost: number, totalInitial: number) {
+      if (totalLost <= 0 || totalInitial <= 0) return;
+      let remaining = totalLost;
+      let error = 0;
+      for (const s of squads) {
+        const exact = (s.initial / totalInitial) * totalLost + error;
+        const rounded = Math.round(exact);
+        const clamped = Math.min(rounded, s.initial, remaining);
+        s.lost = clamped;
+        s.final = s.initial - clamped;
+        remaining -= clamped;
+        error = exact - clamped;
+      }
+      // If rounding left unassigned losses, assign to first squads with capacity
+      for (const s of squads) {
+        if (remaining <= 0) break;
+        const canLose = s.final;
+        if (canLose > 0) {
+          const extra = Math.min(remaining, canLose);
+          s.lost += extra;
+          s.final -= extra;
+          remaining -= extra;
+        }
+      }
+    }
+    distributeSquadLosses(defMeleeSquads, meleeLost, totalDefMelee);
+    distributeSquadLosses(defRangedSquads, rangedLost, totalDefRanged);
 
-    // Attacker casualties: distribute proportionally across all squads
-    const totalAtkInitial = attackerComp.reduce((sum, s) => sum + s.initial, 0);
-    attackerComp.forEach(s => {
-      const proportion = totalAtkInitial > 0 ? s.initial / totalAtkInitial : 0;
-      s.lost = Math.round(totalAtkLost * proportion);
-      s.final = Math.max(0, s.initial - s.lost);
-    });
+    // Attacker casualties: distribute proportionally across all squads (split by role)
+    const atkMeleeSquads = attackerComp.filter(s => s.role === 'melee');
+    const atkRangedSquads = attackerComp.filter(s => s.role === 'ranged');
+    const totalAtkMelee = atkMeleeSquads.reduce((sum, s) => sum + s.initial, 0);
+    const totalAtkRanged = atkRangedSquads.reduce((sum, s) => sum + s.initial, 0);
+    const totalAtkInitial = totalAtkMelee + totalAtkRanged;
+    const atkMeleeLost = totalAtkInitial > 0 ? Math.round(totalAtkLost * (totalAtkMelee / totalAtkInitial)) : 0;
+    const atkRangedLost = totalAtkLost - atkMeleeLost;
+    distributeSquadLosses(atkMeleeSquads, atkMeleeLost, totalAtkMelee);
+    distributeSquadLosses(atkRangedSquads, atkRangedLost, totalAtkRanged);
 
     // Generate battle takeaway
     let battleTakeaway: string;
@@ -6791,6 +6819,108 @@ Safe recruits (unassigned people): ${freePop}`;
               >
                 {isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
               </button>
+              <button
+                onClick={() => {
+                  // Quick test setup: create 2 mixed banners + launch expedition + deploy to fortress
+                  const pd = provinceDataRef.current;
+                  if (!pd?.provinces) { alert('Province data not loaded yet'); return; }
+
+                  // 1. Create 2 mixed mercenary banners
+                  const mixedUnits = ['warrior','warrior','warrior','warrior','archer','archer','archer','archer'];
+                  let seq = squadSeqRef.current;
+                  let bSeq = bannerSeq;
+                  const newBanners: Banner[] = [];
+
+                  for (let i = 0; i < 2; i++) {
+                    const { squads: squadObjs, nextSeq } = initializeSquadsFromUnits(mixedUnits, seq);
+                    seq = nextSeq;
+                    const bid = bSeq++;
+                    const autoName = generateBannerName(bid, squadObjs);
+                    const levelInfo = calculateLevelFromXP(0);
+                    newBanners.push({
+                      id: bid,
+                      name: autoName,
+                      units: mixedUnits,
+                      squads: squadObjs,
+                      status: 'deployed' as const,
+                      reqPop: 80,
+                      recruited: 80,
+                      type: 'mercenary' as const,
+                      customNamed: false,
+                      xp: 0,
+                      level: levelInfo.level,
+                      xpCurrentLevel: levelInfo.xpCurrentLevel,
+                      xpNextLevel: levelInfo.xpNextLevel,
+                    });
+                  }
+                  squadSeqRef.current = seq;
+                  setSquadSeq(seq);
+                  setBannerSeq(bSeq);
+                  setBanners(prev => [...prev, ...newBanners]);
+
+                  // 2. Initialize expedition as completed with fortress
+                  const buildings = createInitialFortressBuildings();
+                  const stats = calculateFortressStats(buildings);
+                  const plainsProvs = pd.provinces.filter((p: any) => p.terrain === 'plains' && p.isLand);
+                  const chosen = plainsProvs[Math.floor(Math.random() * plainsProvs.length)];
+                  const revealed = pd.provinces.map((p: any) => p.id);
+                  const expMissions = selectRandomMissions(3, EXPEDITION_1_MISSION_POOL);
+                  const missionPositions: Record<string, string> = {};
+                  for (const m of expMissions) {
+                    const terrain = m.terrain || 'plains';
+                    const usedProvIds = new Set(Object.values(missionPositions));
+                    const matching = pd.provinces.filter(
+                      (p: any) => p.terrain === terrain && p.isLand && p.id !== chosen.id && !usedProvIds.has(p.id)
+                    );
+                    if (matching.length > 0) {
+                      const pick = matching[Math.floor(Math.random() * matching.length)];
+                      missionPositions[m.id] = pick.id;
+                    }
+                  }
+
+                  // 3. Deploy both banners at fortress province
+                  const bannerIds = newBanners.map(b => b.id);
+                  const armyPositions: Record<number, string> = {};
+                  for (const bid of bannerIds) armyPositions[bid] = chosen.id;
+
+                  setExpeditions(exps => exps.map(exp =>
+                    exp.expeditionId === 'godonis_mountain_expedition' ? {
+                      ...exp,
+                      state: 'completed' as const,
+                      travelProgress: 100,
+                      fortress: {
+                        buildings,
+                        stats,
+                        garrison: bannerIds,
+                      },
+                      mapState: {
+                        fortressProvinceId: chosen.id,
+                        armyPositions,
+                        missionPositions,
+                        revealedProvinces: revealed,
+                        provinceControl: {},
+                        turnNumber: 1,
+                        pendingOrders: {},
+                        expeditionMissions: expMissions,
+                      },
+                    } : exp
+                  ));
+
+                  // 4. Max out resources
+                  setWarehouse(w => ({
+                    ...w,
+                    wood: warehouseCap.wood,
+                    stone: warehouseCap.stone,
+                    food: warehouseCap.food,
+                    iron: warehouseCap.iron,
+                    gold: warehouseCap.gold,
+                  }));
+
+                }}
+                className="px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-lg bg-green-600 active:bg-green-700 hover:bg-green-700 text-white text-[10px] sm:text-xs font-semibold touch-manipulation min-h-[44px] sm:min-h-0"
+              >
+                🚀 Quick Test Setup
+              </button>
             </div>
             {/* Simulators Section */}
             <div className="mt-2 pt-2 border-t border-amber-700/50">
@@ -7324,14 +7454,24 @@ Safe recruits (unassigned people): ${freePop}`;
                       battleResultId: result.id,
                     });
 
-                    const casualties = applyFieldBattleCasualties(result, newTurnNumber, conflict.provinceId);
+                    // Apply casualties via React state (setBanners)
+                    applyFieldBattleCasualties(result, newTurnNumber, conflict.provinceId);
+
+                    // Detect destroyed armies directly from battle result (don't rely on setBanners timing)
+                    const allPlayerResults = result.playerArmies && result.playerArmies.length > 0
+                      ? result.playerArmies : [result.playerArmy];
+                    for (const pa of allPlayerResults) {
+                      if (pa.finalTroops <= 0) destroyedPlayerIds.add(pa.bannerId);
+                    }
 
                     // Update enemies in local array
                     const allEnemyResults = result.enemyArmies || [result.enemyArmy];
+                    const destroyedEnemyIds: number[] = [];
                     for (const eResult of allEnemyResults) {
+                      if (eResult.finalTroops <= 0) destroyedEnemyIds.push(eResult.enemyId);
                       updatedEnemies = updatedEnemies.map(e => {
                         if (e.id !== eResult.enemyId) return e;
-                        if (casualties.destroyedEnemyIds.includes(e.id)) {
+                        if (eResult.finalTroops <= 0) {
                           return {
                             ...e,
                             status: 'destroyed' as const,
@@ -7356,8 +7496,9 @@ Safe recruits (unassigned people): ${freePop}`;
                     }
 
                     // Log destroyed armies
-                    for (const bid of casualties.destroyedBannerIds) {
-                      destroyedPlayerIds.add(bid);
+                    for (const bid of Array.from(destroyedPlayerIds)) {
+                      // Only log if this banner was in this conflict
+                      if (!conflict.playerBannerIds.includes(bid)) continue;
                       const bName = banners.find(b => b.id === bid)?.name || 'Army';
                       newLogEntries.push({
                         id: `log_${newTurnNumber}_${logIdx++}`,
@@ -7366,7 +7507,7 @@ Safe recruits (unassigned people): ${freePop}`;
                         provinceId: conflict.provinceId,
                       });
                     }
-                    for (const eid of casualties.destroyedEnemyIds) {
+                    for (const eid of destroyedEnemyIds) {
                       const eName = enemyForces.find(e => e.id === eid)?.name || 'Enemy';
                       newLogEntries.push({
                         id: `log_${newTurnNumber}_${logIdx++}`,
@@ -7559,6 +7700,7 @@ Safe recruits (unassigned people): ${freePop}`;
                 let pendingSiegeBattle: (import('./types').SiegeBattleResult & { enemyName: string }) | undefined;
 
                 // 4a: Deployed armies at fortress province intercept enemies in field battle FIRST
+                // Skip enemies that already fought in Phase 2 province conflicts — they already battled this turn
                 const deployedAtFortress = Object.entries(newPositions)
                   .filter(([, prov]) => prov === fortId)
                   .map(([bidStr]) => Number(bidStr))
@@ -7571,6 +7713,8 @@ Safe recruits (unassigned people): ${freePop}`;
                   for (let i = 0; i < updatedEnemies.length; i++) {
                     const enemy = updatedEnemies[i];
                     if (enemy.status !== 'marching' || enemy.provinceId !== fortId) continue;
+                    // Skip enemies that already fought a field battle this turn (Phase 2)
+                    if (battleEnemyIds.has(enemy.id)) continue;
 
                     dbg.log(`[FIELD-FORT] Deployed armies intercept "${enemy.name}" at fortress province!`);
                     const fbResult = runMergedBattle(fortressFieldBanners, [enemy], fortId, newTurnNumber, newFieldBattles.length);
@@ -7615,9 +7759,11 @@ Safe recruits (unassigned people): ${freePop}`;
                 }
 
                 // 4b: Surviving enemies at fortress trigger siege
+                // Enemies that fought in Phase 2 are pushed back — they don't siege this turn
                 for (let i = 0; i < updatedEnemies.length; i++) {
                   const enemy = updatedEnemies[i];
                   if (enemy.status !== 'marching' || enemy.provinceId !== fortId) continue;
+                  if (battleEnemyIds.has(enemy.id)) continue;
 
                   dbg.log(`[NPC] Enemy "${enemy.name}" (${enemy.totalTroops} troops) reached fortress! Triggering siege...`);
                   newLogEntries.push({
