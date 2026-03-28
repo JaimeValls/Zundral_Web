@@ -326,10 +326,10 @@ export default function ArmyTab({
                             onClick={() => onRequestReinforcement?.(b.id)}
                             className="px-2 py-1 bg-amber-700/80 hover:bg-amber-600 text-amber-100 rounded text-[10px] font-semibold border border-amber-500/50 shrink-0 whitespace-nowrap transition-colors"
                           >
-                            🔄 Recruit ({totalMissing} · {totalMissing}g)
+                            🔄 Reinforce ({totalMissing} · {totalMissing}g)
                           </button>
                         ) : isReinforcing ? (
-                          <span className="text-[10px] text-amber-400 animate-pulse font-semibold shrink-0">🔄 Recruiting...</span>
+                          <span className="text-[10px] text-amber-400 animate-pulse font-semibold shrink-0">🔄 Reinforcing...</span>
                         ) : (
                           <span className="text-[10px] px-2 py-0.5 rounded border text-emerald-400 bg-emerald-950/30 border-emerald-900/50 font-semibold shrink-0">
                             Stationed
@@ -731,11 +731,11 @@ export default function ArmyTab({
                             onClick={() => onRequestReinforcement?.(b.id)}
                             className="px-2 py-1 bg-amber-700/80 hover:bg-amber-600 text-amber-100 rounded text-[9px] font-semibold border border-amber-500/50 whitespace-nowrap transition-colors"
                           >
-                            🔄 Recruit ({totalMissing}g)
+                            🔄 Reinforce ({totalMissing}g)
                           </button>
                         )}
                         {isReinforcing && (
-                          <span className="text-[9px] text-amber-400 animate-pulse font-semibold">🔄 Recruiting...</span>
+                          <span className="text-[9px] text-amber-400 animate-pulse font-semibold">🔄 Reinforcing...</span>
                         )}
                         <button
                           onClick={() => onDeleteBannerModal(b.id)}

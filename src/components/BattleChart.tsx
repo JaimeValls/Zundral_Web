@@ -8,245 +8,459 @@ import React, { useEffect, useRef, useState, useMemo } from 'react';
 import type { BattleResult, SiegeRound, InnerBattleStep } from '../types';
 
 function BattleChart({ timeline }: { timeline: BattleResult['timeline'] }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const troopsCanvasRef = useRef<HTMLCanvasElement>(null);
+  const moraleCanvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [tooltip, setTooltip] = useState<{
     visible: boolean;
     x: number;
     y: number;
-    data: Array<{ label: string; value: number; color: string }>;
+    data: Array<{ label: string; value: string; color: string }>;
+    phase: string;
     tick: number;
   } | null>(null);
   const [hoveredTick, setHoveredTick] = useState<number | null>(null);
   const graphDataRef = useRef<{
-    sx: (x: number) => number;
-    syT: (y: number) => number;
-    syM: (y: number) => number;
-    W: number;
-    H: number;
-    tMin: number;
-    tMax: number;
-    mMin: number;
-    mMax: number;
+    PAD: { top: number; left: number; right: number; bottom: number };
+    plotW: number;
+    plotH: number;
+    N: number;
+    mapX: (i: number) => number;
     A_morale: number[];
     B_morale: number[];
     A_troops: number[];
     B_troops: number[];
   } | null>(null);
 
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas || !timeline.length) return;
+  // ── Compute phase bands once ──
+  const bands = useMemo(() => {
+    if (!timeline.length) return [];
+    const result: Array<{ phase: string; startIdx: number; endIdx: number }> = [];
+    let start = 0;
+    let cur = timeline[0].phase;
+    for (let i = 1; i < timeline.length; i++) {
+      if (timeline[i].phase !== cur) {
+        result.push({ phase: cur, startIdx: start, endIdx: i - 1 });
+        start = i;
+        cur = timeline[i].phase;
+      }
+    }
+    result.push({ phase: cur, startIdx: start, endIdx: timeline.length - 1 });
+    return result;
+  }, [timeline]);
 
+  // ── Per-phase stats — always show all 3 canonical phases ──
+  // If timeline contains 'last_stand', show that instead of 'pursuit'
+  const hasLastStand = useMemo(() => timeline.some(t => t.phase === 'last_stand'), [timeline]);
+  const CANONICAL_PHASES = hasLastStand
+    ? ['skirmish', 'melee', 'last_stand'] as const
+    : ['skirmish', 'melee', 'pursuit'] as const;
+
+  const phaseStats = useMemo(() => {
+    if (!timeline.length) return [];
+
+    // Build a map from actual bands
+    const bandMap = new Map<string, { startIdx: number; endIdx: number }>();
+    for (const b of bands) bandMap.set(b.phase, { startIdx: b.startIdx, endIdx: b.endIdx });
+
+    return CANONICAL_PHASES.map(phase => {
+      const band = bandMap.get(phase);
+      if (band) {
+        const sA = timeline[band.startIdx].A_troops;
+        const eA = timeline[band.endIdx].A_troops;
+        const sB = timeline[band.startIdx].B_troops;
+        const eB = timeline[band.endIdx].B_troops;
+        return {
+          phase,
+          ticks: band.endIdx - band.startIdx + 1,
+          skipped: false,
+          playerStart: Math.round(sA),
+          playerEnd: Math.round(eA),
+          playerLost: Math.round(sA - eA),
+          enemyStart: Math.round(sB),
+          enemyEnd: Math.round(eB),
+          enemyLost: Math.round(sB - eB),
+        };
+      }
+      // Phase didn't happen — skipped
+      return {
+        phase,
+        ticks: 0,
+        skipped: true,
+        playerStart: 0, playerEnd: 0, playerLost: 0,
+        enemyStart: 0, enemyEnd: 0, enemyLost: 0,
+      };
+    });
+  }, [timeline, bands]);
+
+  // ── Phase colors ──
+  const phaseColor = (ph: string) => {
+    if (ph === 'skirmish') return { bg: 'rgba(56,189,248,0.10)', border: 'rgba(56,189,248,0.3)', text: '#7dd3fc' };
+    if (ph === 'pursuit') return { bg: 'rgba(248,113,113,0.10)', border: 'rgba(248,113,113,0.3)', text: '#fca5a5' };
+    if (ph === 'last_stand') return { bg: 'rgba(251,191,36,0.12)', border: 'rgba(251,191,36,0.3)', text: '#fbbf24' };
+    return { bg: 'rgba(148,163,184,0.08)', border: 'rgba(148,163,184,0.2)', text: '#94a3b8' };
+  };
+
+  const phaseIcon = (ph: string) => {
+    if (ph === 'skirmish') return '\u2694'; // ⚔
+    if (ph === 'melee') return '\u2694';
+    if (ph === 'pursuit') return '\u{1F3C3}'; // 🏃
+    if (ph === 'last_stand') return '\u{1F6E1}'; // 🛡
+    return '';
+  };
+
+  // ── Draw troops chart ──
+  useEffect(() => {
+    const canvas = troopsCanvasRef.current;
+    if (!canvas || !timeline.length) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const w = canvas.width = canvas.clientWidth * 2;
-    const h = canvas.height = canvas.clientHeight * 2;
+    const dpr = 2;
+    const w = canvas.width = canvas.clientWidth * dpr;
+    const h = canvas.height = canvas.clientHeight * dpr;
     ctx.clearRect(0, 0, w, h);
-    ctx.save();
-    ctx.translate(48, 10);
-    const W = w - 76;
-    const H = h - 40;
 
-    const N = timeline.length || 1;
-    const sx = (x: number) => (x - 1) / (N - 1 || 1) * W;
+    const PAD = { top: 32, bottom: 8, left: 52, right: 16 };
+    const plotW = w - PAD.left - PAD.right;
+    const plotH = h - PAD.top - PAD.bottom;
+    const N = timeline.length;
 
-    const troopsAll = [...timeline.map(t => t.A_troops), ...timeline.map(t => t.B_troops)].filter(Number.isFinite);
-    const moraleAll = [...timeline.map(t => t.A_morale), ...timeline.map(t => t.B_morale)].filter(Number.isFinite);
-    const tMin = Math.min(...troopsAll, 0);
-    const tMax = Math.max(...troopsAll, 1);
-    const mMin = Math.min(...moraleAll, 0);
-    const mMax = Math.max(...moraleAll, 1);
-    const syT = (y: number) => H - (y - tMin) / (tMax - tMin || 1) * H;
-    const syM = (y: number) => H - (y - mMin) / (mMax - mMin || 1) * H;
-
-    // Store graph data for tooltip calculations
-    const A_morale = timeline.map(r => r.A_morale);
-    const B_morale = timeline.map(r => r.B_morale);
     const A_troops = timeline.map(r => r.A_troops);
     const B_troops = timeline.map(r => r.B_troops);
+    const tMax = Math.max(...A_troops, ...B_troops, 1);
 
+    const mapX = (i: number) => PAD.left + (i / (N - 1 || 1)) * plotW;
+    const mapY = (v: number) => PAD.top + plotH - (v / tMax) * plotH;
+
+    // Store for tooltip
     graphDataRef.current = {
-      sx, syT, syM, W, H, tMin, tMax, mMin, mMax,
-      A_morale, B_morale, A_troops, B_troops
+      PAD, plotW, plotH, N, mapX,
+      A_morale: timeline.map(r => r.A_morale),
+      B_morale: timeline.map(r => r.B_morale),
+      A_troops, B_troops
     };
 
     // Background
-    ctx.fillStyle = '#0f141b';
-    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#0c1018';
+    ctx.fillRect(0, 0, w, h);
 
     // Phase bands
-    if (timeline.length) {
-      const bands: Array<{ ph: string; s: number; e: number }> = [];
-      let s = 0;
-      let cur = timeline[0].phase;
-      for (let i = 1; i < timeline.length; i++) {
-        if (timeline[i].phase !== cur) {
-          bands.push({ ph: cur, s: s + 1, e: i });
-          s = i;
-          cur = timeline[i].phase;
-        }
+    for (const b of bands) {
+      const x0 = mapX(b.startIdx);
+      const x1 = mapX(b.endIdx);
+      const pc = phaseColor(b.phase);
+      ctx.fillStyle = pc.bg;
+      ctx.fillRect(x0, PAD.top, Math.max(1, x1 - x0), plotH);
+      // Phase separator
+      if (b.startIdx > 0) {
+        ctx.strokeStyle = pc.border;
+        ctx.lineWidth = 1;
+        ctx.setLineDash([3, 3]);
+        ctx.beginPath();
+        ctx.moveTo(x0, PAD.top);
+        ctx.lineTo(x0, PAD.top + plotH);
+        ctx.stroke();
+        ctx.setLineDash([]);
       }
-      bands.push({ ph: cur, s: s + 1, e: timeline.length });
+      // Phase label at top
+      const cx = x0 + (x1 - x0) / 2;
+      ctx.font = 'bold 17px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      ctx.fillStyle = pc.text;
+      ctx.globalAlpha = 0.7;
+      ctx.fillText(b.phase.charAt(0).toUpperCase() + b.phase.slice(1), cx, PAD.top + 6);
+      ctx.globalAlpha = 1;
+    }
 
-      for (const b of bands) {
-        const x0 = sx(b.s);
-        const x1 = sx(b.e);
-        let c = 'rgba(154,163,178,0.14)';
-        if (b.ph === 'skirmish') c = 'rgba(45,156,255,0.16)';
-        else if (b.ph === 'pursuit') c = 'rgba(255,93,93,0.16)';
-        ctx.fillStyle = c;
-        ctx.fillRect(x0, 0, Math.max(1, x1 - x0), H);
-        ctx.fillStyle = '#cfd6e1';
-        ctx.font = 'bold 16px system-ui';
-        ctx.textAlign = 'center';
-        ctx.fillText(b.ph.charAt(0).toUpperCase() + b.ph.slice(1), x0 + (x1 - x0) / 2, 6);
+    // Grid lines (horizontal)
+    const gridCount = 4;
+    ctx.font = '16px system-ui, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    for (let i = 0; i <= gridCount; i++) {
+      const v = Math.round(tMax * i / gridCount);
+      const y = mapY(v);
+      ctx.strokeStyle = 'rgba(148,163,184,0.08)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(PAD.left, y);
+      ctx.lineTo(PAD.left + plotW, y);
+      ctx.stroke();
+      ctx.fillStyle = '#64748b';
+      ctx.fillText(shortNum(v), PAD.left - 8, y);
+    }
+
+    // Area fill helper
+    const drawArea = (arr: number[], color: string, alpha: number) => {
+      if (arr.length < 2) return;
+      const r = parseInt(color.slice(1, 3), 16);
+      const g = parseInt(color.slice(3, 5), 16);
+      const b = parseInt(color.slice(5, 7), 16);
+      ctx.fillStyle = `rgba(${r},${g},${b},${alpha})`;
+      ctx.beginPath();
+      ctx.moveTo(mapX(0), mapY(arr[0]));
+      for (let i = 1; i < arr.length; i++) ctx.lineTo(mapX(i), mapY(arr[i]));
+      ctx.lineTo(mapX(arr.length - 1), PAD.top + plotH);
+      ctx.lineTo(mapX(0), PAD.top + plotH);
+      ctx.closePath();
+      ctx.fill();
+    };
+
+    // Line helper
+    const drawLine = (arr: number[], color: string, lw: number) => {
+      if (arr.length < 2) return;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = lw;
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(mapX(0), mapY(arr[0]));
+      for (let i = 1; i < arr.length; i++) ctx.lineTo(mapX(i), mapY(arr[i]));
+      ctx.stroke();
+    };
+
+    // Draw areas then lines
+    drawArea(A_troops, '#38bdf8', 0.12);
+    drawArea(B_troops, '#f87171', 0.12);
+    drawLine(A_troops, '#38bdf8', 4);
+    drawLine(B_troops, '#f87171', 4);
+
+    // Hover guideline
+    if (hoveredTick !== null && hoveredTick >= 0 && hoveredTick < N) {
+      const gx = mapX(hoveredTick);
+      ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(gx, PAD.top);
+      ctx.lineTo(gx, PAD.top + plotH);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      // Dots
+      const dotR = 6;
+      ctx.fillStyle = '#38bdf8';
+      ctx.beginPath();
+      ctx.arc(gx, mapY(A_troops[hoveredTick]), dotR, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#0c1018';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.fillStyle = '#f87171';
+      ctx.beginPath();
+      ctx.arc(gx, mapY(B_troops[hoveredTick]), dotR, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#0c1018';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+
+    // Border
+    ctx.strokeStyle = '#1e293b';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(PAD.left, PAD.top, plotW, plotH);
+
+  }, [timeline, hoveredTick, bands]);
+
+  // ── Draw morale chart ──
+  useEffect(() => {
+    const canvas = moraleCanvasRef.current;
+    if (!canvas || !timeline.length) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const dpr = 2;
+    const w = canvas.width = canvas.clientWidth * dpr;
+    const h = canvas.height = canvas.clientHeight * dpr;
+    ctx.clearRect(0, 0, w, h);
+
+    const PAD = { top: 12, bottom: 8, left: 52, right: 16 };
+    const plotW = w - PAD.left - PAD.right;
+    const plotH = h - PAD.top - PAD.bottom;
+    const N = timeline.length;
+
+    const A_morale = timeline.map(r => r.A_morale);
+    const B_morale = timeline.map(r => r.B_morale);
+    const mMax = Math.max(...A_morale, ...B_morale, 1);
+
+    const mapX = (i: number) => PAD.left + (i / (N - 1 || 1)) * plotW;
+    const mapY = (v: number) => PAD.top + plotH - (v / mMax) * plotH;
+
+    // Background
+    ctx.fillStyle = '#0c1018';
+    ctx.fillRect(0, 0, w, h);
+
+    // Phase bands (sync with troops chart)
+    for (const b of bands) {
+      const x0 = mapX(b.startIdx);
+      const x1 = mapX(b.endIdx);
+      const pc = phaseColor(b.phase);
+      ctx.fillStyle = pc.bg;
+      ctx.fillRect(x0, PAD.top, Math.max(1, x1 - x0), plotH);
+      if (b.startIdx > 0) {
+        ctx.strokeStyle = pc.border;
+        ctx.lineWidth = 1;
+        ctx.setLineDash([3, 3]);
+        ctx.beginPath();
+        ctx.moveTo(x0, PAD.top);
+        ctx.lineTo(x0, PAD.top + plotH);
+        ctx.stroke();
+        ctx.setLineDash([]);
       }
     }
 
     // Grid
-    ctx.strokeStyle = '#202733';
-    ctx.lineWidth = 1;
-    for (let i = 0; i <= 5; i++) {
-      const y = i * (H / 5);
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(W, y);
-      ctx.stroke();
-    }
-    for (let i = 0; i <= 10; i++) {
-      const x = i * (W / 10);
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, H);
-      ctx.stroke();
-    }
-    ctx.strokeStyle = '#2c3545';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(0, 0, W, H);
-
-    // Y labels
-    ctx.fillStyle = '#a7b0bd';
-    ctx.font = '12px system-ui';
+    const gridCount = 3;
+    ctx.font = '16px system-ui, sans-serif';
     ctx.textAlign = 'right';
     ctx.textBaseline = 'middle';
-    for (let i = 0; i <= 4; i++) {
-      const v = tMin + (tMax - tMin) * i / 4;
-      const y = syT(v);
-      ctx.fillText(Math.round(v).toString(), -6, y);
-    }
-    ctx.fillText('Troops', -6, -6);
-    ctx.textAlign = 'left';
-    for (let i = 0; i <= 4; i++) {
-      const v = mMin + (mMax - mMin) * i / 4;
-      const y = syM(v);
-      ctx.fillText(Math.round(v).toString(), W + 6, y);
-    }
-    ctx.fillText('Morale', W + 6, -6);
-
-    // Lines
-    const draw = (arr: number[], sy: (y: number) => number, col: string) => {
-      if (!arr.length) return;
+    for (let i = 0; i <= gridCount; i++) {
+      const v = Math.round(mMax * i / gridCount);
+      const y = mapY(v);
+      ctx.strokeStyle = 'rgba(148,163,184,0.08)';
+      ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = col;
-      ctx.moveTo(sx(1), sy(arr[0]));
-      for (let i = 1; i < arr.length; i++) {
-        ctx.lineTo(sx(i + 1), sy(arr[i]));
-      }
+      ctx.moveTo(PAD.left, y);
+      ctx.lineTo(PAD.left + plotW, y);
       ctx.stroke();
+      ctx.fillStyle = '#64748b';
+      ctx.fillText(shortNum(v), PAD.left - 8, y);
+    }
+
+    // Morale break threshold line (35% of initial morale)
+    const initialPlayerMorale = A_morale[0] || 0;
+    const initialEnemyMorale = B_morale[0] || 0;
+    const breakThreshold = Math.min(initialPlayerMorale, initialEnemyMorale) * 0.35;
+    if (breakThreshold > 0) {
+      const by = mapY(breakThreshold);
+      ctx.strokeStyle = 'rgba(251,191,36,0.5)';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([6, 4]);
+      ctx.beginPath();
+      ctx.moveTo(PAD.left, by);
+      ctx.lineTo(PAD.left + plotW, by);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      // Label
+      ctx.font = 'bold 14px system-ui, sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillStyle = 'rgba(251,191,36,0.7)';
+      ctx.fillText('BREAK', PAD.left + 6, by - 6);
+    }
+
+    // Line helper
+    const drawLine = (arr: number[], color: string, lw: number, dashed?: boolean) => {
+      if (arr.length < 2) return;
+      if (dashed) ctx.setLineDash([6, 4]);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = lw;
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(mapX(0), mapY(arr[0]));
+      for (let i = 1; i < arr.length; i++) ctx.lineTo(mapX(i), mapY(arr[i]));
+      ctx.stroke();
+      if (dashed) ctx.setLineDash([]);
     };
 
-    draw(A_morale, syM, '#6fb3ff');
-    draw(B_morale, syM, '#ff8c00'); // Enemy morale: Orange
-    draw(A_troops, syT, '#2d9cff');
-    draw(B_troops, syT, '#ff5d5d');
+    drawLine(A_morale, '#7dd3fc', 3);
+    drawLine(B_morale, '#fbbf24', 3);
 
-    // Draw vertical guideline at hovered tick
-    if (hoveredTick !== null && hoveredTick >= 1 && hoveredTick <= timeline.length) {
-      const guidelineX = sx(hoveredTick);
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+    // Hover guideline
+    if (hoveredTick !== null && hoveredTick >= 0 && hoveredTick < N) {
+      const gx = mapX(hoveredTick);
+      ctx.strokeStyle = 'rgba(255,255,255,0.35)';
       ctx.lineWidth = 1;
       ctx.setLineDash([4, 4]);
       ctx.beginPath();
-      ctx.moveTo(guidelineX, 0);
-      ctx.lineTo(guidelineX, H);
+      ctx.moveTo(gx, PAD.top);
+      ctx.lineTo(gx, PAD.top + plotH);
       ctx.stroke();
       ctx.setLineDash([]);
+      // Dots
+      const dotR = 5;
+      ctx.fillStyle = '#7dd3fc';
+      ctx.beginPath();
+      ctx.arc(gx, mapY(A_morale[hoveredTick]), dotR, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#0c1018';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.fillStyle = '#fbbf24';
+      ctx.beginPath();
+      ctx.arc(gx, mapY(B_morale[hoveredTick]), dotR, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#0c1018';
+      ctx.lineWidth = 2;
+      ctx.stroke();
     }
 
-    ctx.restore();
-  }, [timeline, hoveredTick]);
+    // Border
+    ctx.strokeStyle = '#1e293b';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(PAD.left, PAD.top, plotW, plotH);
 
+  }, [timeline, hoveredTick, bands]);
+
+  // ── Unified mouse handler (works on both canvases) ──
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current;
     const container = containerRef.current;
     const data = graphDataRef.current;
-    if (!canvas || !container || !data || !timeline.length) return;
+    if (!container || !data || !timeline.length) return;
 
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
+    const rect = container.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const dpr = 2;
 
-    // Account for canvas translation (48, 10)
-    const mouseX = (e.clientX - rect.left) * scaleX - 48;
-    const mouseY = (e.clientY - rect.top) * scaleY - 10;
+    // Convert to canvas coords using troops chart layout
+    const canvasX = mouseX * dpr;
+    const plotLeft = data.PAD.left;
+    const plotRight = data.PAD.left + data.plotW;
 
-    // Find closest data point
-    let closestTick = 1;
-    let minDist = Infinity;
-
-    for (let i = 0; i < timeline.length; i++) {
-      const tick = i + 1;
-      const x = data.sx(tick);
-      const dist = Math.abs(mouseX - x);
-      if (dist < minDist) {
-        minDist = dist;
-        closestTick = tick;
-      }
-    }
-
-    // Only show tooltip if close enough (within 30 pixels)
-    if (minDist < 30 && mouseX >= 0 && mouseX <= data.W && mouseY >= 0 && mouseY <= data.H) {
-      const index = closestTick - 1;
-      const tooltipData: Array<{ label: string; value: number; color: string }> = [];
-
-      if (index >= 0 && index < timeline.length) {
-        tooltipData.push({
-          label: 'Player Morale',
-          value: data.A_morale[index],
-          color: '#6fb3ff'
-        });
-        tooltipData.push({
-          label: 'Enemy Morale',
-          value: data.B_morale[index],
-          color: '#ff8c00'
-        });
-        tooltipData.push({
-          label: 'Player Troops',
-          value: data.A_troops[index],
-          color: '#2d9cff'
-        });
-        tooltipData.push({
-          label: 'Enemy Troops',
-          value: data.B_troops[index],
-          color: '#ff5d5d'
-        });
-      }
-
-      setHoveredTick(closestTick);
-      setTooltip({
-        visible: true,
-        x: e.clientX - rect.left,
-        y: e.clientY - rect.top,
-        data: tooltipData,
-        tick: closestTick
-      });
-    } else {
+    if (canvasX < plotLeft || canvasX > plotRight) {
       setHoveredTick(null);
       setTooltip(null);
+      return;
     }
+
+    // Find closest index
+    let closestIdx = 0;
+    let minDist = Infinity;
+    for (let i = 0; i < data.N; i++) {
+      const x = data.mapX(i);
+      const dist = Math.abs(canvasX - x);
+      if (dist < minDist) { minDist = dist; closestIdx = i; }
+    }
+
+    if (minDist > 40) {
+      setHoveredTick(null);
+      setTooltip(null);
+      return;
+    }
+
+    setHoveredTick(closestIdx);
+
+    const phase = timeline[closestIdx].phase;
+    const tooltipData: Array<{ label: string; value: string; color: string }> = [
+      { label: 'Your Troops', value: Math.round(data.A_troops[closestIdx]).toString(), color: '#38bdf8' },
+      { label: 'Enemy Troops', value: Math.round(data.B_troops[closestIdx]).toString(), color: '#f87171' },
+      { label: 'Your Morale', value: Math.round(data.A_morale[closestIdx]).toString(), color: '#7dd3fc' },
+      { label: 'Enemy Morale', value: Math.round(data.B_morale[closestIdx]).toString(), color: '#fbbf24' },
+    ];
+
+    // Position tooltip to the right of cursor, flip if near right edge
+    let tx = mouseX + 14;
+    if (tx + 180 > rect.width) tx = mouseX - 190;
+
+    setTooltip({
+      visible: true,
+      x: tx,
+      y: e.clientY - rect.top,
+      data: tooltipData,
+      phase,
+      tick: closestIdx + 1
+    });
   };
 
   const handleMouseLeave = () => {
@@ -254,32 +468,156 @@ function BattleChart({ timeline }: { timeline: BattleResult['timeline'] }) {
     setTooltip(null);
   };
 
+  // Summary stats
+  const firstTick = timeline[0];
+  const lastTick = timeline[timeline.length - 1];
+  const playerLost = firstTick ? Math.round(firstTick.A_troops - lastTick.A_troops) : 0;
+  const enemyLost = firstTick ? Math.round(firstTick.B_troops - lastTick.B_troops) : 0;
+
   return (
-    <div ref={containerRef} className="relative">
+    <div ref={containerRef} className="relative space-y-0">
+      {/* ── Phase Breakdown Header ── */}
+      <div className="bg-slate-900/80 border border-slate-700/60 rounded-t-lg overflow-hidden">
+        {/* Title row + total summary */}
+        <div className="flex items-center justify-between px-3 py-1.5 border-b border-slate-700/40">
+          <span className="font-bold text-slate-400 uppercase tracking-wider text-[10px]">Battle Timeline</span>
+          <div className="flex items-center gap-4 text-[10px]">
+            <span className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-sm bg-sky-400 inline-block" />
+              <span className="text-sky-300">You: {firstTick ? Math.round(firstTick.A_troops) : 0}</span>
+              <span className="text-slate-500">{'\u2192'}</span>
+              <span className="text-sky-300">{lastTick ? Math.round(lastTick.A_troops) : 0}</span>
+              {playerLost > 0 && <span className="text-red-400 font-semibold">({'\u25BC'}{playerLost})</span>}
+            </span>
+            <span className="text-slate-700">|</span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-sm bg-red-400 inline-block" />
+              <span className="text-red-300">Foe: {firstTick ? Math.round(firstTick.B_troops) : 0}</span>
+              <span className="text-slate-500">{'\u2192'}</span>
+              <span className="text-red-300">{lastTick ? Math.round(lastTick.B_troops) : 0}</span>
+              {enemyLost > 0 && <span className="text-red-400 font-semibold">({'\u25BC'}{enemyLost})</span>}
+            </span>
+          </div>
+        </div>
+        {/* Phase cards row — always shows all 3 phases */}
+        {phaseStats.length > 0 && (
+          <div className="flex">
+            {phaseStats.map((ps, i) => {
+              const pc = phaseColor(ps.phase);
+              const phaseName = ps.phase === 'melee' ? 'Battle' : ps.phase === 'last_stand' ? 'Last Stand' : ps.phase.charAt(0).toUpperCase() + ps.phase.slice(1);
+              return (
+                <div
+                  key={i}
+                  className="flex-1 px-2.5 py-1.5 text-[10px] leading-tight"
+                  style={{
+                    background: ps.skipped ? 'rgba(51,65,85,0.35)' : pc.bg,
+                    borderRight: i < phaseStats.length - 1 ? `1px solid ${ps.skipped ? 'rgba(100,116,139,0.4)' : pc.border}` : undefined,
+                  }}
+                >
+                  {/* Phase name + duration */}
+                  <div className="flex items-center gap-1 mb-0.5">
+                    <span style={{ color: ps.skipped ? '#94a3b8' : pc.text }} className="font-bold">
+                      {phaseIcon(ps.phase)} {phaseName}
+                    </span>
+                    {ps.skipped
+                      ? <span className="text-amber-400/80 font-semibold text-[9px]">-- DID NOT OCCUR --</span>
+                      : <span className="text-slate-500">({ps.ticks})</span>
+                    }
+                  </div>
+                  {ps.skipped ? (
+                    <div className="text-slate-400 text-[9px] mt-0.5">Army morale broke before this phase</div>
+                  ) : (
+                    <>
+                      {/* Player losses */}
+                      <div className="flex items-center gap-1">
+                        <span className="text-sky-400/70 w-[22px]">You:</span>
+                        <span className="text-sky-300">{ps.playerStart}{'\u2192'}{ps.playerEnd}</span>
+                        {ps.playerLost > 0
+                          ? <span className="text-red-400 font-semibold">{'\u25BC'}{ps.playerLost}</span>
+                          : <span className="text-slate-600">{'\u2014'}</span>
+                        }
+                      </div>
+                      {/* Enemy losses */}
+                      <div className="flex items-center gap-1">
+                        <span className="text-red-400/70 w-[22px]">Foe:</span>
+                        <span className="text-red-300">{ps.enemyStart}{'\u2192'}{ps.enemyEnd}</span>
+                        {ps.enemyLost > 0
+                          ? <span className="text-red-400 font-semibold">{'\u25BC'}{ps.enemyLost}</span>
+                          : <span className="text-slate-600">{'\u2014'}</span>
+                        }
+                      </div>
+                    </>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Troops canvas */}
       <canvas
-        ref={canvasRef}
-        className="w-full h-[300px] bg-[#0b0e12] border border-slate-700 rounded-lg cursor-crosshair"
-        style={{ imageRendering: 'pixelated' }}
+        ref={troopsCanvasRef}
+        className="w-full h-[180px] bg-[#0c1018] cursor-crosshair"
+        style={{ imageRendering: 'auto', display: 'block' }}
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
       />
+
+      {/* Morale label bar */}
+      <div className="flex items-center gap-4 px-2 py-1 bg-slate-900/80 border-x border-slate-700/60 text-[11px]">
+        <span className="font-bold text-slate-400 uppercase tracking-wider text-[10px]">Morale</span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-3 h-[3px] rounded-full bg-sky-300 inline-block" />
+          <span className="text-sky-200">Your Morale</span>
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-3 h-[3px] rounded-full bg-amber-400 inline-block" />
+          <span className="text-amber-200">Enemy Morale</span>
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-3 h-[2px] border-t border-dashed border-amber-500/60 inline-block" />
+          <span className="text-amber-400/60">Break threshold</span>
+        </span>
+      </div>
+
+      {/* Morale canvas */}
+      <canvas
+        ref={moraleCanvasRef}
+        className="w-full h-[100px] bg-[#0c1018] rounded-b-lg cursor-crosshair"
+        style={{ imageRendering: 'auto', display: 'block' }}
+        onMouseMove={handleMouseMove}
+        onMouseLeave={handleMouseLeave}
+      />
+
+      {/* Tooltip */}
       {tooltip && tooltip.visible && (
         <div
-          className="absolute pointer-events-none z-50 bg-slate-900 border border-slate-700 rounded-lg shadow-xl p-2 text-xs"
+          className="absolute pointer-events-none z-50 bg-slate-900/95 border border-slate-600/80 rounded-lg shadow-2xl backdrop-blur-sm"
           style={{
-            left: `${tooltip.x + 10}px`,
-            top: `${tooltip.y - 10}px`,
-            transform: 'translateY(-100%)'
+            left: `${tooltip.x}px`,
+            top: `${tooltip.y - 8}px`,
+            transform: 'translateY(-100%)',
+            minWidth: 170
           }}
         >
-          <div className="font-semibold text-slate-300 mb-1">Tick {tooltip.tick}</div>
-          {tooltip.data.map((item, idx) => (
-            <div key={idx} className="flex items-center gap-2 mb-1">
-              <div className="w-3 h-3 rounded" style={{ backgroundColor: item.color }}></div>
-              <span className="text-slate-400">{item.label}:</span>
-              <span className="text-white font-semibold">{item.value.toFixed(1)}</span>
-            </div>
-          ))}
+          <div className="px-2.5 py-1.5 border-b border-slate-700/60 flex items-center justify-between">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Tick {tooltip.tick}</span>
+            <span className="text-[10px] font-semibold" style={{ color: phaseColor(tooltip.phase).text }}>
+              {tooltip.phase.charAt(0).toUpperCase() + tooltip.phase.slice(1)}
+            </span>
+          </div>
+          <div className="px-2.5 py-1.5 space-y-1">
+            {tooltip.data.map((item, idx) => (
+              <div key={idx} className="flex items-center justify-between gap-3 text-[11px]">
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-sm" style={{ backgroundColor: item.color }} />
+                  <span className="text-slate-400">{item.label}</span>
+                </span>
+                <span className="text-white font-bold tabular-nums">{item.value}</span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>

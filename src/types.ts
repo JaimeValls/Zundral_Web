@@ -331,7 +331,7 @@ export type SiegeBattleResult = {
   finalAttackers: number;
   finalDefenders: number;
   siegeTimeline: SiegeRound[];
-  innerTimeline: InnerBattleStep[];
+  innerTimeline: BattleResult['timeline'];
   initialFortHP: number;
   initialAttackers: number;
   initialGarrison: { warriors: number; archers: number };
@@ -376,8 +376,17 @@ export type FieldBattleResult = {
   // All participating armies (multi-army battles)
   playerArmies?: FieldBattlePlayerArmy[];
   enemyArmies?: FieldBattleEnemyArmy[];
-  timeline: InnerBattleStep[];
+  timeline: BattleResult['timeline'];
   battleTakeaway: string;
+  // Flanking info (if armies converged from multiple directions)
+  flanking?: {
+    playerFlanking: number;  // how many extra directions player attacked from
+    enemyFlanking: number;
+  };
+  stance?: {
+    playerDefending?: boolean;
+    enemyDefending?: boolean;
+  };
 };
 
 export type Expedition = {
@@ -429,7 +438,7 @@ export interface MapData {
 }
 
 // Turn-based order system
-export type ArmyOrderType = 'hold' | 'move';
+export type ArmyOrderType = 'hold' | 'move' | 'defend';
 
 export interface ArmyOrder {
   bannerId: number;

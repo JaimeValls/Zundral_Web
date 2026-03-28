@@ -28,9 +28,10 @@ interface Props {
   onExecuteTurn?: () => void;
   onClaimExpeditionReward?: (missionId: number) => void;
   onRequestReinforcement?: (bannerId: number) => void;
+  onCancelReinforcement?: (bannerId: number) => void;
 }
 
-export const ExpeditionMap: React.FC<Props> = ({ expedition, banners, missions, onClose, onDeployArmy, onSetArmyOrder, onClearArmyOrder, onExecuteTurn, onClaimExpeditionReward, onRequestReinforcement }) => {
+export const ExpeditionMap: React.FC<Props> = ({ expedition, banners, missions, onClose, onDeployArmy, onSetArmyOrder, onClearArmyOrder, onExecuteTurn, onClaimExpeditionReward, onRequestReinforcement, onCancelReinforcement }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const mapLoadState = useMapData();
@@ -79,6 +80,8 @@ export const ExpeditionMap: React.FC<Props> = ({ expedition, banners, missions, 
       onClearArmyOrder={onClearArmyOrder}
       onExecuteTurn={onExecuteTurn}
       onClaimExpeditionReward={onClaimExpeditionReward}
+      onRequestReinforcement={onRequestReinforcement}
+      onCancelReinforcement={onCancelReinforcement}
       canvasRef={canvasRef}
       containerRef={containerRef}
     />
@@ -100,6 +103,8 @@ interface MapViewProps {
   onClearArmyOrder?: (bannerId: number) => void;
   onExecuteTurn?: () => void;
   onClaimExpeditionReward?: (missionId: number) => void;
+  onRequestReinforcement?: (bannerId: number) => void;
+  onCancelReinforcement?: (bannerId: number) => void;
   canvasRef: React.RefObject<HTMLCanvasElement | null>;
   containerRef: React.RefObject<HTMLDivElement | null>;
 }
@@ -115,6 +120,8 @@ const MapView: React.FC<MapViewProps> = ({
   onClearArmyOrder,
   onExecuteTurn,
   onClaimExpeditionReward,
+  onRequestReinforcement,
+  onCancelReinforcement,
   canvasRef,
   containerRef,
 }) => {
@@ -126,6 +133,7 @@ const MapView: React.FC<MapViewProps> = ({
   const [orderingBannerId, setOrderingBannerId] = useState<number | null>(null);
   const [orderMode, setOrderMode] = useState<'idle' | 'selectingMoveTarget'>('idle');
   const [rewardPopupMissionId, setRewardPopupMissionId] = useState<number | null>(null);
+  const [showCancelReinforce, setShowCancelReinforce] = useState(false);
   type BattleEvent = { type: 'field'; battleId: string } | { type: 'siege'; siegeData: any };
   const [battlePopupQueue, setBattlePopupQueue] = useState<BattleEvent[]>([]);
   const prevBattleCountRef = useRef((expedition.mapState?.fieldBattleResults || []).length);
@@ -172,9 +180,11 @@ const MapView: React.FC<MapViewProps> = ({
     if (armyBid !== undefined) {
       setOrderingBannerId(armyBid);
       setOrderMode('idle');
+      setShowCancelReinforce(false);
     } else {
       setOrderingBannerId(null);
       setOrderMode('idle');
+      setShowCancelReinforce(false);
     }
   }, [onDeployArmy, onSetArmyOrder]);
 
@@ -838,7 +848,7 @@ const MapView: React.FC<MapViewProps> = ({
               <div className="text-xs text-slate-500 mb-2">{troops} troops</div>
 
               {orderMode === 'selectingMoveTarget' ? (
-                <div>
+                <div className="space-y-1.5">
                   <div className="text-sm text-blue-300 mb-2">
                     Select destination province
                   </div>
@@ -851,6 +861,61 @@ const MapView: React.FC<MapViewProps> = ({
                   >
                     Cancel
                   </button>
+                  {/* Reinforce button — visible even during move selection */}
+                  {isDamaged && (
+                    <>
+                      <button
+                        onClick={() => {
+                          if (isTraining) { setShowCancelReinforce(v => !v); }
+                          else { onRequestReinforcement?.(orderingBannerId); }
+                        }}
+                        title={
+                          isTraining && isPaused ? 'Reinforcement paused'
+                          : isTraining ? `Reinforcing: ${banner.recruited ?? 0}/${banner.reqPop ?? missingTroops} — click to cancel`
+                          : `Reinforce ${missingTroops} missing troops`
+                        }
+                        className={`w-full px-3 py-1.5 rounded text-xs border transition-colors flex items-center gap-2 ${
+                          isTraining
+                            ? isPaused
+                              ? 'bg-slate-700/50 text-slate-400 border-slate-600/50 hover:bg-slate-600/50'
+                              : 'bg-amber-900/40 text-amber-300 border-amber-600/50 hover:bg-amber-800/50'
+                            : 'bg-emerald-800/60 hover:bg-emerald-700/80 text-emerald-200 border-emerald-500/50'
+                        }`}
+                      >
+                        {isTraining && isPaused ? '⏸' : '🔄'}{' '}
+                        {isTraining && isPaused
+                          ? 'Paused'
+                          : isTraining
+                            ? `Reinforcing... ${banner.recruited ?? 0}/${banner.reqPop ?? missingTroops}`
+                            : `Reinforce (${missingTroops} missing)`}
+                        {isTraining && !isPaused && (
+                          <span className="ml-auto w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                        )}
+                      </button>
+                      {showCancelReinforce && isTraining && (
+                        <div className="bg-slate-800 border border-amber-600/50 rounded p-2 text-xs space-y-2">
+                          <p className="text-amber-300">⚠ Cancel reinforcement? Progress will be lost.</p>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => setShowCancelReinforce(false)}
+                              className="flex-1 px-2 py-1 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded border border-slate-500/50"
+                            >
+                              Keep Going
+                            </button>
+                            <button
+                              onClick={() => {
+                                onCancelReinforcement?.(orderingBannerId);
+                                setShowCancelReinforce(false);
+                              }}
+                              className="flex-1 px-2 py-1 bg-red-900/60 hover:bg-red-800/80 text-red-200 rounded border border-red-600/50"
+                            >
+                              Cancel Reinforcement
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
               ) : (
                 <div className="space-y-1.5">
@@ -869,49 +934,107 @@ const MapView: React.FC<MapViewProps> = ({
                     {orderType === 'hold' && <span className="ml-auto text-emerald-400 text-[10px]">ACTIVE</span>}
                   </button>
                   <button
-                    onClick={() => setOrderMode('selectingMoveTarget')}
+                    onClick={() => {
+                      onSetArmyOrder?.(orderingBannerId, {
+                        bannerId: orderingBannerId,
+                        type: 'defend',
+                      });
+                      setOrderMode('idle');
+                    }}
                     className={`w-full px-3 py-1.5 rounded text-xs border transition-colors flex items-center gap-2 ${
-                      orderType === 'move'
-                        ? 'bg-blue-800/80 text-blue-200 border-blue-500/50'
+                      orderType === 'defend'
+                        ? 'bg-amber-800/80 text-amber-200 border-amber-500/50'
                         : 'bg-slate-700 hover:bg-slate-600 text-slate-300 border-slate-500/50'
                     }`}
                   >
-                    ➡️ Move
-                    {orderType === 'move' && <span className="ml-auto text-blue-400 text-[10px]">ACTIVE</span>}
+                    🛡 Defend (Last Stand)
+                    {orderType === 'defend' && <span className="ml-auto text-amber-400 text-[10px]">ACTIVE</span>}
                   </button>
-                  {orderType === 'move' && targetProvId && (
+                  {orderType === 'defend' && (
+                    <div className="text-[10px] text-amber-400/80 bg-amber-900/20 rounded px-2 py-0.5 border border-amber-700/20">
+                      Army will fight to the death — no retreat
+                    </div>
+                  )}
+                  <button
+                    onClick={() => { if (!isTraining) setOrderMode('selectingMoveTarget'); }}
+                    disabled={isTraining}
+                    title={isTraining ? 'Cannot move while reinforcing' : undefined}
+                    className={`w-full px-3 py-1.5 rounded text-xs border transition-colors flex items-center gap-2 ${
+                      isTraining
+                        ? 'bg-slate-700/50 text-slate-500 border-slate-600/50 cursor-not-allowed'
+                        : orderType === 'move'
+                          ? 'bg-blue-800/80 text-blue-200 border-blue-500/50'
+                          : 'bg-slate-700 hover:bg-slate-600 text-slate-300 border-slate-500/50'
+                    }`}
+                  >
+                    ➡️ Move
+                    {isTraining && <span className="ml-auto text-amber-400 text-[10px]">🔒</span>}
+                    {!isTraining && orderType === 'move' && <span className="ml-auto text-blue-400 text-[10px]">ACTIVE</span>}
+                  </button>
+                  {isTraining && (
+                    <div className="text-[10px] text-amber-400/80 bg-amber-900/20 rounded px-2 py-0.5 border border-amber-700/20">
+                      ⚠ Cannot move while reinforcing
+                    </div>
+                  )}
+                  {orderType === 'move' && targetProvId && !isTraining && (
                     <div className="text-xs text-blue-300 bg-blue-900/30 rounded px-2 py-1 border border-blue-700/30 mt-1">
                       → {targetProvId.replace('prov_', 'Province ')}
                     </div>
                   )}
-                  {/* Recruit button — only shown when army is damaged */}
+                  {/* Reinforce button — only shown when army is damaged */}
                   {isDamaged && (
-                    <button
-                      onClick={() => { if (!isTraining) onRequestReinforcement?.(orderingBannerId); }}
-                      disabled={isTraining}
-                      title={
-                        isTraining && isPaused ? 'Recruitment paused'
-                        : isTraining ? `Recruiting: ${banner.recruited ?? 0}/${banner.reqPop ?? missingTroops}`
-                        : `Recruit ${missingTroops} missing troops`
-                      }
-                      className={`w-full px-3 py-1.5 rounded text-xs border transition-colors flex items-center gap-2 ${
-                        isTraining
-                          ? isPaused
-                            ? 'bg-slate-700/50 text-slate-400 border-slate-600/50 cursor-not-allowed'
-                            : 'bg-amber-900/40 text-amber-300 border-amber-600/50 cursor-not-allowed'
-                          : 'bg-emerald-800/60 hover:bg-emerald-700/80 text-emerald-200 border-emerald-500/50'
-                      }`}
-                    >
-                      {isTraining && isPaused ? '⏸' : isTraining ? '🔄' : '🔄'}{' '}
-                      {isTraining && isPaused
-                        ? 'Paused'
-                        : isTraining
-                          ? `Recruiting... ${banner.recruited ?? 0}/${banner.reqPop ?? missingTroops}`
-                          : `Recruit (${missingTroops} missing)`}
-                      {isTraining && !isPaused && (
-                        <span className="ml-auto w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                    <>
+                      <button
+                        onClick={() => {
+                          if (isTraining) { setShowCancelReinforce(v => !v); }
+                          else { onRequestReinforcement?.(orderingBannerId); }
+                        }}
+                        title={
+                          isTraining && isPaused ? 'Reinforcement paused'
+                          : isTraining ? `Reinforcing: ${banner.recruited ?? 0}/${banner.reqPop ?? missingTroops} — click to cancel`
+                          : `Reinforce ${missingTroops} missing troops`
+                        }
+                        className={`w-full px-3 py-1.5 rounded text-xs border transition-colors flex items-center gap-2 ${
+                          isTraining
+                            ? isPaused
+                              ? 'bg-slate-700/50 text-slate-400 border-slate-600/50 hover:bg-slate-600/50'
+                              : 'bg-amber-900/40 text-amber-300 border-amber-600/50 hover:bg-amber-800/50'
+                            : 'bg-emerald-800/60 hover:bg-emerald-700/80 text-emerald-200 border-emerald-500/50'
+                        }`}
+                      >
+                        {isTraining && isPaused ? '⏸' : '🔄'}{' '}
+                        {isTraining && isPaused
+                          ? 'Paused'
+                          : isTraining
+                            ? `Reinforcing... ${banner.recruited ?? 0}/${banner.reqPop ?? missingTroops}`
+                            : `Reinforce (${missingTroops} missing)`}
+                        {isTraining && !isPaused && (
+                          <span className="ml-auto w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                        )}
+                      </button>
+                      {showCancelReinforce && isTraining && (
+                        <div className="bg-slate-800 border border-amber-600/50 rounded p-2 text-xs space-y-2">
+                          <p className="text-amber-300">⚠ Cancel reinforcement? Progress will be lost.</p>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => setShowCancelReinforce(false)}
+                              className="flex-1 px-2 py-1 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded border border-slate-500/50"
+                            >
+                              Keep Going
+                            </button>
+                            <button
+                              onClick={() => {
+                                onCancelReinforcement?.(orderingBannerId);
+                                setShowCancelReinforce(false);
+                              }}
+                              className="flex-1 px-2 py-1 bg-red-900/60 hover:bg-red-800/80 text-red-200 rounded border border-red-600/50"
+                            >
+                              Cancel Reinforcement
+                            </button>
+                          </div>
+                        </div>
                       )}
-                    </button>
+                    </>
                   )}
                 </div>
               )}
@@ -999,14 +1122,14 @@ const MapView: React.FC<MapViewProps> = ({
                       const meleeCount = b.squads.filter(sq => ['warrior', 'militia', 'pikemen', 'longsword', 'heavy_cavalry', 'light_cavalry'].includes(sq.type)).reduce((s, sq) => s + sq.currentSize, 0);
                       const rangedCount = b.squads.filter(sq => ['archer', 'skirmisher', 'crossbowman'].includes(sq.type)).reduce((s, sq) => s + sq.currentSize, 0);
 
-                      // Recruitment status
+                      // Reinforcement status
                       const isTraining = b.status === 'training';
                       const isPaused = !!b.trainingPaused;
                       const needsReinforcement = isDamaged && !isTraining;
                       const recruitIcon = isTraining && isPaused ? '⏸' : isTraining ? '🔄' : needsReinforcement ? '⚠' : null;
                       const recruitColor = isTraining && isPaused ? 'text-slate-400' : isTraining ? 'text-amber-400' : needsReinforcement ? 'text-red-400' : '';
-                      const recruitTooltip = isTraining && isPaused ? 'Recruitment paused'
-                        : isTraining ? `Recruiting: ${b.recruited}/${b.reqPop}`
+                      const recruitTooltip = isTraining && isPaused ? 'Reinforcement paused'
+                        : isTraining ? `Reinforcing: ${b.recruited}/${b.reqPop}`
                         : needsReinforcement ? `Needs reinforcement (${maxTroops - totalTroops} missing)`
                         : '';
 
@@ -1091,8 +1214,8 @@ const MapView: React.FC<MapViewProps> = ({
                       const gPaused = !!b.trainingPaused;
                       const gIcon = gTraining && gPaused ? '⏸' : gTraining ? '🔄' : gDamaged ? '⚠' : null;
                       const gIconColor = gTraining && gPaused ? 'text-slate-400' : gTraining ? 'text-amber-400' : gDamaged ? 'text-red-400' : '';
-                      const gTip = gTraining && gPaused ? 'Recruitment paused'
-                        : gTraining ? `Recruiting: ${b.recruited}/${b.reqPop}`
+                      const gTip = gTraining && gPaused ? 'Reinforcement paused'
+                        : gTraining ? `Reinforcing: ${b.recruited}/${b.reqPop}`
                         : gDamaged ? `Needs reinforcement (${gMax - troops} missing)` : '';
                       return (
                         <div key={b.id} className="flex items-center justify-between gap-1.5 rounded px-2 py-1 mb-0.5 bg-slate-800/30 border border-slate-700/20">
@@ -1129,9 +1252,7 @@ const MapView: React.FC<MapViewProps> = ({
         {expeditionLog.length > 0 && (
           <div
             className="absolute left-3 bottom-10 bg-slate-900/90 border border-slate-600/40 rounded-lg px-2 py-1.5 z-30 max-w-[260px] backdrop-blur-sm"
-            style={{ pointerEvents: 'auto' }}
-            onClick={e => e.stopPropagation()}
-            onMouseDown={e => e.stopPropagation()}
+            style={{ pointerEvents: 'none' }}
           >
             {expeditionLog.slice(0, 3).map(entry => {
               const icon: Record<string, string> = { hostile_detected: '👁️', battle_resolved: '⚔️', army_destroyed: '💀', mission_completed: '⭐', mission_failed: '❌', fortress_attacked: '🏰', fortress_damaged: '🏚️' };
@@ -1142,7 +1263,7 @@ const MapView: React.FC<MapViewProps> = ({
                   <span>{icon[entry.type] || '•'}</span>
                   <span className={`truncate ${color[entry.type] || 'text-slate-400'}`}>{entry.text}</span>
                   {entry.provinceId && (
-                    <button onClick={() => focusProvince(entry.provinceId!)} className="text-blue-400 hover:text-blue-300 shrink-0" title="Go to province">📍</button>
+                    <button onClick={(e) => { e.stopPropagation(); focusProvince(entry.provinceId!); }} style={{ pointerEvents: 'auto' }} className="text-blue-400 hover:text-blue-300 shrink-0" title="Go to province">📍</button>
                   )}
                 </div>
               );
@@ -1151,7 +1272,7 @@ const MapView: React.FC<MapViewProps> = ({
         )}
 
         {/* Controls hint */}
-        <div className="absolute bottom-3 left-3 text-xs text-slate-500 bg-slate-900/80 px-2 py-1 rounded">
+        <div className="absolute bottom-3 left-3 text-xs text-slate-500 bg-slate-900/80 px-2 py-1 rounded pointer-events-none">
           Scroll to zoom · Drag to pan · Click army to give orders
         </div>
 

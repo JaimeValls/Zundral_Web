@@ -35,6 +35,12 @@ export type BattleParams = {
   rng_variance: number;
 };
 
+/** Flanking context — how many distinct directions each side attacks from. */
+export type FlankingContext = {
+  playerFlanking: number;  // 0 = no flank, 1 = from 2 dirs, 2 = from 3 dirs
+  enemyFlanking: number;
+};
+
 // ----------------------------------------------------------------------------
 // Default data — used for state initialisation in the component
 // ----------------------------------------------------------------------------
@@ -249,14 +255,21 @@ export function getWarriorArcherTotals(div: Division): { warrior: number; archer
   };
 }
 
+export type BattleStance = {
+  playerDefending?: boolean;  // player side fights to the death (no retreat)
+  enemyDefending?: boolean;   // enemy side fights to the death
+};
+
 /**
- * Runs a full skirmish → melee → pursuit battle simulation.
+ * Runs a full skirmish → melee → pursuit/last_stand battle simulation.
  *
  * @param playerDiv     Player's starting division (not mutated; deep-copied internally).
  * @param enemyDiv      Enemy's starting division (not mutated; deep-copied internally).
  * @param stats         Per-unit combat stats (from `getDefaultUnitStats()` or saved custom values).
  * @param params        Battle tuning parameters (from `getDefaultBattleParams()` or saved custom values).
  * @param playerCommander  Optional commander whose bonuses apply to the player side.
+ * @param flanking      Flanking context (morale penalties for being flanked).
+ * @param stance        Defend stance: defending side never routs, fights to last_stand.
  */
 export function simulateBattle(
   playerDiv: Division,
@@ -264,6 +277,8 @@ export function simulateBattle(
   stats: UnitStats,
   params: BattleParams,
   playerCommander?: Commander | null,
+  flanking?: FlankingContext,
+  stance?: BattleStance,
 ): BattleResult {
   // Deep copy divisions so originals are not mutated
   const A: Division = {};
@@ -280,6 +295,18 @@ export function simulateBattle(
   let mA = morale(A, stats);
   let mB = morale(B, stats);
   const mA0 = mA, mB0 = mB;
+
+  // Flanking morale penalty: -20% starting morale per flanking level
+  // Break thresholds use ORIGINAL morale, so flanked side reaches break faster
+  if (flanking) {
+    if (flanking.enemyFlanking > 0) {
+      mA *= Math.max(0.4, 1 - 0.20 * flanking.enemyFlanking);
+    }
+    if (flanking.playerFlanking > 0) {
+      mB *= Math.max(0.4, 1 - 0.20 * flanking.playerFlanking);
+    }
+  }
+
   const tA = Math.max(0, (params.break_pct || 20) / 100 * mA0);
   const tB = Math.max(0, (params.break_pct || 20) / 100 * mB0);
   let brokeA = false, brokeB = false;
@@ -321,10 +348,29 @@ export function simulateBattle(
     step('skirmish');
   }
 
-  // Melee until one side breaks or is destroyed
+  // Melee until one side breaks or is destroyed (defend stance = no rout)
+  const playerDefends = stance?.playerDefending || false;
+  const enemyDefends = stance?.enemyDefending || false;
   let guard = 0;
-  while (total(A) > 0 && total(B) > 0 && mA > tA && mB > tB) {
-    step('melee');
+  while (total(A) > 0 && total(B) > 0) {
+    const aBroken = mA <= tA;
+    const bBroken = mB <= tB;
+
+    // Normal rout exit — unless the broken side is defending
+    if (aBroken && !playerDefends && !bBroken) break;
+    if (bBroken && !enemyDefends && !aBroken) break;
+    // Both broken: if neither is defending → draw exit; if one defends → they keep fighting
+    if (aBroken && bBroken) {
+      if (!playerDefends && !enemyDefends) break;
+      // One or both defending: continue until troops gone
+    }
+    // Neither broken yet → normal melee
+    if (!aBroken && !bBroken) {
+      step('melee');
+    } else {
+      // At least one side broken but defending → last stand
+      step('last_stand');
+    }
     if (++guard > 5000) break;
   }
 
@@ -337,8 +383,10 @@ export function simulateBattle(
   else if (mB <= tB || total(B) <= 0) winner = 'player';
   else winner = mA > mB ? 'player' : mB > mA ? 'enemy' : total(A) > total(B) ? 'player' : total(B) > total(A) ? 'enemy' : 'draw';
 
-  // Pursuit phase
-  if ((winner === 'player' || winner === 'enemy') && params.pursuit_ticks > 0) {
+  // Pursuit phase — only if winner exists AND winner is NOT defending (defenders don't chase)
+  const winnerDefends = (winner === 'player' && playerDefends) || (winner === 'enemy' && enemyDefends);
+  const loserDefends = (winner === 'player' && enemyDefends) || (winner === 'enemy' && playerDefends);
+  if ((winner === 'player' || winner === 'enemy') && params.pursuit_ticks > 0 && !winnerDefends && !loserDefends) {
     for (let i = 0; i < params.pursuit_ticks; i++) {
       const SA = phaseStats(A, stats, 'melee', playerCommander);
       const SB = phaseStats(B, stats, 'melee');

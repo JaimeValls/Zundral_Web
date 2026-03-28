@@ -2520,6 +2520,8 @@ export default function ResourceVillageUI() {
     provinceId: string;
     playerBannerIds: number[];   // ALL player armies arriving here
     enemyIds: number[];          // ALL enemy armies arriving here
+    playerOrigins: Record<number, string>;  // bannerId → origin provinceId (for flanking)
+    enemyOrigins: Record<number, string>;   // enemyId → origin provinceId (for flanking)
   };
 
   function computeEnemyDestinations(
@@ -2570,21 +2572,34 @@ export default function ResourceVillageUI() {
     enemyDests: Map<number, string>
   ): ProvinceConflict[] {
     // Build province → armies map from destinations (co-location)
-    const provinceMap = new Map<string, { players: Set<number>; enemies: Set<number> }>();
+    // Also track origin province for each army (for flanking detection)
+    const provinceMap = new Map<string, {
+      players: Set<number>;
+      enemies: Set<number>;
+      playerOrigins: Record<number, string>;
+      enemyOrigins: Record<number, string>;
+    }>();
+
+    const getEntry = (prov: string) => {
+      let e = provinceMap.get(prov);
+      if (!e) { e = { players: new Set(), enemies: new Set(), playerOrigins: {}, enemyOrigins: {} }; provinceMap.set(prov, e); }
+      return e;
+    };
 
     for (const [bidStr, dest] of Object.entries(playerDests)) {
-      const entry = provinceMap.get(dest) || { players: new Set(), enemies: new Set() };
-      entry.players.add(Number(bidStr));
-      provinceMap.set(dest, entry);
+      const bid = Number(bidStr);
+      const entry = getEntry(dest);
+      entry.players.add(bid);
+      entry.playerOrigins[bid] = playerPositions[bid] || dest; // origin = current position
     }
 
     for (const enemy of enemies) {
       if (enemy.status !== 'marching') continue;
       const dest = enemyDests.get(enemy.id);
       if (!dest) continue;
-      const entry = provinceMap.get(dest) || { players: new Set(), enemies: new Set() };
+      const entry = getEntry(dest);
       entry.enemies.add(enemy.id);
-      provinceMap.set(dest, entry);
+      entry.enemyOrigins[enemy.id] = enemy.provinceId; // origin = current position
     }
 
     // Also check swap: player A→B while enemy B→A → battle at B
@@ -2598,10 +2613,11 @@ export default function ResourceVillageUI() {
         const eDest = enemyDests.get(enemy.id);
         // Player going to enemy's position, enemy going to player's position
         if (pDest === enemy.provinceId && eDest === pCurrent) {
-          const entry = provinceMap.get(pDest) || { players: new Set(), enemies: new Set() };
+          const entry = getEntry(pDest);
           entry.players.add(bid);
+          entry.playerOrigins[bid] = pCurrent;
           entry.enemies.add(enemy.id);
-          provinceMap.set(pDest, entry);
+          entry.enemyOrigins[enemy.id] = enemy.provinceId;
         }
       }
     }
@@ -2613,6 +2629,8 @@ export default function ResourceVillageUI() {
         provinceId,
         playerBannerIds: Array.from(v.players),
         enemyIds: Array.from(v.enemies),
+        playerOrigins: v.playerOrigins,
+        enemyOrigins: v.enemyOrigins,
       }));
   }
 
@@ -2661,35 +2679,27 @@ export default function ResourceVillageUI() {
     const playerTotal = playerWarriors + playerArchers;
     const enemyTotal = enemyWarriors + enemyArchers;
 
-    // Battle stats
-    const battleStats = {
-      warrior: {
-        skirmish: stats.warrior?.skirmish_attack || 0,
-        melee: stats.warrior?.melee_attack || 15,
-      },
-      archer: {
-        skirmish: stats.archer?.skirmish_attack || 15,
-        melee: stats.archer?.melee_attack || 0,
-      },
-    };
+    // Build Division objects for the full morale-aware battle simulator
+    const playerDiv: Record<string, number> = {};
+    for (const sq of banner.squads || []) {
+      playerDiv[sq.type] = (playerDiv[sq.type] || 0) + sq.currentSize;
+    }
+    const enemyDiv: Record<string, number> = {};
+    for (const sq of enemy.squads || []) {
+      enemyDiv[sq.type] = (enemyDiv[sq.type] || 0) + (sq.count * 10);
+    }
 
-    // Run the battle — player is "defender" (warriors/archers split), enemy is "attacker"
-    const timeline = runInnerBattle(playerWarriors, playerArchers, enemyTotal, battleStats, baseCas);
-
-    // Read final state
-    const lastStep = timeline.length > 0 ? timeline[timeline.length - 1] : null;
-    const finalPlayerTroops = lastStep ? lastStep.defenders : playerTotal;
-    const finalEnemyTroops = lastStep ? lastStep.attackers : enemyTotal;
+    // Run full battle with morale tracking and pursuit phase
+    const battleResult = simulateBattle(playerDiv as any, enemyDiv as any, stats, p);
+    const timeline = battleResult.timeline;
+    const finalPlayerTroops = battleResult.playerFinal.total;
+    const finalEnemyTroops = battleResult.enemyFinal.total;
 
     // Determine outcome
-    let outcome: FieldBattleResult['outcome'];
-    if (finalPlayerTroops > 0 && finalEnemyTroops <= 0) {
-      outcome = 'player_wins';
-    } else if (finalPlayerTroops <= 0 && finalEnemyTroops > 0) {
-      outcome = 'enemy_wins';
-    } else {
-      outcome = 'draw';
-    }
+    const outcome: FieldBattleResult['outcome'] =
+      battleResult.winner === 'player' ? 'player_wins'
+      : battleResult.winner === 'enemy' ? 'enemy_wins'
+      : 'draw';
 
     // Distribute casualties proportionally across squads of the same role
     function distributeCasualties(
@@ -2763,7 +2773,10 @@ export default function ResourceVillageUI() {
     enemyForces: EnemyArmy[],
     provinceId: string,
     turnNumber: number,
-    battleIndex: number
+    battleIndex: number,
+    playerOrigins?: Record<number, string>,
+    enemyOrigins?: Record<number, string>,
+    pendingOrders?: Record<number, import('./types').ArmyOrder>,
   ): FieldBattleResult {
     const stats = unitStats;
     const p = battleParams;
@@ -2800,9 +2813,12 @@ export default function ResourceVillageUI() {
       let eWarr = 0, eArch = 0;
       const eComp: BattleSquadEntry[] = [];
       for (const sq of enemy.squads || []) {
-        const troopCount = sq.count * 10;
-        const entry = buildSquadEntry(sq.type, troopCount);
-        eComp.push(entry);
+        const SQUAD_SIZE = 10;
+        // Expand each squad type into individual squad-of-10 entries
+        for (let i = 0; i < sq.count; i++) {
+          eComp.push(buildSquadEntry(sq.type, SQUAD_SIZE));
+        }
+        const troopCount = sq.count * SQUAD_SIZE;
         if ((unitCategory[sq.type as UnitType] || 'infantry') === 'ranged_infantry') {
           eArch += troopCount;
         } else {
@@ -2817,22 +2833,45 @@ export default function ResourceVillageUI() {
     const totalPlayer = totalPlayerWarriors + totalPlayerArchers;
     const totalEnemy = totalEnemyWarriors + totalEnemyArchers;
 
-    const battleStats = {
-      warrior: { skirmish: stats.warrior?.skirmish_attack || 0, melee: stats.warrior?.melee_attack || 15 },
-      archer: { skirmish: stats.archer?.skirmish_attack || 15, melee: stats.archer?.melee_attack || 0 },
+    // Build Division objects for the full morale-aware battle simulator
+    const playerDiv: Record<string, number> = {};
+    for (const pb of perBanner) {
+      for (const sq of pb.banner.squads || []) {
+        playerDiv[sq.type] = (playerDiv[sq.type] || 0) + sq.currentSize;
+      }
+    }
+    const enemyDiv: Record<string, number> = {};
+    for (const pe of perEnemy) {
+      for (const entry of pe.comp) {
+        enemyDiv[entry.type] = (enemyDiv[entry.type] || 0) + entry.initial;
+      }
+    }
+
+    // Compute flanking: count distinct origin provinces for each side
+    const playerDirs = new Set(playerBanners.map(b => playerOrigins?.[b.id] || provinceId));
+    const enemyDirs = new Set(enemyForces.map(e => enemyOrigins?.[e.id] || provinceId));
+    const flankingCtx: import('./battleSimulator').FlankingContext = {
+      playerFlanking: Math.max(0, playerDirs.size - 1),
+      enemyFlanking: Math.max(0, enemyDirs.size - 1),
     };
+    const hasFlank = flankingCtx.playerFlanking > 0 || flankingCtx.enemyFlanking > 0;
 
-    // Run combined battle
-    const timeline = runInnerBattle(totalPlayerWarriors, totalPlayerArchers, totalEnemy, battleStats, baseCas);
+    // Detect defend stance from pending orders
+    const playerDefending = playerBanners.some(b => pendingOrders?.[b.id]?.type === 'defend');
+    const stanceCtx: import('./battleSimulator').BattleStance | undefined =
+      playerDefending ? { playerDefending: true } : undefined;
 
-    const lastStep = timeline.length > 0 ? timeline[timeline.length - 1] : null;
-    const finalPlayerTroops = lastStep ? lastStep.defenders : totalPlayer;
-    const finalEnemyTroops = lastStep ? lastStep.attackers : totalEnemy;
+    // Run full battle with morale tracking and pursuit phase
+    const battleResult = simulateBattle(playerDiv as any, enemyDiv as any, stats, p, undefined, hasFlank ? flankingCtx : undefined, stanceCtx);
+    const timeline = battleResult.timeline;
 
-    let outcome: FieldBattleResult['outcome'];
-    if (finalPlayerTroops > 0 && finalEnemyTroops <= 0) outcome = 'player_wins';
-    else if (finalPlayerTroops <= 0 && finalEnemyTroops > 0) outcome = 'enemy_wins';
-    else outcome = 'draw';
+    const finalPlayerTroops = battleResult.playerFinal.total;
+    const finalEnemyTroops = battleResult.enemyFinal.total;
+
+    const outcome: FieldBattleResult['outcome'] =
+      battleResult.winner === 'player' ? 'player_wins'
+      : battleResult.winner === 'enemy' ? 'enemy_wins'
+      : 'draw';
 
     // Distribute casualties proportionally within a composition
     function distributeCasualties(comp: BattleSquadEntry[], totalLost: number, warriors: number, archers: number, total: number) {
@@ -2901,6 +2940,26 @@ export default function ResourceVillageUI() {
       battleTakeaway = `Both sides fought to a standstill at ${provinceId.replace('prov_', 'Province ')}.`;
     }
 
+    // Prepend defend stance narrative
+    if (playerDefending) {
+      if (outcome === 'player_wins') {
+        battleTakeaway = `Standing their ground in a desperate last stand, ${playerNames} held the line. ` + battleTakeaway;
+      } else if (outcome === 'enemy_wins') {
+        battleTakeaway = `${playerNames} fought to the last man in a heroic last stand. ` + battleTakeaway;
+      } else {
+        battleTakeaway = `In a brutal last stand, ${playerNames} refused to retreat. ` + battleTakeaway;
+      }
+    }
+
+    // Prepend flanking narrative
+    if (hasFlank) {
+      if (flankingCtx.playerFlanking > 0) {
+        battleTakeaway = `Caught in a pincer attack, ${enemyNames} was flanked from ${flankingCtx.playerFlanking + 1} directions. ` + battleTakeaway;
+      } else if (flankingCtx.enemyFlanking > 0) {
+        battleTakeaway = `Your forces were flanked from ${flankingCtx.enemyFlanking + 1} directions. ` + battleTakeaway;
+      }
+    }
+
     return {
       id: `fb_${turnNumber}_${battleIndex}`,
       turn: turnNumber,
@@ -2912,6 +2971,8 @@ export default function ResourceVillageUI() {
       enemyArmies,
       timeline,
       battleTakeaway,
+      flanking: hasFlank ? { playerFlanking: flankingCtx.playerFlanking, enemyFlanking: flankingCtx.enemyFlanking } : undefined,
+      stance: stanceCtx ? { playerDefending: stanceCtx.playerDefending, enemyDefending: stanceCtx.enemyDefending } : undefined,
     };
   }
 
@@ -3076,10 +3137,31 @@ export default function ResourceVillageUI() {
 
     // Build composition arrays for the report (uses shared buildSquadEntry helper)
 
-    const defenderComp: BattleSquadEntry[] = actualGarrison.squads.map(s => buildSquadEntry(s.type, s.count));
-    const attackerComp: BattleSquadEntry[] = attackerSquads
-      ? attackerSquads.map(s => buildSquadEntry(s.type, s.count))
-      : [buildSquadEntry('warrior', attackers)];
+    // Expand defenders into squads of 10 (same as attackers)
+    const defenderComp: BattleSquadEntry[] = [];
+    {
+      const SQUAD_SIZE = 10;
+      for (const s of actualGarrison.squads) {
+        const numSquads = Math.ceil(s.count / SQUAD_SIZE);
+        for (let i = 0; i < numSquads; i++) {
+          const size = Math.min(SQUAD_SIZE, s.count - i * SQUAD_SIZE);
+          defenderComp.push(buildSquadEntry(s.type, size));
+        }
+      }
+    }
+    const attackerComp: BattleSquadEntry[] = [];
+    if (attackerSquads) {
+      const SQUAD_SIZE = 10;
+      for (const s of attackerSquads) {
+        const numSquads = Math.ceil(s.count / SQUAD_SIZE);
+        for (let i = 0; i < numSquads; i++) {
+          const size = Math.min(SQUAD_SIZE, s.count - i * SQUAD_SIZE);
+          attackerComp.push(buildSquadEntry(s.type, size));
+        }
+      }
+    } else {
+      attackerComp.push(buildSquadEntry('warrior', attackers));
+    }
 
     // Calculate active wall archers (limited by Watch Post capacity) for Phase 1 only
     const wallArchers = calculateActiveWallArchers(expeditionId);
@@ -3125,14 +3207,31 @@ export default function ResourceVillageUI() {
     // Inner battle phase (if walls fall)
     // IMPORTANT: Inner battle uses ONLY actual units from banners, NOT Watch Post capacity
     // Watch Post slots do NOT apply in inner battle - they only limit Phase 1 wall archers
-    let innerTimeline: InnerBattleStep[] = [];
+    let innerTimeline: BattleResult['timeline'] = [];
     if (fortHP <= 0 && remainingAttackers > 0 && (garrisonWarriors + garrisonArchers) > 0) {
-      const battleStats = {
-        warrior: { skirmish: wSkirmish, melee: wMelee },
-        archer: { skirmish: aSkirmish, melee: aSkirmish * 0.3 }
-      };
       dbg.log('[SIEGE] Starting inner battle with defenders:', { garrisonWarriors, garrisonArchers });
-      innerTimeline = runInnerBattle(garrisonWarriors, garrisonArchers, remainingAttackers, battleStats, baseCas);
+      // Build Division objects for the full morale-aware battle simulator
+      const defDiv: Record<string, number> = {};
+      for (const bid of garrisonBannerIds) {
+        const banner = banners.find(b => b.id === bid);
+        for (const sq of banner?.squads || []) {
+          defDiv[sq.type] = (defDiv[sq.type] || 0) + sq.currentSize;
+        }
+      }
+      // Attacker division from attacker squads
+      const atkDiv: Record<string, number> = {};
+      for (const entry of attackerComp) {
+        atkDiv[entry.type] = (atkDiv[entry.type] || 0) + entry.initial;
+      }
+      // Scale attacker division to remaining attackers (after wall siege losses)
+      const atkTotal = Object.values(atkDiv).reduce((s, n) => s + n, 0);
+      if (atkTotal > 0) {
+        const scale = remainingAttackers / atkTotal;
+        for (const key in atkDiv) atkDiv[key] = Math.round(atkDiv[key] * scale);
+      }
+      // Fortress defenders always use defend stance — garrison never pursues retreating attackers
+      const innerResult = simulateBattle(defDiv as any, atkDiv as any, stats, p, undefined, undefined, { playerDefending: true });
+      innerTimeline = innerResult.timeline;
     } else if (fortHP <= 0 && remainingAttackers > 0) {
       dbg.log('[SIEGE] No inner battle - no defenders from banners');
     }
@@ -3168,9 +3267,13 @@ export default function ResourceVillageUI() {
     } else if (lastSiege.fortHP <= 0 && lastSiege.attackers > 0) {
       if (innerTimeline.length > 0) {
         const lastInner = innerTimeline[innerTimeline.length - 1];
-        finalAttackers = lastInner.attackers;
-        finalDefenders = lastInner.defenders;
-        finalGarrison = { warriors: lastInner.defWarriors, archers: lastInner.defArchers };
+        // In simulateBattle, A = defenders (garrison), B = attackers
+        finalDefenders = Math.round(lastInner.A_troops);
+        finalAttackers = Math.round(lastInner.B_troops);
+        // Approximate garrison split (proportional to initial ratio)
+        const totalGarr = garrisonWarriors + garrisonArchers;
+        const wRatio = totalGarr > 0 ? garrisonWarriors / totalGarr : 0.5;
+        finalGarrison = { warriors: Math.round(finalDefenders * wRatio), archers: Math.round(finalDefenders * (1 - wRatio)) };
         if (finalDefenders > 0 && finalAttackers <= 0) {
           outcome = 'fortress_holds_inner';
         } else if (finalAttackers > 0 && finalDefenders <= 0) {
@@ -3374,8 +3477,7 @@ export default function ResourceVillageUI() {
 
   // Create reinforcement training entry
   function requestReinforcement(bannerId: number, squadId?: number) {
-    console.log('[REINFORCE] called bannerId=', bannerId, 'squadId=', squadId, 'editingBannerId=', editingBannerId);
-    if (editingBannerId === bannerId) { console.log('[REINFORCE] blocked: editing'); return; }
+    console.log('[REINFORCE] called bannerId=', bannerId, 'squadId=', squadId);
 
     const banner = banners.find(b => b.id === bannerId);
     if (!banner) { console.log('[REINFORCE] blocked: banner not found'); return; }
@@ -3435,6 +3537,21 @@ export default function ResourceVillageUI() {
       // Regular banner: Use normal training system (status: 'training')
       if (banner.status === 'training') return;
 
+      // Deployed banners recruit via gold (like mercenaries) — don't overwrite 'deployed' status
+      if (banner.status === 'deployed') {
+        const damagedSquads = bannerWithSquads.squads.filter(s => s.currentSize < s.maxSize);
+        if (damagedSquads.length === 0) return;
+        const totalMissing = damagedSquads.reduce((sum, s) => sum + (s.maxSize - s.currentSize), 0);
+        setHireAndRefillModal({
+          bannerId,
+          hireCost: 0,
+          refillCost: totalMissing,
+          totalCost: totalMissing,
+          bannerName: banner.name
+        });
+        return;
+      }
+
       setBanners((bs) => bs.map(b => {
         if (b.id !== bannerId) return b;
 
@@ -3453,6 +3570,15 @@ export default function ResourceVillageUI() {
         };
       }));
     }
+  }
+
+  // Cancel an in-progress reinforcement — returns banner to deployed status
+  function cancelReinforcement(bannerId: number) {
+    console.log('[REINFORCE] cancel bannerId=', bannerId);
+    setBanners(bs => bs.map(b => {
+      if (b.id !== bannerId || b.status !== 'training') return b;
+      return { ...b, status: 'deployed', reinforcingSquadId: undefined, trainingPaused: undefined };
+    }));
   }
 
   // === Battle Simulation Functions ===
@@ -4380,9 +4506,9 @@ export default function ResourceVillageUI() {
                 const banner = banners.find(b => b.id === job.bannerId);
                 const isMercenary = banner?.type === 'mercenary';
 
-                // For mercenary banners, consume gold (1 per unit)
-                // For regular banners, consume population
-                if (isMercenary) {
+                // For mercenary banners or deployed regular banners, consume gold (1 per unit)
+                // For regular banners at village, consume population
+                if (isMercenary || banner?.status === 'deployed') {
                   // Consume gold if available
                   if (warehouse.gold >= 1 && job.soldiersTrained < job.soldiersNeeded) {
                     setWarehouse(w => ({ ...w, gold: Math.max(0, w.gold - 1) }));
@@ -7183,7 +7309,7 @@ Safe recruits (unassigned people): ${freePop}`;
                   dbg.log(`[FIELD] Battle at ${conflict.provinceId}: [${playerNames}] vs [${enemyNames}]`);
 
                   try {
-                    const result = runMergedBattle(playerBanners, enemyForces, conflict.provinceId, newTurnNumber, bi);
+                    const result = runMergedBattle(playerBanners, enemyForces, conflict.provinceId, newTurnNumber, bi, conflict.playerOrigins, conflict.enemyOrigins, exp.mapState.pendingOrders);
                     newFieldBattles.push(result);
                     battleProvs.push(conflict.provinceId);
 
@@ -7676,6 +7802,7 @@ Safe recruits (unassigned people): ${freePop}`;
             }}
             onShowResourceError={(msg) => setToastMessage(msg)}
             onRequestReinforcement={(bannerId) => requestReinforcement(bannerId)}
+            onCancelReinforcement={(bannerId) => cancelReinforcement(bannerId)}
             onRunBattle={(expeditionId) => {
               try {
                 const result = runSiegeBattle(expeditionId, 100);

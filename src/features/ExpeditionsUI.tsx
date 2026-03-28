@@ -7,7 +7,7 @@
 
 import React, { useState } from 'react';
 import type { Expedition, Banner, Mission, WarehouseState, SiegeBattleResult, BattleSquadEntry, UnitType, ArmyOrder, ExpeditionLogEntry } from '../types';
-import { SiegeGraphCanvas, InnerBattleGraphCanvas } from '../components/BattleChart';
+import { BattleChart, SiegeGraphCanvas } from '../components/BattleChart';
 import { unitCategory, unitDisplayNames } from '../constants';
 import { ExpeditionMap } from './map/ExpeditionMap';
 
@@ -46,6 +46,7 @@ export interface ExpeditionsUIProps {
   onRunBattle: (expeditionId: string) => { result: SiegeBattleResult; destroyedBanners: number[] } | null;
   onShowResourceError?: (msg: string) => void;
   onRequestReinforcement?: (bannerId: number) => void;
+  onCancelReinforcement?: (bannerId: number) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -74,6 +75,7 @@ export default function ExpeditionsUI({
   onRunBattle,
   onShowResourceError,
   onRequestReinforcement,
+  onCancelReinforcement,
 }: ExpeditionsUIProps) {
   const [battleLoading, setBattleLoading] = useState<{ expeditionId: string; progress: number } | null>(null);
   const [battleError, setBattleError] = useState<{ expeditionId: string; message: string } | null>(null);
@@ -235,7 +237,7 @@ export default function ExpeditionsUI({
                   )}
 
                   {/* Expedition Tab Navigation */}
-                  <div className="flex p-1 bg-slate-800/80 rounded-lg border border-slate-600">
+                  <div className="flex p-1 bg-slate-800/80 rounded-lg border border-slate-600 sticky top-0 z-10">
                     {(['map', 'army', 'building'] as const).map(tab => {
                       const labels = { map: '🗺️ Map', army: '⚔️ Army', building: '🏗️ Building' };
                       const disabled = exp.state === 'failed' && tab !== 'map';
@@ -271,6 +273,7 @@ export default function ExpeditionsUI({
                         onExecuteTurn={() => onExecuteTurn(exp.expeditionId)}
                         onClaimExpeditionReward={(missionId) => onClaimExpeditionReward(exp.expeditionId, missionId)}
                         onRequestReinforcement={onRequestReinforcement}
+                        onCancelReinforcement={onCancelReinforcement}
                       />
                     </div>
 
@@ -330,7 +333,11 @@ export default function ExpeditionsUI({
                       const isHold = battle.outcome === 'fortress_holds_walls' || battle.outcome === 'fortress_holds_inner';
                       return (
                         <details id={`battle-report-${exp.expeditionId}`} className="mt-4 pt-4 border-t border-slate-700">
-                          <summary className="p-3 cursor-pointer hover:bg-slate-700/30 rounded-lg bg-slate-800/50 border border-slate-700 list-none">
+                          <summary className={`p-3 cursor-pointer rounded-lg border list-none ${
+                            isHold
+                              ? 'bg-emerald-950/20 border-emerald-800/40 hover:bg-emerald-900/20'
+                              : 'bg-red-950/20 border-red-800/40 hover:bg-red-900/20'
+                          }`}>
                             {/* Battle header */}
                             <div className="flex items-center gap-3 mb-2">
                               <span className="text-lg">🏰</span>
@@ -344,76 +351,99 @@ export default function ExpeditionsUI({
                                 {isHold ? 'Held' : 'Fallen'}
                               </span>
                             </div>
-                            {/* Per-unit summary rows */}
+                            {/* Per-unit summary — squad cards */}
                             <div className="grid grid-cols-2 gap-2 text-[10px]">
                               <div className="bg-red-950/20 border border-red-900/30 rounded px-2 py-1.5">
-                                <div className="text-[9px] text-red-400 uppercase font-bold mb-1">Attackers — {battle.initialAttackers} → {battle.finalAttackers}</div>
-                                {(battle.attackerComposition || []).map((c, i) => {
-                                  const pct = c.initial > 0 ? c.lost / c.initial : 0;
-                                  const severity = c.final === 0 ? 'text-red-500 font-bold' : pct > 0.3 ? 'text-red-400' : pct > 0.1 ? 'text-amber-400' : 'text-emerald-400';
-                                  return (
-                                    <div key={i} className="flex justify-between items-center py-0.5">
-                                      <span className="text-slate-300">{c.role === 'ranged' ? '🏹' : '⚔️'} {c.displayName}</span>
-                                      <span className={severity}>
-                                        {Math.round(c.initial)} → {Math.round(c.final)}
-                                        {c.lost > 0 && <span className="text-red-400 ml-1">(-{Math.round(c.lost)})</span>}
-                                        {c.final === 0 && <span className="ml-1">💀</span>}
-                                      </span>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                              <div className="bg-blue-950/20 border border-blue-900/30 rounded px-2 py-1.5">
-                                <div className="text-[9px] text-blue-400 uppercase font-bold mb-1">Defenders — {totalDef} → {Math.round(battle.finalDefenders)}</div>
-                                {(battle.defenderComposition || []).map((c, i) => {
-                                  const pct = c.initial > 0 ? c.lost / c.initial : 0;
-                                  const severity = c.final === 0 ? 'text-red-500 font-bold' : pct > 0.3 ? 'text-red-400' : pct > 0.1 ? 'text-amber-400' : 'text-emerald-400';
-                                  return (
-                                    <div key={i} className="flex justify-between items-center py-0.5">
-                                      <span className="text-slate-300">{c.role === 'ranged' ? '🏹' : '⚔️'} {c.displayName}</span>
-                                      <span className={severity}>
-                                        {Math.round(c.initial)} → {Math.round(c.final)}
-                                        {c.lost > 0 && <span className="text-red-400 ml-1">(-{Math.round(c.lost)})</span>}
-                                      </span>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                              {/* Per-army garrison breakdown (only when 2+ armies) */}
-                              {battle.garrisonArmies && battle.garrisonArmies.length > 1 && (
-                                <div className="bg-blue-950/30 border border-blue-800/30 rounded px-2 py-1.5 mt-1.5">
-                                  <div className="text-[9px] text-blue-300 uppercase font-bold mb-1">Garrison Armies</div>
-                                  {battle.garrisonArmies.map((a, i) => {
-                                    const lost = a.initialTroops - a.finalTroops;
-                                    const pct = a.initialTroops > 0 ? lost / a.initialTroops : 0;
-                                    const totalInit = battle.garrisonArmies!.reduce((s, x) => s + x.initialTroops, 0);
-                                    const share = totalInit > 0 ? Math.round((a.initialTroops / totalInit) * 100) : 100;
-                                    const severity = a.finalTroops === 0 ? 'text-red-500 font-bold'
-                                      : pct > 0.3 ? 'text-red-400'
-                                      : pct > 0.1 ? 'text-amber-400'
-                                      : 'text-emerald-400';
+                                <div className="text-[9px] text-red-400 uppercase font-bold mb-1.5">Attackers — {battle.initialAttackers} → {battle.finalAttackers}</div>
+                                <div className="grid grid-cols-4 gap-1">
+                                  {(battle.attackerComposition || []).map((s, si) => {
+                                    const sqIcon = s.role === 'ranged' ? '🏹' : '⚔️';
+                                    const isDamaged = s.final < s.initial;
+                                    const fillPct = s.initial > 0 ? (s.final / s.initial) * 100 : 100;
                                     return (
-                                      <div key={i} className="flex justify-between items-center py-0.5">
-                                        <span className="text-slate-300 truncate">
-                                          ⚔️ {a.bannerName}
-                                          <span className="text-slate-500 ml-1 text-[9px]">{share}%</span>
-                                        </span>
-                                        <span className={severity}>
-                                          {Math.round(a.initialTroops)} → {Math.round(a.finalTroops)}
-                                          {lost > 0 && <span className="text-red-400 ml-1">(-{Math.round(lost)})</span>}
-                                          {a.finalTroops === 0 && <span className="ml-1">💀</span>}
-                                        </span>
+                                      <div key={si} className="h-9 rounded-md border bg-slate-800/60 border-slate-700 flex items-center px-1.5 gap-1.5 overflow-hidden">
+                                        <span className="text-sm shrink-0 leading-none">{sqIcon}</span>
+                                        <div className="flex flex-col min-w-0 flex-1 leading-none justify-center h-full py-0.5">
+                                          <div className="flex items-center justify-between gap-1 w-full">
+                                            <span className="text-[9px] font-semibold text-slate-200 truncate">{s.displayName}</span>
+                                            <span className={`text-[9px] font-medium shrink-0 ${s.final === 0 ? 'text-red-500' : isDamaged ? 'text-red-400' : 'text-slate-500'}`}>
+                                              {Math.round(s.final)}/{Math.round(s.initial)}
+                                            </span>
+                                          </div>
+                                          <div className="w-full h-0.5 bg-slate-950/50 rounded-full mt-0.5 overflow-hidden">
+                                            <div
+                                              className={`h-full rounded-full ${s.final === 0 ? 'bg-red-600' : isDamaged ? 'bg-red-500' : 'bg-emerald-500'}`}
+                                              style={{ width: `${Math.max(fillPct, s.final === 0 ? 0 : 2)}%` }}
+                                            />
+                                          </div>
+                                        </div>
                                       </div>
                                     );
                                   })}
                                 </div>
-                              )}
-                              {/* Destroyed army callouts */}
-                              {battle.garrisonArmies?.filter(a => a.finalTroops === 0).map((a, i) => (
-                                <span key={`ds${i}`} className="inline-block mt-1 text-[9px] px-1.5 py-0.5 bg-red-950/50 border border-red-800 rounded text-red-400 font-bold">
-                                  💀 {a.bannerName} destroyed
-                                </span>
-                              ))}
+                              </div>
+                              <div className="bg-blue-950/20 border border-blue-900/30 rounded px-2 py-1.5">
+                                <div className="text-[9px] text-blue-400 uppercase font-bold mb-1.5">Defenders — {totalDef} → {Math.round(battle.finalDefenders)}</div>
+                                <div className="grid grid-cols-4 gap-1">
+                                  {(battle.defenderComposition || []).flatMap(s => {
+                                    if (s.initial <= 10) return [s];
+                                    const SQ = 10;
+                                    const n = Math.ceil(s.initial / SQ);
+                                    const lossRate = s.initial > 0 ? s.lost / s.initial : 0;
+                                    return Array.from({ length: n }, (_, i) => {
+                                      const sqInit = Math.min(SQ, s.initial - i * SQ);
+                                      const sqLost = Math.round(sqInit * lossRate);
+                                      return { ...s, initial: sqInit, final: sqInit - sqLost, lost: sqLost };
+                                    });
+                                  }).map((s, si) => {
+                                    const sqIcon = s.role === 'ranged' ? '🏹' : '⚔️';
+                                    const isDamaged = s.final < s.initial;
+                                    const fillPct = s.initial > 0 ? (s.final / s.initial) * 100 : 100;
+                                    return (
+                                      <div key={si} className="h-9 rounded-md border bg-slate-800/60 border-slate-700 flex items-center px-1.5 gap-1.5 overflow-hidden">
+                                        <span className="text-sm shrink-0 leading-none">{sqIcon}</span>
+                                        <div className="flex flex-col min-w-0 flex-1 leading-none justify-center h-full py-0.5">
+                                          <div className="flex items-center justify-between gap-1 w-full">
+                                            <span className="text-[9px] font-semibold text-slate-200 truncate">{s.displayName}</span>
+                                            <span className={`text-[9px] font-medium shrink-0 ${s.final === 0 ? 'text-red-500' : isDamaged ? 'text-amber-400' : 'text-slate-500'}`}>
+                                              {Math.round(s.final)}/{Math.round(s.initial)}
+                                            </span>
+                                          </div>
+                                          <div className="w-full h-0.5 bg-slate-950/50 rounded-full mt-0.5 overflow-hidden">
+                                            <div
+                                              className={`h-full rounded-full ${s.final === 0 ? 'bg-red-600' : isDamaged ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                                              style={{ width: `${Math.max(fillPct, s.final === 0 ? 0 : 2)}%` }}
+                                            />
+                                          </div>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                                {/* Per-army garrison breakdown inline (only when 2+ armies) */}
+                                {battle.garrisonArmies && battle.garrisonArmies.length > 1 && (
+                                  <div className="mt-1.5 pt-1.5 border-t border-blue-900/30 space-y-0.5">
+                                    {battle.garrisonArmies.map((a, i) => {
+                                      const lost = a.initialTroops - a.finalTroops;
+                                      const pct = a.initialTroops > 0 ? lost / a.initialTroops : 0;
+                                      const severity = a.finalTroops === 0 ? 'text-red-500 font-bold'
+                                        : pct > 0.3 ? 'text-red-400'
+                                        : pct > 0.1 ? 'text-amber-400'
+                                        : 'text-emerald-400';
+                                      return (
+                                        <div key={i} className="flex justify-between items-center py-0.5">
+                                          <span className="text-slate-300 truncate text-[9px]">⚔️ {a.bannerName}</span>
+                                          <span className={`text-[9px] ${severity}`}>
+                                            {Math.round(a.initialTroops)} → {Math.round(a.finalTroops)}
+                                            {lost > 0 && <span className="text-red-400 ml-1">(-{Math.round(lost)})</span>}
+                                            {a.finalTroops === 0 && <span className="ml-1">💀</span>}
+                                          </span>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </div>
                             </div>
                             {/* Wall HP + destroyed callouts */}
                             <div className="mt-2 flex items-center gap-3 text-[10px]">
@@ -435,8 +465,8 @@ export default function ExpeditionsUI({
                               </span>
                             </div>
                           </summary>
-                          <div className="mt-3">
-                        <div className="text-sm font-semibold mb-3">Battle Report</div>
+                          <div className="mt-3 border-l-2 border-amber-700/50 pl-3 ml-1">
+                        <div className="text-[10px] text-amber-500/70 uppercase tracking-wider font-semibold mb-3">Detailed Breakdown</div>
                         {(() => {
                           const lastRound = battle.siegeTimeline[battle.siegeTimeline.length - 1];
 
@@ -459,23 +489,6 @@ export default function ExpeditionsUI({
                           const atkComp = battle.attackerComposition;
                           const defComp = battle.defenderComposition;
 
-                          const renderSquadList = (squads: BattleSquadEntry[], colorClass: string) => (
-                            <div className="space-y-1">
-                              {squads.map((s, i) => (
-                                <div key={i} className="flex items-center justify-between text-[11px]">
-                                  <div className="flex items-center gap-1.5">
-                                    <span className="text-[10px]">{s.role === 'ranged' ? '🏹' : '⚔'}</span>
-                                    <span className={colorClass}>{s.displayName}</span>
-                                    <span className="text-[9px] px-1 py-0 rounded border border-slate-700 text-slate-500">
-                                      {s.role === 'ranged' ? 'Ranged' : 'Melee'}
-                                    </span>
-                                  </div>
-                                  <span className={`font-semibold ${colorClass}`}>×{formatInt(s.initial)}</span>
-                                </div>
-                              ))}
-                            </div>
-                          );
-
                           const renderCasualtyList = (squads: BattleSquadEntry[], colorClass: string, lostColor: string) => (
                             <div className="space-y-1">
                               {squads.map((s, i) => (
@@ -494,106 +507,12 @@ export default function ExpeditionsUI({
 
                           return (
                             <div className="space-y-3 text-xs">
-                              {/* ── Result Summary Cards ─────────────────────────── */}
-                              <div className={`p-3 rounded-lg border ${outcome.bg}`}>
-                                <div className="grid grid-cols-5 gap-2 text-center">
-                                  <div>
-                                    <div className="text-[10px] text-slate-400 mb-0.5">Result</div>
-                                    <div className={`font-bold text-sm ${outcome.color}`}>{outcome.title}</div>
-                                  </div>
-                                  <div>
-                                    <div className="text-[10px] text-slate-400 mb-0.5">Attackers</div>
-                                    <div className="text-red-300 font-semibold">
-                                      {formatInt(battle.initialAttackers)} → {formatInt(battle.finalAttackers)}
-                                    </div>
-                                    <div className="text-[9px] text-red-400">-{formatInt(totalAtkLost)}</div>
-                                  </div>
-                                  <div>
-                                    <div className="text-[10px] text-slate-400 mb-0.5">Defenders</div>
-                                    <div className="text-blue-300 font-semibold">
-                                      {formatInt(totalDefenders)} → {formatInt(battle.finalDefenders)}
-                                    </div>
-                                    <div className="text-[9px] text-blue-400">-{formatInt(totalDefLost)}</div>
-                                  </div>
-                                  <div>
-                                    <div className="text-[10px] text-slate-400 mb-0.5">Wall HP</div>
-                                    <div className="text-amber-300 font-semibold">
-                                      {formatInt(battle.initialFortHP)} → {formatInt(battle.finalFortHP)}
-                                    </div>
-                                  </div>
-                                  <div>
-                                    <div className="text-[10px] text-slate-400 mb-0.5">Phases</div>
-                                    <div className="text-slate-200 font-semibold text-[11px]">
-                                      {battle.siegeRounds} wall{battle.innerTimeline.length > 0 ? `, ${battle.innerTimeline.length} inner` : ''}
-                                    </div>
-                                  </div>
+                              {/* ── Takeaway (summary cards removed — info already in collapsed header) ── */}
+                              {battle.battleTakeaway && (
+                                <div className={`p-2 rounded-lg border ${outcome.bg} text-[11px] text-slate-400 italic text-center`}>
+                                  {battle.battleTakeaway}
                                 </div>
-                                {battle.battleTakeaway && (
-                                  <div className="text-[11px] text-slate-400 italic mt-2 text-center">
-                                    {battle.battleTakeaway}
-                                  </div>
-                                )}
-                              </div>
-
-                              {/* ── Army Composition ─────────────────────────────── */}
-                              <div className="p-2 rounded-lg bg-slate-800 border border-slate-700">
-                                <div className="font-semibold text-slate-300 mb-2">Army Composition</div>
-                                <div className="grid grid-cols-2 gap-3">
-                                  <div className="p-2 rounded bg-red-950/20 border border-red-900/30">
-                                    <div className="text-[10px] text-red-400 font-semibold uppercase tracking-wider mb-1.5">
-                                      Attackers · {formatInt(battle.initialAttackers)}
-                                    </div>
-                                    {atkComp ? renderSquadList(atkComp, 'text-red-200') : (
-                                      <div className="text-[11px] text-red-300">⚔ Warriors ×{formatInt(battle.initialAttackers)}</div>
-                                    )}
-                                  </div>
-                                  <div className="p-2 rounded bg-blue-950/20 border border-blue-900/30">
-                                    <div className="text-[10px] text-blue-400 font-semibold uppercase tracking-wider mb-1.5">
-                                      Defenders · {formatInt(totalDefenders)}
-                                    </div>
-                                    {/* Per-army breakdown when 2+ garrison armies */}
-                                    {battle.garrisonArmies && battle.garrisonArmies.length > 1 ? (
-                                      <div className="space-y-2">
-                                        {battle.garrisonArmies.map((ga, gi) => {
-                                          const banner = banners.find(b => b.id === ga.bannerId);
-                                          const lost = ga.initialTroops - ga.finalTroops;
-                                          const pct = ga.initialTroops > 0 ? lost / ga.initialTroops : 0;
-                                          const severity = ga.finalTroops === 0 ? 'text-red-500 font-bold'
-                                            : pct > 0.3 ? 'text-red-400'
-                                            : pct > 0.1 ? 'text-amber-400'
-                                            : 'text-emerald-400';
-                                          return (
-                                            <div key={gi}>
-                                              <div className="text-[9px] font-semibold mb-0.5 flex justify-between">
-                                                <span className="text-blue-300/70">⚔️ {ga.bannerName}</span>
-                                                <span className={severity}>
-                                                  {Math.round(ga.initialTroops)} → {Math.round(ga.finalTroops)}
-                                                  {lost > 0 && <span className="text-red-400 ml-1">(-{Math.round(lost)})</span>}
-                                                  {ga.finalTroops === 0 && <span className="ml-1">💀</span>}
-                                                </span>
-                                              </div>
-                                              {banner?.squads && banner.squads.map((sq, si) => (
-                                                <div key={si} className="flex items-center justify-between text-[10px] pl-2">
-                                                  <div className="flex items-center gap-1">
-                                                    <span className="text-[9px]">{['archer', 'skirmisher', 'crossbowman'].includes(sq.type) ? '🏹' : '⚔'}</span>
-                                                    <span className="text-blue-200 capitalize">{sq.type.replace('_', ' ')}</span>
-                                                  </div>
-                                                  <span className="text-blue-200">×{sq.currentSize}</span>
-                                                </div>
-                                              ))}
-                                            </div>
-                                          );
-                                        })}
-                                      </div>
-                                    ) : defComp && defComp.length > 0 ? renderSquadList(defComp, 'text-blue-200') : (
-                                      <div className="text-[11px] text-blue-300 space-y-0.5">
-                                        <div>⚔ Melee ×{formatInt(battle.initialGarrison.warriors)}</div>
-                                        <div>🏹 Ranged ×{formatInt(battle.initialGarrison.archers)}</div>
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
+                              )}
 
                               {/* ── Wall Assault ─────────────────────────────────── */}
                               {battle.siegeTimeline.length > 0 && (
@@ -679,8 +598,8 @@ export default function ExpeditionsUI({
                               {battle.innerTimeline.length > 0 && (() => {
                                 const firstInner = battle.innerTimeline[0];
                                 const lastInner = battle.innerTimeline[battle.innerTimeline.length - 1];
-                                const defendersKilled = totalDefenders - lastInner.defenders;
-                                const attackersKilledInInner = firstInner.attackers - lastInner.attackers;
+                                const defendersKilled = totalDefenders - lastInner.A_troops;
+                                const attackersKilledInInner = firstInner.B_troops - lastInner.B_troops;
 
                                 return (
                                   <div className="p-2 rounded-lg bg-slate-800 border border-slate-700">
@@ -692,8 +611,8 @@ export default function ExpeditionsUI({
                                       for (const step of battle.innerTimeline) {
                                         if (!phases[step.phase]) phases[step.phase] = { steps: 0, defKilled: 0, atkKilled: 0 };
                                         phases[step.phase].steps++;
-                                        phases[step.phase].defKilled += step.killedDefenders;
-                                        phases[step.phase].atkKilled += step.killedAttackers;
+                                        phases[step.phase].defKilled += step.BtoA;
+                                        phases[step.phase].atkKilled += step.AtoB;
                                       }
                                       const phaseOrder = ['skirmish', 'melee', 'pursuit'];
                                       const phaseColors: Record<string, string> = {
@@ -716,10 +635,10 @@ export default function ExpeditionsUI({
                                                   {phaseIcons[p]} {p} ({d.steps} step{d.steps !== 1 ? 's' : ''})
                                                 </div>
                                                 <div className="flex justify-between text-[10px]">
-                                                  <span className="text-blue-300">Defender losses: <span className="text-red-400 font-semibold">{d.defKilled}</span></span>
+                                                  <span className="text-blue-300">Defender losses: <span className="text-red-400 font-semibold">{Math.round(d.defKilled)}</span></span>
                                                 </div>
                                                 <div className="flex justify-between text-[10px]">
-                                                  <span className="text-red-300">Attacker losses: <span className="text-red-400 font-semibold">{d.atkKilled}</span></span>
+                                                  <span className="text-red-300">Attacker losses: <span className="text-red-400 font-semibold">{Math.round(d.atkKilled)}</span></span>
                                                 </div>
                                                 {isDecisive && <div className="text-[8px] text-amber-400 mt-0.5 font-bold uppercase">Decisive phase</div>}
                                               </div>
@@ -731,7 +650,7 @@ export default function ExpeditionsUI({
 
                                     <div className="space-y-1.5 text-[11px] text-slate-300">
                                       <div>
-                                        <span className="text-red-300 font-semibold">{formatInt(firstInner.attackers)}</span> attackers engaged the garrison (<span className="text-blue-300">{formatInt(battle.initialGarrison.warriors)}</span> melee, <span className="text-blue-300">{formatInt(battle.initialGarrison.archers)}</span> ranged) inside the fortress.
+                                        <span className="text-red-300 font-semibold">{formatInt(firstInner.B_troops)}</span> attackers engaged the garrison (<span className="text-blue-300">{formatInt(battle.initialGarrison.warriors)}</span> melee, <span className="text-blue-300">{formatInt(battle.initialGarrison.archers)}</span> ranged) inside the fortress.
                                       </div>
                                       <div>
                                         The battle lasted <strong>{battle.innerTimeline.length}</strong> steps through skirmish, melee, and pursuit phases.
@@ -739,12 +658,12 @@ export default function ExpeditionsUI({
                                       <div className="flex gap-4 mt-1.5 pt-1.5 border-t border-slate-700">
                                         <div>
                                           <span className="text-slate-400">Defenders:</span>{' '}
-                                          <span className="text-blue-300 font-semibold">{formatInt(lastInner.defenders)}</span> remaining
+                                          <span className="text-blue-300 font-semibold">{formatInt(lastInner.A_troops)}</span> remaining
                                           <span className="text-blue-400 text-[10px] ml-1">(-{formatInt(defendersKilled)})</span>
                                         </div>
                                         <div>
                                           <span className="text-slate-400">Attackers:</span>{' '}
-                                          <span className="text-red-300 font-semibold">{formatInt(lastInner.attackers)}</span> remaining
+                                          <span className="text-red-300 font-semibold">{formatInt(lastInner.B_troops)}</span> remaining
                                           <span className="text-red-400 text-[10px] ml-1">(-{formatInt(attackersKilledInInner)})</span>
                                         </div>
                                       </div>
@@ -760,38 +679,25 @@ export default function ExpeditionsUI({
                                             <tr className="bg-slate-900 border-b border-slate-700">
                                               <th className="p-1 text-left text-slate-300">Step</th>
                                               <th className="p-1 text-left text-slate-300">Phase</th>
-                                              <th className="p-1 text-right text-slate-300">Def. Melee</th>
-                                              <th className="p-1 text-right text-slate-300">Def. Ranged</th>
-                                              <th className="p-1 text-right text-slate-300">Def. Total</th>
+                                              <th className="p-1 text-right text-slate-300">Defenders</th>
                                               <th className="p-1 text-right text-slate-300">Attackers</th>
-                                              <th className="p-1 text-right text-slate-300">Def. Killed</th>
-                                              <th className="p-1 text-right text-slate-300">Atk. Killed</th>
+                                              <th className="p-1 text-right text-slate-300">Casualties</th>
                                             </tr>
                                           </thead>
                                           <tbody>
-                                            {battle.innerTimeline.map((step, idx) => {
-                                              const prevStep = idx > 0 ? battle.innerTimeline[idx - 1] : null;
-                                              const defendersAtStart = prevStep ? prevStep.defenders : totalDefenders;
-                                              const attackersAtStart = prevStep ? prevStep.attackers : firstInner.attackers;
-                                              return (
+                                            {battle.innerTimeline.map((step, idx) => (
                                                 <tr key={idx} className="border-b border-slate-800 hover:bg-slate-900">
-                                                  <td className="p-1 text-slate-200 font-semibold">{step.step}</td>
+                                                  <td className="p-1 text-slate-200 font-semibold">{step.tick}</td>
                                                   <td className="p-1 text-slate-300 capitalize">{step.phase}</td>
-                                                  <td className="p-1 text-right text-blue-200">{formatInt(step.defWarriors)}</td>
-                                                  <td className="p-1 text-right text-blue-200">{formatInt(step.defArchers)}</td>
+                                                  <td className="p-1 text-right text-blue-300">{formatInt(step.A_troops)}</td>
+                                                  <td className="p-1 text-right text-red-300">{formatInt(step.B_troops)}</td>
                                                   <td className="p-1 text-right">
-                                                    <span className="text-blue-300">{formatInt(step.defenders)}</span>
-                                                    {prevStep && <span className="text-red-400 text-[9px] ml-1">(-{formatInt(defendersAtStart - step.defenders)})</span>}
+                                                    {step.BtoA > 0 && <span className="text-blue-400">Def -{formatInt(step.BtoA)}</span>}
+                                                    {step.BtoA > 0 && step.AtoB > 0 && <span className="text-slate-600 mx-0.5">/</span>}
+                                                    {step.AtoB > 0 && <span className="text-red-400">Atk -{formatInt(step.AtoB)}</span>}
                                                   </td>
-                                                  <td className="p-1 text-right">
-                                                    <span className="text-red-300">{formatInt(step.attackers)}</span>
-                                                    {prevStep && <span className="text-red-400 text-[9px] ml-1">(-{formatInt(attackersAtStart - step.attackers)})</span>}
-                                                  </td>
-                                                  <td className="p-1 text-right text-blue-400">{formatInt(step.killedDefenders)}</td>
-                                                  <td className="p-1 text-right text-red-400">{formatInt(step.killedAttackers)}</td>
                                                 </tr>
-                                              );
-                                            })}
+                                            ))}
                                           </tbody>
                                         </table>
                                       </div>
@@ -801,7 +707,7 @@ export default function ExpeditionsUI({
                                       <summary className="text-slate-400 cursor-pointer hover:text-slate-300 text-[11px] font-semibold">
                                         ▾ Inner Battle Graph
                                       </summary>
-                                      <InnerBattleGraphCanvas timeline={battle.innerTimeline} />
+                                      <BattleChart timeline={battle.innerTimeline} />
                                     </details>
                                   </div>
                                 );
@@ -894,6 +800,17 @@ export default function ExpeditionsUI({
                                       }`}>
                                         {isVictory ? 'Victory' : isDefeat ? 'Defeat' : 'Draw'}
                                       </span>
+                                      {fb.flanking && (fb.flanking.playerFlanking > 0 || fb.flanking.enemyFlanking > 0) && (
+                                        <span className={`text-[10px] px-2 py-0.5 rounded font-bold uppercase ${
+                                          fb.flanking.playerFlanking > 0
+                                            ? 'bg-amber-900/50 text-amber-300 border border-amber-700'
+                                            : 'bg-red-900/50 text-red-300 border border-red-700'
+                                        }`}>
+                                          {fb.flanking.playerFlanking > 0
+                                            ? `⚔ Flanked (${fb.flanking.playerFlanking + 1} dirs)`
+                                            : `⚔ You flanked (${fb.flanking.enemyFlanking + 1} dirs)`}
+                                        </span>
+                                      )}
                                     </div>
                                     {/* ── Option A: Per-army summary rows ── */}
                                     <div className="grid grid-cols-2 gap-2 text-[10px]">
@@ -957,6 +874,13 @@ export default function ExpeditionsUI({
                                         ))}
                                       </div>
                                     )}
+                                    {/* Extended Report toggle button */}
+                                    <div className="mt-2 flex justify-center">
+                                      <span className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-amber-900/40 hover:bg-amber-800/60 border border-amber-600/50 rounded text-[11px] text-amber-300 font-bold uppercase tracking-wider transition-colors">
+                                        📊 Extended Battle Report
+                                        <svg className="w-3 h-3 transition-transform [details[open]_&]:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                                      </span>
+                                    </div>
                                   </summary>
                                   <div className="px-3 pb-3 border-t border-slate-700">
                                     {/* Takeaway */}
@@ -967,8 +891,8 @@ export default function ExpeditionsUI({
                                       for (const step of fb.timeline) {
                                         if (!phases[step.phase]) phases[step.phase] = { steps: 0, defKilled: 0, atkKilled: 0 };
                                         phases[step.phase].steps++;
-                                        phases[step.phase].defKilled += step.killedDefenders;
-                                        phases[step.phase].atkKilled += step.killedAttackers;
+                                        phases[step.phase].defKilled += step.BtoA;
+                                        phases[step.phase].atkKilled += step.AtoB;
                                       }
                                       const phaseOrder = ['skirmish', 'melee', 'pursuit'];
                                       const phaseColors: Record<string, string> = {
@@ -991,10 +915,10 @@ export default function ExpeditionsUI({
                                                   {phaseIcons[p]} {p} ({d.steps} step{d.steps !== 1 ? 's' : ''})
                                                 </div>
                                                 <div className="flex justify-between text-[10px]">
-                                                  <span className="text-blue-300">Your losses: <span className="text-red-400 font-semibold">{d.defKilled}</span></span>
+                                                  <span className="text-blue-300">Your losses: <span className="text-red-400 font-semibold">{Math.round(d.defKilled)}</span></span>
                                                 </div>
                                                 <div className="flex justify-between text-[10px]">
-                                                  <span className="text-red-300">Enemy losses: <span className="text-red-400 font-semibold">{d.atkKilled}</span></span>
+                                                  <span className="text-red-300">Enemy losses: <span className="text-red-400 font-semibold">{Math.round(d.atkKilled)}</span></span>
                                                 </div>
                                                 {isDecisive && <div className="text-[8px] text-amber-400 mt-0.5 font-bold uppercase">Decisive phase</div>}
                                               </div>
@@ -1052,7 +976,7 @@ export default function ExpeditionsUI({
                                         <summary className="text-[11px] text-slate-400 cursor-pointer hover:text-slate-300 font-semibold">
                                           ▸ Battle Timeline Graph
                                         </summary>
-                                        <InnerBattleGraphCanvas timeline={fb.timeline} />
+                                        <BattleChart timeline={fb.timeline} />
                                       </details>
                                     )}
                                   </div>
