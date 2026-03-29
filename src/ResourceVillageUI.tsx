@@ -7762,6 +7762,8 @@ Safe recruits (unassigned people): ${freePop}`;
                 // Find player armies intercepting fortress-bound enemies
                 const siegeFlankerBannerIds = new Set<number>();
                 const siegeFlankerEnemyIds = new Set<number>();
+                // Save enemy ORIGINAL provinces (before Phase 3 moves them to fortress)
+                const siegeFlankerEnemyOrigins = new Map<number, string>();
 
                 // Method 1: Swap conflicts (player army directly meets fortress-bound enemy)
                 for (const conflict of provinceConflicts) {
@@ -7769,7 +7771,11 @@ Safe recruits (unassigned people): ${freePop}`;
                   const fortBoundEnemies = conflict.enemyIds.filter(eid => fortressEnemyIds.has(eid));
                   if (fortBoundEnemies.length > 0) {
                     for (const bid of conflict.playerBannerIds) siegeFlankerBannerIds.add(bid);
-                    for (const eid of fortBoundEnemies) siegeFlankerEnemyIds.add(eid);
+                    for (const eid of fortBoundEnemies) {
+                      siegeFlankerEnemyIds.add(eid);
+                      const e = currentEnemies.find(en => en.id === eid);
+                      if (e) siegeFlankerEnemyOrigins.set(eid, e.provinceId);
+                    }
                   }
                 }
 
@@ -7785,8 +7791,8 @@ Safe recruits (unassigned people): ${freePop}`;
                   for (const eid of fortressEnemyIds) {
                     const enemy = currentEnemies.find(e => e.id === eid);
                     if (enemy && dest === enemy.provinceId) {
-                      // Player army is moving to where the enemy was → flanking the siege
                       siegeFlankerBannerIds.add(bid);
+                      siegeFlankerEnemyOrigins.set(eid, enemy.provinceId);
                       break;
                     }
                   }
@@ -8178,7 +8184,10 @@ Safe recruits (unassigned people): ${freePop}`;
                     });
                     const flankIds = Array.from(siegeFlankerBannerIds);
                     const result = runSiegeBattle(expeditionId, enemy.totalTroops, siegeSquadComp, newPositions, flankIds.length > 0 ? flankIds : undefined);
-                    const destroyedBanners = applyFortressBattleCasualties(expeditionId, result);
+                    // Only apply garrison casualties if an Inner Battle occurred — wall-only victories leave garrison untouched
+                    const destroyedBanners = (result.innerTimeline.length > 0)
+                      ? applyFortressBattleCasualties(expeditionId, result)
+                      : [];
 
                     if (updatedFortress) {
                       const updatedGarrison = destroyedBanners.length > 0
@@ -8228,12 +8237,14 @@ Safe recruits (unassigned people): ${freePop}`;
                       }
                     }
 
-                    // Flanker position: advance to enemy origin ONLY if enemy destroyed (cell is empty)
+                    // Flanker position: advance to enemy ORIGINAL province ONLY if enemy destroyed (cell is empty)
+                    // Use saved origin from detection time (before Phase 3 moved enemy to fortress)
+                    const enemyOriginalProvince = siegeFlankerEnemyOrigins.get(enemy.id) || enemy.provinceId;
                     for (const flankBid of siegeFlankerBannerIds) {
                       if (destroyedPlayerIds.has(flankBid)) continue;
                       if (enemyDestroyed) {
-                        // Enemy destroyed → flanker advances to enemy's origin province
-                        newPositions[flankBid] = enemy.provinceId;
+                        // Enemy destroyed → flanker advances to enemy's original province
+                        newPositions[flankBid] = enemyOriginalProvince;
                       } else {
                         // Enemy survived (retreated or won) → flanker stays at own origin
                         newPositions[flankBid] = currentPositions[flankBid] || newPositions[flankBid];
