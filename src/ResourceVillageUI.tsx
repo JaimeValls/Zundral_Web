@@ -3321,7 +3321,8 @@ export default function ResourceVillageUI() {
   function runSiegeBattle(
     expeditionId: string,
     attackers: number,
-    attackerSquads?: Array<{ type: string; count: number }>
+    attackerSquads?: Array<{ type: string; count: number }>,
+    currentArmyPositions?: Record<number, string>,
   ): SiegeBattleResult {
     const expedition = expeditions.find(exp => exp.expeditionId === expeditionId);
     if (!expedition?.fortress) {
@@ -3335,9 +3336,13 @@ export default function ResourceVillageUI() {
 
     const fortHPmax = expedition.fortress.stats.fortHP;
 
-    // Calculate actual garrison from stationed banners (real units only)
-    // IMPORTANT: Garrison stats are army-count capacity only — always use calculateGarrisonFromBanners for actual troops
-    const garrisonBannerIds = expedition.fortress.garrison || [];
+    // Calculate actual garrison from banners physically AT the fortress (not just assigned)
+    // Armies that moved away from the fortress don't count as garrison defenders
+    const fortressProvId = expedition.mapState?.fortressProvinceId;
+    const positions = currentArmyPositions || expedition.mapState?.armyPositions || {};
+    const garrisonBannerIds = (expedition.fortress.garrison || []).filter(bid =>
+      positions[bid] === fortressProvId
+    );
     const actualGarrison = calculateGarrisonFromBanners(garrisonBannerIds);
 
     // Snapshot per-banner troops for the report
@@ -7968,17 +7973,44 @@ Safe recruits (unassigned people): ${freePop}`;
                   }));
                 }
 
-                // ── Phase 4: Check fortress arrivals — field intercept then siege ──
+                // ── Phase 4: Check fortress arrivals — siege ──
                 let expeditionFailed = false;
                 let updatedFortress = exp.fortress;
+                // Clear previous siege report — only show siege from current turn
+                if (updatedFortress) {
+                  const { lastBattle: _prevBattle, ...fortressWithoutBattle } = updatedFortress;
+                  updatedFortress = fortressWithoutBattle as typeof updatedFortress;
+                }
                 let pendingSiegeBattle: (import('./types').SiegeBattleResult & { enemyName: string }) | undefined;
 
                 // All enemies at fortress go directly to siege — garrison defends from behind walls
                 // No field intercept: runSiegeBattle handles wall defense, archer fire, and inner battle
+                // First check if any player armies are actually at the fortress
+                const garrisonAtFort = Object.entries(newPositions)
+                  .filter(([, prov]) => prov === fortId)
+                  .map(([bidStr]) => Number(bidStr))
+                  .filter(bid => !destroyedPlayerIds.has(bid));
+
                 for (let i = 0; i < updatedEnemies.length; i++) {
                   const enemy = updatedEnemies[i];
                   if (enemy.status !== 'marching' || enemy.provinceId !== fortId) continue;
                   if (battleEnemyIds.has(enemy.id)) continue;
+
+                  // If no garrison at fortress, it falls without a battle
+                  if (garrisonAtFort.length === 0) {
+                    dbg.log(`[NPC] Enemy "${enemy.name}" reached undefended fortress — fortress falls!`);
+                    expeditionFailed = true;
+                    newLogEntries.push({
+                      id: `log_${newTurnNumber}_${logIdx++}`,
+                      turn: newTurnNumber, type: 'fortress_damaged',
+                      text: `Fortress fell without resistance — no garrison present`,
+                      provinceId: fortId,
+                    });
+                    updatedEnemies = updatedEnemies.map((e, idx) =>
+                      idx === i ? { ...e, status: 'destroyed' as const } : e
+                    );
+                    continue;
+                  }
 
                   dbg.log(`[NPC] Enemy "${enemy.name}" (${enemy.totalTroops} troops) reached fortress! Triggering siege...`);
                   newLogEntries.push({
@@ -7996,7 +8028,7 @@ Safe recruits (unassigned people): ${freePop}`;
                       siegeTroopsLeft -= capped;
                       return { type: s.type, count: capped };
                     });
-                    const result = runSiegeBattle(expeditionId, enemy.totalTroops, siegeSquadComp);
+                    const result = runSiegeBattle(expeditionId, enemy.totalTroops, siegeSquadComp, newPositions);
                     const destroyedBanners = applyFortressBattleCasualties(expeditionId, result);
 
                     if (updatedFortress) {

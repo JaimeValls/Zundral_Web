@@ -359,9 +359,9 @@ export default function ExpeditionsUI({
                             <div className="flex items-center gap-3 mb-2">
                               <span className="text-lg">🏰</span>
                               <div className="flex-1">
-                                <div className="text-xs font-bold text-slate-200">Fortress Siege</div>
+                                <div className="text-xs font-bold text-slate-200">Fortress Siege — {exp.mapState?.fortressProvinceId?.replace('prov_', 'Province ') || 'Fortress'}</div>
                                 <div className="text-[10px] text-slate-500">
-                                  {siegeRounds} wall round{siegeRounds !== 1 ? 's' : ''}{battle.innerTimeline?.length ? `, ${battle.innerTimeline.length} inner steps` : ''} — {battle.initialAttackers} attackers vs {totalDef} defenders
+                                  Turn {exp.mapState?.turnNumber || '?'} · {siegeRounds} wall round{siegeRounds !== 1 ? 's' : ''}{battle.innerTimeline?.length ? `, ${battle.innerTimeline.length} inner steps` : ''} — {battle.initialAttackers} attackers vs {totalDef} defenders
                                 </div>
                               </div>
                               <span className={`text-[10px] px-2 py-0.5 rounded font-bold uppercase ${isHold ? 'bg-emerald-900/50 text-emerald-400 border border-emerald-800' : 'bg-red-900/50 text-red-400 border border-red-800'}`}>
