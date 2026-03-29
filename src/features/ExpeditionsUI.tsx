@@ -464,7 +464,30 @@ export default function ExpeditionsUI({
                                   </div>
                                 )}
                               </div>
-                              {/* Flanking armies shown in Inner Battle section, not here */}
+                              {/* Flanking Support — always shown if flankers exist */}
+                              {battle.flankingArmies && battle.flankingArmies.length > 0 && (
+                                <div className="mt-1.5 pt-1.5 border-t border-amber-900/30">
+                                  <div className="text-[9px] text-amber-400 uppercase font-bold mb-0.5">Flanking Support</div>
+                                  {battle.flankingArmies.map((a, i) => {
+                                    const lost = a.initialTroops - a.finalTroops;
+                                    const engaged = battle.innerTimeline.length > 0;
+                                    return (
+                                      <div key={i} className="flex justify-between items-center py-0.5">
+                                        <span className="text-slate-300 truncate text-[9px]">
+                                          ⚔️ {a.bannerName}
+                                          <span className="text-[8px] px-1 py-0 rounded border bg-orange-700/60 text-orange-200 border-orange-500/40 ml-1 font-semibold uppercase">Flank</span>
+                                        </span>
+                                        <span className={`text-[9px] ${engaged && lost > 0 ? 'text-amber-400' : 'text-emerald-400'}`}>
+                                          {engaged
+                                            ? <>{Math.round(a.initialTroops)} → {Math.round(a.finalTroops)}{lost > 0 && <span className="text-red-400 ml-1">(-{Math.round(lost)})</span>}</>
+                                            : <span className="text-slate-500 italic">Ready — did not engage</span>
+                                          }
+                                        </span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
                             </div>
                             {/* Wall HP + destroyed callouts */}
                             <div className="mt-2 flex items-center gap-3 text-[10px]">
@@ -544,7 +567,7 @@ export default function ExpeditionsUI({
                                       <span className="text-red-300 font-semibold">{formatInt(battle.initialAttackers)}</span> attackers assaulted the fortress walls over <strong>{battle.siegeRounds}</strong> rounds.
                                     </div>
                                     <div>
-                                      <span className="text-blue-300 font-semibold">{formatInt(battle.siegeTimeline[0]?.archers || 0)}</span> archers firing from the walls{battle.flankingArmies && battle.flankingArmies.length > 0 ? <>, supported by <span className="text-amber-300 font-semibold">{battle.flankingArmies.length} flanking {battle.flankingArmies.length === 1 ? 'army' : 'armies'}</span> attacking from the field</> : ''}, killed <span className="text-red-300 font-semibold">{formatInt(totalAttackersKilled)}</span> attackers during the siege.
+                                      <span className="text-blue-300 font-semibold">{formatInt(battle.siegeTimeline[0]?.archers || 0)}</span> archers firing from the walls killed <span className="text-red-300 font-semibold">{formatInt(totalAttackersKilled)}</span> attackers during the siege.
                                     </div>
                                     <div>
                                       Wall HP reduced from <span className="text-amber-300">{formatInt(battle.initialFortHP)}</span> to <span className="text-amber-300">{formatInt(lastRound.fortHP)}</span> (<span className="text-amber-400">{formatInt(totalDamageToFort)}</span> damage).
@@ -760,14 +783,7 @@ export default function ExpeditionsUI({
 
                               {/* Casualties by unit type removed — already shown in squad cards above */}
 
-                              {/* Flanker note when no Inner Battle occurred */}
-                              {battle.innerTimeline.length === 0 && battle.flankingArmies && battle.flankingArmies.length > 0 && (
-                                <div className="p-2 rounded-lg bg-slate-800/50 border border-slate-700/50 mt-2">
-                                  <div className="text-[10px] text-slate-500 italic">
-                                    {battle.flankingArmies.map(a => a.bannerName).join(', ')} — flanking force did not engage (enemy destroyed on walls)
-                                  </div>
-                                </div>
-                              )}
+                              {/* Flanker info now shown in Defenders panel above */}
                             </div>
                           );
                         })()}

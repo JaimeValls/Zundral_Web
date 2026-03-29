@@ -3429,6 +3429,14 @@ export default function ResourceVillageUI() {
     const siegeTimeline: SiegeRound[] = [];
     let finalGarrison = { warriors: garrisonWarriors, archers: garrisonArchers };
 
+    // Attacker morale during wall phase — attackers can retreat if morale breaks
+    // Morale starts based on troop count, drops from casualties and wall resilience
+    const attackerMoralePer100 = 100; // average morale for attacking forces
+    let attackerMorale = (attackers / 100) * attackerMoralePer100;
+    const attackerMorale0 = attackerMorale;
+    const attackerMoraleBreak = (p.break_pct || 35) / 100 * attackerMorale0;
+    let attackerRetreated = false;
+
     // Wall phase — only wall archers fire, flanker does NOT participate
     let rounds = 0;
     while (fortHP > 0 && remainingAttackers > 0 && rounds < maxRounds) {
@@ -3442,6 +3450,10 @@ export default function ResourceVillageUI() {
       const dmgToFort = remainingAttackers * fortDamagePerWarrior * baseCas;
       fortHP = Math.max(0, fortHP - dmgToFort);
 
+      // Attacker morale loss: casualties + seeing walls barely damaged
+      const wallRatio = fortHPmax > 0 ? fortHP / fortHPmax : 0;
+      attackerMorale -= (p.morale_per_casualty || 0.8) * killed + (p.advantage_morale_tick || 3) * wallRatio;
+
       siegeTimeline.push({
         round: rounds,
         fortHP,
@@ -3450,6 +3462,12 @@ export default function ResourceVillageUI() {
         killed,
         dmgToFort
       });
+
+      // Morale break check — attacker retreats from siege
+      if (attackerMorale <= attackerMoraleBreak && remainingAttackers > 0) {
+        attackerRetreated = true;
+        break;
+      }
     }
 
     // Inner battle phase (if walls fall)
@@ -3554,7 +3572,10 @@ export default function ResourceVillageUI() {
     let finalAttackers = lastSiege.attackers;
     let finalDefenders = garrisonWarriors + garrisonArchers;
 
-    if (lastSiege.attackers <= 0 && lastSiege.fortHP > 0) {
+    if (attackerRetreated && lastSiege.attackers > 0) {
+      // Attacker morale broke during wall phase — retreated with survivors
+      outcome = 'fortress_holds_walls';
+    } else if (lastSiege.attackers <= 0 && lastSiege.fortHP > 0) {
       outcome = 'fortress_holds_walls';
     } else if (lastSiege.fortHP <= 0 && lastSiege.attackers > 0) {
       if (innerTimeline.length > 0) {
