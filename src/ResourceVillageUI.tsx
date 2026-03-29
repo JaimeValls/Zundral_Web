@@ -3355,8 +3355,9 @@ export default function ResourceVillageUI() {
     // Armies that moved away from the fortress don't count as garrison defenders
     const fortressProvId = expedition.mapState?.fortressProvinceId;
     const positions = currentArmyPositions || expedition.mapState?.armyPositions || {};
+    const flankingSet = new Set(flankingBannerIds || []);
     const garrisonBannerIds = (expedition.fortress.garrison || []).filter(bid =>
-      positions[bid] === fortressProvId
+      positions[bid] === fortressProvId && !flankingSet.has(bid)
     );
     const actualGarrison = calculateGarrisonFromBanners(garrisonBannerIds);
 
@@ -3412,17 +3413,9 @@ export default function ResourceVillageUI() {
     const wMelee = stats.warrior?.melee_attack || 15;
     const aSkirmish = stats.archer?.skirmish_attack || 15;
 
-    // Calculate flanking army contribution (field units attacking enemy from outside during siege)
+    // Flanking armies: only participate in Inner Battle, NOT wall phase
     const flankingBanners = (flankingBannerIds || []).map(bid => banners.find(b => b.id === bid)).filter((b): b is Banner => !!b && b.status !== 'destroyed');
-    let flankingWarriors = 0, flankingArchers = 0;
-    for (const fb of flankingBanners) {
-      for (const sq of fb.squads || []) {
-        const cat = unitCategory[sq.type as UnitType] || 'infantry';
-        if (cat === 'ranged_infantry') flankingArchers += sq.currentSize;
-        else flankingWarriors += sq.currentSize;
-      }
-    }
-    const totalFlankingTroops = flankingWarriors + flankingArchers;
+    const totalFlankingTroops = flankingBanners.reduce((sum, b) => sum + b.squads.reduce((s, sq) => s + sq.currentSize, 0), 0);
 
     // Snapshot flanking army initial troops for report
     const perFlankingInitial = flankingBanners.map(b => ({
@@ -3436,19 +3429,14 @@ export default function ResourceVillageUI() {
     const siegeTimeline: SiegeRound[] = [];
     let finalGarrison = { warriors: garrisonWarriors, archers: garrisonArchers };
 
-    // Siege phase
+    // Wall phase — only wall archers fire, flanker does NOT participate
     let rounds = 0;
     while (fortHP > 0 && remainingAttackers > 0 && rounds < maxRounds) {
       rounds++;
 
-      // Wall archers fire from towers
       const dmgFromArchers = (activeArchers / 100) * aSkirmish * baseCas;
-      // Flanking army attacks enemy from outside (skirmish damage from flanking troops)
-      const flankingSkirmishDmg = totalFlankingTroops > 0
-        ? ((flankingArchers / 100) * aSkirmish + (flankingWarriors / 100) * wSkirmish) * baseCas * 0.5  // 50% effectiveness (field, not walls)
-        : 0;
-      const totalKilled = Math.min(remainingAttackers, dmgFromArchers + flankingSkirmishDmg);
-      remainingAttackers -= totalKilled;
+      const killed = Math.min(remainingAttackers, dmgFromArchers);
+      remainingAttackers -= killed;
 
       const fortDamagePerWarrior = wMelee * 0.2;
       const dmgToFort = remainingAttackers * fortDamagePerWarrior * baseCas;
@@ -3459,40 +3447,49 @@ export default function ResourceVillageUI() {
         fortHP,
         attackers: remainingAttackers,
         archers: activeArchers,
-        killed: totalKilled,
+        killed,
         dmgToFort
       });
     }
 
-    // Apply flanking army casualties (they take some damage from enemy during siege — proportional to siege length)
-    const flankingCasualtyRate = Math.min(0.3, rounds * 0.03); // Up to 30% losses over max siege
-    let flankingFinalTroops = Math.round(totalFlankingTroops * (1 - flankingCasualtyRate));
-
     // Inner battle phase (if walls fall)
-    // IMPORTANT: Inner battle uses actual units from banners + any surviving flankers
-    // Watch Post slots do NOT apply in inner battle - they only limit Phase 1 wall archers
+    // Garrison fights to the death. Flanker has independent morale (can withdraw).
+    // Attacker has normal morale (can retreat).
     let innerTimeline: BattleResult['timeline'] = [];
     let innerWinner: 'player' | 'enemy' | 'draw' | null = null;
-    const totalDefendersForInner = garrisonWarriors + garrisonArchers + flankingFinalTroops;
+    let flankingFinalTroops = totalFlankingTroops; // default: no losses if no inner battle
+    let flankerWithdrew = false;
+    const totalDefendersForInner = garrisonWarriors + garrisonArchers + totalFlankingTroops;
     if (fortHP <= 0 && remainingAttackers > 0 && totalDefendersForInner > 0) {
-      dbg.log('[SIEGE] Starting inner battle with defenders:', { garrisonWarriors, garrisonArchers, flankingFinalTroops });
-      // Build Division objects for the full morale-aware battle simulator
+      dbg.log('[SIEGE] Starting inner battle with defenders:', { garrisonWarriors, garrisonArchers, flankingTroops: totalFlankingTroops });
+      // Build garrison Division (fights to the death)
       const defDiv: Record<string, number> = {};
-      // Garrison banners (inside fortress)
       for (const bid of garrisonBannerIds) {
         const banner = banners.find(b => b.id === bid);
         for (const sq of banner?.squads || []) {
           defDiv[sq.type] = (defDiv[sq.type] || 0) + sq.currentSize;
         }
       }
-      // Flanking banners (joining from outside, scaled by casualties taken during siege)
-      if (flankingFinalTroops > 0) {
-        const flankScale = totalFlankingTroops > 0 ? flankingFinalTroops / totalFlankingTroops : 0;
+
+      // Build flanker Division (independent morale, can withdraw)
+      const flankerDiv: Record<string, number> = {};
+      for (const fb of flankingBanners) {
+        for (const sq of fb.squads || []) {
+          flankerDiv[sq.type] = (flankerDiv[sq.type] || 0) + sq.currentSize;
+        }
+      }
+
+      // Average morale_per_100 for flanker units
+      let flankerMoralePer100 = 90; // default
+      if (totalFlankingTroops > 0) {
+        let moralSum = 0;
         for (const fb of flankingBanners) {
           for (const sq of fb.squads || []) {
-            defDiv[sq.type] = (defDiv[sq.type] || 0) + Math.round(sq.currentSize * flankScale);
+            const unitStat = stats[sq.type as UnitType];
+            if (unitStat) moralSum += sq.currentSize * unitStat.morale_per_100;
           }
         }
+        flankerMoralePer100 = moralSum / totalFlankingTroops;
       }
       // Attacker division from attacker squads
       const atkDiv: Record<string, number> = {};
@@ -3505,10 +3502,28 @@ export default function ResourceVillageUI() {
         const scale = remainingAttackers / atkTotal;
         for (const key in atkDiv) atkDiv[key] = Math.round(atkDiv[key] * scale);
       }
-      // Fortress defenders always use defend stance — garrison never pursues retreating attackers
-      const innerResult = simulateBattle(defDiv as any, atkDiv as any, stats, p, undefined, undefined, { playerDefending: true });
+      // Garrison fights to the death (playerDefending). Attacker can retreat normally.
+      // Flanker has independent morale via withdrawGroup — can withdraw mid-battle.
+      const withdrawGrp = totalFlankingTroops > 0 ? {
+        div: flankerDiv as any,
+        moralePer100: flankerMoralePer100,
+      } : undefined;
+      const innerResult = simulateBattle(defDiv as any, atkDiv as any, stats, p, undefined, undefined, { playerDefending: true }, undefined, withdrawGrp);
       innerTimeline = innerResult.timeline;
       innerWinner = innerResult.winner;
+
+      // Extract flanker final state from withdraw result
+      if (innerResult.withdrawResult) {
+        flankingFinalTroops = innerResult.withdrawResult.finalTroops;
+        flankerWithdrew = innerResult.withdrawResult.withdrawnAtTick !== null;
+      } else if (totalFlankingTroops > 0) {
+        // No withdrawResult but flankers fought — distribute losses proportionally
+        const totalDefInitial = (garrisonWarriors + garrisonArchers) + totalFlankingTroops;
+        const totalDefFinal = innerResult.playerFinal.total;
+        const totalDefLost = totalDefInitial - totalDefFinal;
+        const flankShare = totalDefInitial > 0 ? totalFlankingTroops / totalDefInitial : 0;
+        flankingFinalTroops = Math.max(0, totalFlankingTroops - Math.round(totalDefLost * flankShare));
+      }
     } else if (fortHP <= 0 && remainingAttackers > 0) {
       dbg.log('[SIEGE] No inner battle - no defenders from banners');
     }
@@ -3659,10 +3674,16 @@ export default function ResourceVillageUI() {
           finalTroops: Math.max(0, Math.round(a.initialTroops * (1 - lossRatio))),
         }));
       })(),
-      flankingArmies: perFlankingInitial.length > 0 ? perFlankingInitial.map(a => ({
-        ...a,
-        finalTroops: Math.max(0, Math.round(a.initialTroops * (1 - flankingCasualtyRate))),
-      })) : undefined,
+      flankingArmies: perFlankingInitial.length > 0 ? (() => {
+        // Distribute flanker losses proportionally across flanking banners
+        const totalFlankInit = perFlankingInitial.reduce((s, a) => s + a.initialTroops, 0);
+        const totalFlankLost = totalFlankInit - flankingFinalTroops;
+        return perFlankingInitial.map(a => {
+          const share = totalFlankInit > 0 ? a.initialTroops / totalFlankInit : 0;
+          const lost = Math.round(totalFlankLost * share);
+          return { ...a, finalTroops: Math.max(0, a.initialTroops - lost) };
+        });
+      })() : undefined,
     };
   }
 
@@ -7191,6 +7212,15 @@ Safe recruits (unassigned people): ${freePop}`;
                     gold: warehouseCap.gold,
                   }));
 
+                  // 5. Level up Town Hall to 2 and build Barracks level 1
+                  setTownHall({ level: 2 as TownHallLevel });
+                  setBarracks({
+                    level: 1,
+                    trainingSlots: getMaxTrainingSlots(1),
+                    maxTemplates: 3,
+                    trainingQueue: [],
+                  });
+
                 }}
                 className="px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-lg bg-green-600 active:bg-green-700 hover:bg-green-700 text-white text-[10px] sm:text-xs font-semibold touch-manipulation min-h-[44px] sm:min-h-0"
               >
@@ -7729,17 +7759,36 @@ Safe recruits (unassigned people): ${freePop}`;
                   if (e.status === 'marching' && enemyDests.get(e.id) === fortId) fortressEnemyIds.add(e.id);
                 });
 
-                // Find swap conflicts where a player army intercepts a fortress-bound enemy
+                // Find player armies intercepting fortress-bound enemies
                 const siegeFlankerBannerIds = new Set<number>();
                 const siegeFlankerEnemyIds = new Set<number>();
+
+                // Method 1: Swap conflicts (player army directly meets fortress-bound enemy)
                 for (const conflict of provinceConflicts) {
                   if (conflict.provinceId === fortId) continue; // fortress conflict handled separately
-                  // Check if any enemy in this conflict is fortress-bound
                   const fortBoundEnemies = conflict.enemyIds.filter(eid => fortressEnemyIds.has(eid));
                   if (fortBoundEnemies.length > 0) {
-                    // These player armies are flankers for the fortress siege, not separate field combatants
                     for (const bid of conflict.playerBannerIds) siegeFlankerBannerIds.add(bid);
                     for (const eid of fortBoundEnemies) siegeFlankerEnemyIds.add(eid);
+                  }
+                }
+
+                // Method 2: Adjacent flankers — player army moving to the province where a
+                // fortress-bound enemy WAS (enemy already left toward fortress, but player
+                // intended to intercept from that direction)
+                for (const [bidStr, dest] of Object.entries(playerDests)) {
+                  const bid = Number(bidStr);
+                  if (siegeFlankerBannerIds.has(bid)) continue; // already detected
+                  if (dest === fortId) continue; // staying at fortress = garrison, not flanker
+                  if (currentPositions[bid] === dest) continue; // not moving
+
+                  for (const eid of fortressEnemyIds) {
+                    const enemy = currentEnemies.find(e => e.id === eid);
+                    if (enemy && dest === enemy.provinceId) {
+                      // Player army is moving to where the enemy was → flanking the siege
+                      siegeFlankerBannerIds.add(bid);
+                      break;
+                    }
                   }
                 }
 
@@ -7920,6 +7969,8 @@ Safe recruits (unassigned people): ${freePop}`;
                       }
                     }
                   } else {
+                    // Siege flankers move normally to their destination (they participate
+                    // in the siege via flankingBannerIds, NOT by being at the fortress)
                     // Normal movement (including weak flankers who were excluded from battle)
                     const dest = playerDests[bid];
                     newPositions[bid] = dest;
@@ -8140,9 +8191,23 @@ Safe recruits (unassigned people): ${freePop}`;
                       };
                     }
 
-                    updatedEnemies = updatedEnemies.map((e, idx) =>
-                      idx === i ? { ...e, status: 'destroyed' as const } : e
-                    );
+                    // Enemy outcome: destroyed only if 0 troops, otherwise retreats to origin
+                    const enemyDestroyed = result.finalAttackers <= 0;
+                    if (enemyDestroyed) {
+                      updatedEnemies = updatedEnemies.map((e, idx) =>
+                        idx === i ? { ...e, status: 'destroyed' as const, totalTroops: 0 } : e
+                      );
+                    } else if (result.outcome === 'fortress_falls') {
+                      // Attacker won — stays at fortress
+                      updatedEnemies = updatedEnemies.map((e, idx) =>
+                        idx === i ? { ...e, provinceId: fortId, totalTroops: Math.round(result.finalAttackers) } : e
+                      );
+                    } else {
+                      // Attacker survived but fortress held — retreats to origin
+                      updatedEnemies = updatedEnemies.map((e, idx) =>
+                        idx === i ? { ...e, provinceId: enemy.provinceId, totalTroops: Math.round(result.finalAttackers) } : e
+                      );
+                    }
 
                     // Apply casualties to flanking banners
                     if (result.flankingArmies && result.flankingArmies.length > 0) {
@@ -8160,6 +8225,18 @@ Safe recruits (unassigned people): ${freePop}`;
                           destroyedPlayerIds.add(fa.bannerId);
                           delete newPositions[fa.bannerId];
                         }
+                      }
+                    }
+
+                    // Flanker position: advance to enemy origin ONLY if enemy destroyed (cell is empty)
+                    for (const flankBid of siegeFlankerBannerIds) {
+                      if (destroyedPlayerIds.has(flankBid)) continue;
+                      if (enemyDestroyed) {
+                        // Enemy destroyed → flanker advances to enemy's origin province
+                        newPositions[flankBid] = enemy.provinceId;
+                      } else {
+                        // Enemy survived (retreated or won) → flanker stays at own origin
+                        newPositions[flankBid] = currentPositions[flankBid] || newPositions[flankBid];
                       }
                     }
 

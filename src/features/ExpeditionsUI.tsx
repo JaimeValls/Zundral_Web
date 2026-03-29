@@ -464,30 +464,7 @@ export default function ExpeditionsUI({
                                   </div>
                                 )}
                               </div>
-                              {/* Flanking armies (if any) */}
-                              {battle.flankingArmies && battle.flankingArmies.length > 0 && (
-                                <div className="mt-1.5 pt-1.5 border-t border-amber-900/30">
-                                  <div className="text-[9px] text-amber-400 uppercase font-bold mb-0.5">Flanking Support</div>
-                                  {battle.flankingArmies.map((a, i) => {
-                                    const lost = a.initialTroops - a.finalTroops;
-                                    const pct = a.initialTroops > 0 ? lost / a.initialTroops : 0;
-                                    const severity = a.finalTroops === 0 ? 'text-red-500 font-bold'
-                                      : pct > 0.3 ? 'text-red-400'
-                                      : pct > 0.1 ? 'text-amber-400'
-                                      : 'text-emerald-400';
-                                    return (
-                                      <div key={i} className="flex justify-between items-center py-0.5">
-                                        <span className="text-slate-300 truncate text-[9px]">⚔️ {a.bannerName} <span className="text-[8px] px-1 py-0 rounded border bg-orange-700/60 text-orange-200 border-orange-500/40 ml-1 font-semibold uppercase">Flank</span></span>
-                                        <span className={`text-[9px] ${severity}`}>
-                                          {Math.round(a.initialTroops)} → {Math.round(a.finalTroops)}
-                                          {lost > 0 && <span className="text-red-400 ml-1">(-{Math.round(lost)})</span>}
-                                          {a.finalTroops === 0 && <span className="ml-1">💀</span>}
-                                        </span>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              )}
+                              {/* Flanking armies shown in Inner Battle section, not here */}
                             </div>
                             {/* Wall HP + destroyed callouts */}
                             <div className="mt-2 flex items-center gap-3 text-[10px]">
@@ -649,6 +626,30 @@ export default function ExpeditionsUI({
                                   <div className="p-2 rounded-lg bg-slate-800 border border-slate-700">
                                     <div className="font-semibold text-slate-300 mb-2">Inner Defence Battle</div>
 
+                                    {/* Flanking army participation in Inner Battle */}
+                                    {battle.flankingArmies && battle.flankingArmies.length > 0 && (
+                                      <div className="mb-2 p-1.5 rounded bg-amber-950/20 border border-amber-800/30">
+                                        <div className="text-[9px] text-amber-400 uppercase font-bold mb-1">Flanking Reinforcement (joined Inner Battle)</div>
+                                        {battle.flankingArmies.map((a, fi) => {
+                                          const lost = a.initialTroops - a.finalTroops;
+                                          const pct = a.initialTroops > 0 ? lost / a.initialTroops : 0;
+                                          const sev = a.finalTroops === 0 ? 'text-red-500 font-bold' : pct > 0.3 ? 'text-red-400' : pct > 0.1 ? 'text-amber-400' : 'text-emerald-400';
+                                          return (
+                                            <div key={fi} className="flex justify-between items-center py-0.5">
+                                              <span className="text-slate-300 truncate text-[9px]">
+                                                ⚔️ {a.bannerName}
+                                                <span className="text-[8px] px-1 py-0 rounded border bg-orange-700/60 text-orange-200 border-orange-500/40 ml-1 font-semibold uppercase">Flank</span>
+                                              </span>
+                                              <span className={`text-[9px] ${sev}`}>
+                                                {Math.round(a.initialTroops)} → {Math.round(a.finalTroops)}
+                                                {lost > 0 && <span className="text-red-400 ml-1">(-{Math.round(lost)})</span>}
+                                              </span>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    )}
+
                                     {/* Phase Summary Cards (Skirmish/Melee/Pursuit) */}
                                     {(() => {
                                       const phases: Record<string, { steps: number; defKilled: number; atkKilled: number }> = {};
@@ -758,6 +759,15 @@ export default function ExpeditionsUI({
                               })()}
 
                               {/* Casualties by unit type removed — already shown in squad cards above */}
+
+                              {/* Flanker note when no Inner Battle occurred */}
+                              {battle.innerTimeline.length === 0 && battle.flankingArmies && battle.flankingArmies.length > 0 && (
+                                <div className="p-2 rounded-lg bg-slate-800/50 border border-slate-700/50 mt-2">
+                                  <div className="text-[10px] text-slate-500 italic">
+                                    {battle.flankingArmies.map(a => a.bannerName).join(', ')} — flanking force did not engage (enemy destroyed on walls)
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           );
                         })()}
@@ -1340,10 +1350,11 @@ export default function ExpeditionsUI({
                   {expeditionTab === 'building' && (
                     <div>
                       {exp.state === 'completed' ? (
-                        <div className="space-y-2">
+                        <div className="space-y-3">
                           {exp.fortress!.buildings.map((building) => {
                             const nextLevel = building.level + 1;
                             const canUpgrade = nextLevel <= building.maxLevel;
+                            const isMaxed = !canUpgrade;
                             const nextCost = canUpgrade ? building.getUpgradeCost(nextLevel) : null;
                             const enoughWood = nextCost ? warehouse.wood >= nextCost.wood : false;
                             const enoughStone = nextCost ? warehouse.stone >= nextCost.stone : false;
@@ -1351,62 +1362,116 @@ export default function ExpeditionsUI({
                             const nextEffect = canUpgrade ? building.getEffect(nextLevel) : null;
                             const currentEffect = building.getEffect(building.level);
 
+                            // Per-building config
+                            const icon = building.id === 'palisade_wall' ? '🧱' : building.id === 'watch_post' ? '🏹' : '🏠';
+                            const accentColor = building.id === 'palisade_wall' ? 'border-l-blue-500' : building.id === 'watch_post' ? 'border-l-amber-500' : 'border-l-emerald-500';
+
+                            // Current bonus text
+                            const currentText = building.id === 'palisade_wall'
+                              ? `${formatInt(currentEffect.fortHP || 0)} Wall HP`
+                              : building.id === 'watch_post'
+                                ? `${currentEffect.archerSlots || 0} archer slots on walls`
+                                : `Capacity: ${currentEffect.garrisonCapacity || 1} ${(currentEffect.garrisonCapacity || 1) === 1 ? 'army' : 'armies'}`;
+
+                            // Next level text
+                            const nextText = !canUpgrade || !nextEffect ? '' :
+                              building.id === 'palisade_wall'
+                                ? `+${(nextEffect.fortHP || 0) - (currentEffect.fortHP || 0)} HP \u2192 ${formatInt(nextEffect.fortHP || 0)} total`
+                                : building.id === 'watch_post'
+                                  ? `+${(nextEffect.archerSlots || 0) - (currentEffect.archerSlots || 0)} slots \u2192 ${nextEffect.archerSlots || 0} total`
+                                  : `+1 \u2192 ${nextEffect.garrisonCapacity || 0} armies`;
+
+                            // Subtitle for watch post
+                            const subtitle = building.id === 'watch_post'
+                              ? 'Garrison archers fire from walls during the siege phase'
+                              : undefined;
+
                             return (
-                              <div key={building.id} className="rounded-lg border border-slate-800 bg-slate-800 p-2">
-                                <div className="flex items-center gap-2">
-                                  <div className="min-w-0 flex-1">
-                                    <div className="flex items-baseline gap-1.5 flex-wrap">
-                                      <div className="text-sm font-semibold truncate">{building.name}</div>
-                                      <div className="text-[10px] px-1 py-0.5 rounded bg-slate-700">Lv {building.level}</div>
-                                      <div className="text-[10px] text-slate-400">
-                                        {building.id === 'watch_post'
-                                          ? `+${currentEffect.archerSlots || 0} Archer slots (max ${currentEffect.archerSlots || 0} archers shooting from walls)`
-                                          : building.id === 'garrison_hut'
-                                            ? `Garrison capacity: ${currentEffect.garrisonCapacity || 1} ${(currentEffect.garrisonCapacity || 1) === 1 ? 'army' : 'armies'}`
-                                            : building.description
-                                        }
-                                      </div>
+                              <div key={building.id} className={`rounded-lg border border-slate-700/60 bg-slate-800/80 border-l-4 ${accentColor} overflow-hidden`}>
+                                <div className="p-3">
+                                  {/* Header: Icon + Name + Level + Progress */}
+                                  <div className="flex items-center justify-between mb-2">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-lg">{icon}</span>
+                                      <span className="text-sm font-bold text-slate-100">{building.name}</span>
+                                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-700 text-slate-300 font-semibold">
+                                        Lv {building.level}
+                                      </span>
                                     </div>
-                                    {building.id === 'watch_post' && (
-                                      <div className="text-[10px] text-slate-500 mt-1" title="Watch Post: Allows up to X archers from the defending armies to fire from the walls during the first phase of the siege.">
-                                        Allows up to {currentEffect.archerSlots || 0} archers from defending armies to fire from walls during phase 1.
-                                      </div>
-                                    )}
-                                    {canUpgrade && nextEffect && (
-                                      <div className="text-[10px] text-slate-500 mt-1">
-                                        Next level: {
-                                          nextEffect.fortHP ? `+${nextEffect.fortHP - (currentEffect.fortHP || 0)} Fort HP` :
-                                            nextEffect.archerSlots ? `+${nextEffect.archerSlots - (currentEffect.archerSlots || 0)} Archer slots (max ${nextEffect.archerSlots} archers shooting from walls)` :
-                                              nextEffect.garrisonCapacity ? `Increase garrison to ${nextEffect.garrisonCapacity} armies` :
-                                                ''
-                                        }
-                                      </div>
-                                    )}
+                                    {/* Level progress: filled blocks */}
+                                    <div className="flex gap-0.5">
+                                      {Array.from({ length: building.maxLevel }).map((_, i) => (
+                                        <div
+                                          key={i}
+                                          className={`w-3 h-1.5 rounded-sm ${
+                                            i < building.level
+                                              ? isMaxed ? 'bg-amber-400' : 'bg-emerald-500'
+                                              : 'bg-slate-700'
+                                          }`}
+                                        />
+                                      ))}
+                                    </div>
                                   </div>
-                                  {canUpgrade && nextCost && (
-                                    <div className="text-right">
-                                      <div className="text-[10px] text-slate-500 mb-0.5">Cost: W {formatInt(nextCost.wood)} S {formatInt(nextCost.stone)}</div>
-                                      <button
-                                        className="px-2 py-1 rounded-lg text-xs bg-slate-900 text-white disabled:opacity-50"
-                                        onClick={() => {
-                                          if (!affordable) {
-                                            const missing: string[] = [];
-                                            if (!enoughWood) missing.push('Wood');
-                                            if (!enoughStone) missing.push('Stone');
-                                            if (missing.length > 0) onShowResourceError?.(`Not enough ${missing.join(', ')}`);
-                                            return;
-                                          }
-                                          onUpgradeFortressBuilding(exp.expeditionId, building.id);
-                                        }}
-                                        title={!affordable ? "Not enough resources" : `Upgrade to Lvl ${nextLevel}`}
-                                      >
-                                        Upgrade
-                                      </button>
+
+                                  {/* Current bonus */}
+                                  <div className="text-[11px] text-slate-300 mb-1">
+                                    <span className="text-slate-500 uppercase text-[9px] font-semibold tracking-wider mr-1.5">Current</span>
+                                    <span className="font-semibold text-slate-200">{currentText}</span>
+                                  </div>
+
+                                  {/* Subtitle (watch post only) */}
+                                  {subtitle && (
+                                    <div className="text-[10px] text-slate-500 italic mb-1">{subtitle}</div>
+                                  )}
+
+                                  {/* Next level + Cost + Button row */}
+                                  {canUpgrade && nextEffect && nextCost ? (
+                                    <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-700/50">
+                                      <div>
+                                        <div className="text-[10px] text-slate-400">
+                                          <span className="text-slate-500 uppercase text-[9px] font-semibold tracking-wider mr-1.5">Next</span>
+                                          <span className="text-emerald-400 font-semibold">{nextText}</span>
+                                        </div>
+                                      </div>
+                                      <div className="flex items-center gap-2.5">
+                                        <div className="flex items-center gap-2 text-[10px]">
+                                          <span className={enoughWood ? 'text-slate-300' : 'text-red-400 font-semibold'}>
+                                            🪵 {formatInt(nextCost.wood)}
+                                          </span>
+                                          <span className={enoughStone ? 'text-slate-300' : 'text-red-400 font-semibold'}>
+                                            🪨 {formatInt(nextCost.stone)}
+                                          </span>
+                                        </div>
+                                        <button
+                                          onClick={() => {
+                                            if (!affordable) {
+                                              const missing: string[] = [];
+                                              if (!enoughWood) missing.push('Wood');
+                                              if (!enoughStone) missing.push('Stone');
+                                              if (missing.length > 0) onShowResourceError?.(`Not enough ${missing.join(', ')}`);
+                                              return;
+                                            }
+                                            onUpgradeFortressBuilding(exp.expeditionId, building.id);
+                                          }}
+                                          className={`px-3 py-1.5 rounded text-xs font-bold transition-colors ${
+                                            affordable
+                                              ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                                              : 'bg-slate-700 text-slate-500 cursor-not-allowed'
+                                          }`}
+                                          title={!affordable ? 'Not enough resources' : `Upgrade to Level ${nextLevel}`}
+                                        >
+                                          Upgrade
+                                        </button>
+                                      </div>
                                     </div>
-                                  )}
-                                  {!canUpgrade && (
-                                    <div className="text-[10px] text-slate-500">Max Level</div>
-                                  )}
+                                  ) : isMaxed ? (
+                                    <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-700/50">
+                                      <div className="text-[10px] text-slate-500 italic">Fully upgraded</div>
+                                      <span className="text-[10px] px-2 py-1 rounded font-bold uppercase bg-amber-600/20 text-amber-400 border border-amber-500/40 tracking-wider">
+                                        MAX
+                                      </span>
+                                    </div>
+                                  ) : null}
                                 </div>
                               </div>
                             );

@@ -231,6 +231,12 @@ export type BattleResult = {
     AtoB: number;
     BtoA: number;
   }>;
+  /** If a withdraw group was used, tracks when it withdrew and its final state */
+  withdrawResult?: {
+    withdrawnAtTick: number | null;  // tick when group withdrew (null = fought to end)
+    initialTroops: number;
+    finalTroops: number;             // troops remaining when withdrew (or at battle end)
+  };
 };
 
 // ----------------------------------------------------------------------------

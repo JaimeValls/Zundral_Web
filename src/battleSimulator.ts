@@ -294,6 +294,16 @@ export type BattleStance = {
  * @param flanking      Flanking context (morale penalties for being flanked).
  * @param stance        Defend stance: defending side never routs, fights to last_stand.
  */
+/**
+ * WithdrawGroup — a sub-group of the defender side (A) with independent morale.
+ * When this group's morale breaks, its troops are removed from the fight mid-battle.
+ * The main defender group (garrison) continues fighting to the death.
+ */
+export type WithdrawGroup = {
+  div: Division;       // troop composition (subset that will be added to side A)
+  moralePer100: number; // morale stat per 100 troops for this group
+};
+
 export function simulateBattle(
   playerDiv: Division,
   enemyDiv: Division,
@@ -303,12 +313,37 @@ export function simulateBattle(
   flanking?: FlankingContext,
   stance?: BattleStance,
   terrain?: TerrainModifier,
+  withdrawGroup?: WithdrawGroup,
 ): BattleResult {
   // Deep copy divisions so originals are not mutated
   const A: Division = {};
   const B: Division = {};
   for (const key in playerDiv) A[key as UnitType] = playerDiv[key as UnitType];
   for (const key in enemyDiv) B[key as UnitType] = enemyDiv[key as UnitType];
+
+  // Add withdraw group troops to side A (they fight together but have separate morale)
+  let wgActive = false;
+  let wgTroopsInitial = 0;
+  let wgMorale = 0;
+  let wgMorale0 = 0;
+  let wgBreakThreshold = 0;
+  let wgWithdrawnAtTick: number | null = null;
+  let wgTroopsAtWithdraw = 0;
+  const wgDiv: Division = {}; // tracks withdraw group's current troops separately
+
+  if (withdrawGroup) {
+    wgActive = true;
+    for (const key in withdrawGroup.div) {
+      const ut = key as UnitType;
+      const count = withdrawGroup.div[ut] || 0;
+      A[ut] = (A[ut] || 0) + count;
+      wgDiv[ut] = count;
+      wgTroopsInitial += count;
+    }
+    wgMorale = (wgTroopsInitial / 100) * withdrawGroup.moralePer100;
+    wgMorale0 = wgMorale;
+    wgBreakThreshold = (params.break_pct || 20) / 100 * wgMorale0;
+  }
 
   // Capture initial states (warrior/archer totals for BattleResult backward-compat shape)
   const playerInitialWA = getWarriorArcherTotals(A);
@@ -358,6 +393,37 @@ export function simulateBattle(
     applyCasualties(B, lossB);
     mB -= params.morale_per_casualty * lossB + params.advantage_morale_tick * Math.max(0, rA - 1);
     mA -= params.morale_per_casualty * lossA + params.advantage_morale_tick * Math.max(0, rB - 1);
+
+    // Update withdraw group morale (proportional to losses taken by side A)
+    if (wgActive && wgWithdrawnAtTick === null) {
+      const wgTotalNow = total(wgDiv);
+      if (wgTotalNow > 0) {
+        // Withdraw group takes proportional casualties from side A losses
+        const aTotal = total(A);
+        const wgShare = aTotal > 0 ? wgTotalNow / (aTotal + lossA) : 0;
+        const wgLoss = lossA * wgShare;
+        applyCasualties(wgDiv, wgLoss);
+        // Withdraw group morale drops proportionally
+        wgMorale -= params.morale_per_casualty * wgLoss + params.advantage_morale_tick * Math.max(0, rB - 1) * 0.5;
+
+        // Check if withdraw group morale breaks
+        if (wgMorale <= wgBreakThreshold) {
+          wgWithdrawnAtTick = tick + 1;
+          wgTroopsAtWithdraw = total(wgDiv);
+          // Remove withdraw group troops from side A
+          for (const key in wgDiv) {
+            const ut = key as UnitType;
+            const remaining = wgDiv[ut] || 0;
+            if (remaining > 0 && A[ut]) {
+              A[ut] = Math.max(0, (A[ut] || 0) - remaining);
+            }
+            wgDiv[ut] = 0;
+          }
+          wgActive = false;
+        }
+      }
+    }
+
     tick++;
     tl.push({
       tick,
@@ -470,5 +536,10 @@ export function simulateBattle(
     enemyInitial,
     enemyFinal: { warrior: enemyFinalWA.warrior, archer: enemyFinalWA.archer, total: sB, morale: mB },
     timeline: tl,
+    withdrawResult: withdrawGroup ? {
+      withdrawnAtTick: wgWithdrawnAtTick,
+      initialTroops: wgTroopsInitial,
+      finalTroops: wgWithdrawnAtTick !== null ? wgTroopsAtWithdraw : total(wgDiv),
+    } : undefined,
   };
 }
