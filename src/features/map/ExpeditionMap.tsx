@@ -355,6 +355,25 @@ const MapView: React.FC<MapViewProps> = ({
     return set;
   }, [marchingEnemies, revealedProvinces]);
 
+  // Split valid move provinces into safe (green) and combat (orange)
+  const combatMoveProvinces = useMemo(() => {
+    if (validMoveProvinces.size === 0) return new Set<string>();
+    const combat = new Set<string>();
+    for (const provId of validMoveProvinces) {
+      if (enemyProvinces.has(provId)) combat.add(provId);
+    }
+    return combat;
+  }, [validMoveProvinces, enemyProvinces]);
+
+  const safeMoveProvinces = useMemo(() => {
+    if (validMoveProvinces.size === 0) return new Set<string>();
+    const safe = new Set<string>();
+    for (const provId of validMoveProvinces) {
+      if (!combatMoveProvinces.has(provId)) safe.add(provId);
+    }
+    return safe;
+  }, [validMoveProvinces, combatMoveProvinces]);
+
   // Battle provinces (amber highlights for provinces where battles occurred this turn)
   const battleProvinceSet = useMemo(() => {
     const provs = expedition.mapState?.battleProvinces;
@@ -401,7 +420,8 @@ const MapView: React.FC<MapViewProps> = ({
     revealedProvinces: cheatFogEnabled ? revealedProvinces : undefined,
     fortressProvinceId: expedition.mapState?.fortressProvinceId,
     deployableProvinces: validDeployProvinces.size > 0 ? validDeployProvinces : undefined,
-    moveTargetProvinces: validMoveProvinces.size > 0 ? validMoveProvinces : undefined,
+    moveTargetProvinces: safeMoveProvinces.size > 0 ? safeMoveProvinces : undefined,
+    combatMoveProvinces: combatMoveProvinces.size > 0 ? combatMoveProvinces : undefined,
     pendingMoveArrows: pendingMoveArrows.length > 0 ? pendingMoveArrows : undefined,
     enemyProvinces: enemyProvinces.size > 0 ? enemyProvinces : undefined,
     enemyMoveArrows: enemyMoveArrows.length > 0 ? enemyMoveArrows : undefined,
@@ -736,6 +756,41 @@ const MapView: React.FC<MapViewProps> = ({
           />
         ))}
 
+        {/* On-map stack tooltips: always visible for provinces with 2+ allied armies */}
+        {expedition.mapState && (() => {
+          const positions = expedition.mapState!.armyPositions;
+          // Group armies by province
+          const provStacks = new Map<string, Array<{ id: number; troops: number }>>();
+          for (const [bidStr, provId] of Object.entries(positions)) {
+            const b = banners.find(bn => bn.id === Number(bidStr));
+            if (!b || b.status === 'destroyed') continue;
+            const t = b.squads.reduce((s, sq) => s + sq.currentSize, 0);
+            if (t <= 0) continue;
+            if (!provStacks.has(provId)) provStacks.set(provId, []);
+            provStacks.get(provId)!.push({ id: b.id, troops: t });
+          }
+          return Array.from(provStacks.entries()).map(([provId, stack]) => {
+            if (stack.length < 2) return null;
+            const prov = assets.provinceById.get(provId);
+            if (!prov) return null;
+            const [sx, sy] = mapToScreen(prov.center[0], prov.center[1], view);
+            const totalTroops = stack.reduce((s, b) => s + b.troops, 0);
+            return (
+              <div
+                key={`stack_${provId}`}
+                className="absolute pointer-events-none"
+                style={{ left: sx, top: sy + 46, transform: 'translateX(-50%)', zIndex: 36 }}
+              >
+                <div className="bg-slate-950/90 border border-amber-600/50 rounded px-2 py-1 text-center backdrop-blur-sm shadow-lg shadow-black/40">
+                  <div className="text-[10px] font-bold text-amber-300">
+                    ⚔ {stack.length} Armies · {totalTroops} Troops
+                  </div>
+                </div>
+              </div>
+            );
+          });
+        })()}
+
         {/* Enemy army markers (red hostile) */}
         {enemyMarkers.map(m => (
           <ArmyMarker
@@ -851,11 +906,15 @@ const MapView: React.FC<MapViewProps> = ({
 
               {orderMode === 'selectingMoveTarget' ? (
                 <div className="space-y-1.5">
-                  <div className="text-sm text-blue-300 mb-2">
+                  <div className="text-sm text-emerald-300 mb-2">
                     Select destination province
                   </div>
-                  <div className="text-xs text-slate-500 mb-2">
-                    ➡️ Click a blue highlighted province
+                  <div className="text-xs text-slate-400 mb-1">
+                    Click a highlighted province to move there
+                  </div>
+                  <div className="flex items-center gap-2 text-[9px] text-slate-500 mb-2">
+                    <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-emerald-500/60 border border-emerald-400/40" /> Safe</span>
+                    <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-orange-500/60 border border-orange-400/40" /> Combat</span>
                   </div>
                   <button
                     onClick={() => setOrderMode('idle')}
@@ -1145,7 +1204,7 @@ const MapView: React.FC<MapViewProps> = ({
                           }`}
                           onClick={() => {
                             setOrderingBannerId(isSelected ? null : bid);
-                            setOrderMode(isSelected ? 'idle' : 'selectingMoveTarget');
+                            setOrderMode('idle');
                           }}
                         >
                           {/* Row 1: Status dot + Name + Troops + Recruit icon */}
@@ -1347,20 +1406,20 @@ const MapView: React.FC<MapViewProps> = ({
           // Theme
           const icon = isVictory ? '⚔️' : isDefeat ? '💀' : '⚖️';
           const title = isVictory ? 'V I C T O R Y' : isDefeat ? 'D E F E A T' : 'S T A L E M A T E';
-          const titleColor = isVictory ? 'text-amber-400' : isDefeat ? 'text-red-400' : 'text-amber-500';
-          const borderColor = isVictory ? 'border-amber-500/70' : isDefeat ? 'border-red-600/70' : 'border-amber-600/70';
+          const titleColor = isVictory ? 'text-emerald-400' : isDefeat ? 'text-red-400' : 'text-amber-500';
+          const borderColor = isVictory ? 'border-emerald-500/70' : isDefeat ? 'border-red-600/70' : 'border-amber-600/70';
           const bgGradient = isVictory
             ? 'bg-gradient-to-b from-emerald-950/95 via-slate-900/95 to-slate-900/95'
             : isDefeat
             ? 'bg-gradient-to-b from-red-950/95 via-slate-900/95 to-slate-900/95'
             : 'bg-gradient-to-b from-amber-950/95 via-slate-900/95 to-slate-900/95';
           const btnClass = isVictory
-            ? 'bg-amber-600 hover:bg-amber-500 text-amber-950 border-amber-400/50'
+            ? 'bg-emerald-600 hover:bg-emerald-500 text-emerald-950 border-emerald-400/50'
             : isDefeat
             ? 'bg-red-700 hover:bg-red-600 text-red-100 border-red-500/50'
             : 'bg-amber-700 hover:bg-amber-600 text-amber-100 border-amber-500/50';
           const shadowStyle = isVictory
-            ? { boxShadow: '0 0 40px rgba(234,179,8,0.3)' }
+            ? { boxShadow: '0 0 40px rgba(16,185,129,0.3)' }
             : isDefeat
             ? { boxShadow: '0 0 40px rgba(239,68,68,0.3)' }
             : { boxShadow: '0 0 30px rgba(245,158,11,0.2)' };

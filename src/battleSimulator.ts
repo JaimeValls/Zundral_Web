@@ -27,6 +27,7 @@ export type UnitStats = Record<UnitType, UnitStat>;
 /** Tunable parameters that control battle dynamics. */
 export type BattleParams = {
   skirmish_ticks: number;
+  min_skirmish_ticks: number;
   pursuit_ticks: number;
   base_casualty_rate: number;
   morale_per_casualty: number;
@@ -127,6 +128,7 @@ export function getDefaultUnitStats(): UnitStats {
 export function getDefaultBattleParams(): BattleParams {
   return {
     skirmish_ticks: 30,
+    min_skirmish_ticks: 3,
     pursuit_ticks: 20,
     base_casualty_rate: 0.6,
     morale_per_casualty: 0.8,
@@ -342,9 +344,11 @@ export function simulateBattle(
     });
   }
 
-  // Skirmish phase
+  // Skirmish phase (minimum duration enforced if either side has skirmish-capable troops)
+  const minSkirmish = params.min_skirmish_ticks || 0;
   for (let i = 0; i < params.skirmish_ticks; i++) {
-    if (total(A) <= 0 || total(B) <= 0 || mA <= tA || mB <= tB) break;
+    if (total(A) <= 0 || total(B) <= 0) break; // hard stop: one side eliminated
+    if (i >= minSkirmish && (mA <= tA || mB <= tB)) break; // morale break only after minimum
     step('skirmish');
   }
 

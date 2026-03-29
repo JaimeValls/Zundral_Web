@@ -349,12 +349,15 @@ export type SiegeGarrisonArmy = {
   finalTroops: number;
 };
 
+export type BattleRole = 'primary_attacker' | 'flank_attacker' | 'defender' | 'reinforcement';
+
 export type FieldBattlePlayerArmy = {
   bannerId: number;
   bannerName: string;
   initialTroops: number;
   finalTroops: number;
   composition: BattleSquadEntry[];
+  role?: BattleRole;
 };
 
 export type FieldBattleEnemyArmy = {
@@ -363,6 +366,7 @@ export type FieldBattleEnemyArmy = {
   initialTroops: number;
   finalTroops: number;
   composition: BattleSquadEntry[];
+  role?: BattleRole;
 };
 
 export type FieldBattleResult = {
@@ -386,6 +390,10 @@ export type FieldBattleResult = {
   stance?: {
     playerDefending?: boolean;
     enemyDefending?: boolean;
+  };
+  roles?: {
+    playerRoles: Record<number, BattleRole>;
+    enemyRoles: Record<number, BattleRole>;
   };
 };
 

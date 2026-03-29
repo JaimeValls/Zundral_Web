@@ -15,7 +15,7 @@ import type {
   FortressBuilding, FortressStats, SiegeRound, InnerBattleStep, SiegeBattleResult, BattleSquadEntry, FieldBattleResult, Expedition, EnemyArmy,
   TownHallLevel, TownHallState,
   TrainingEntry, BarracksState, TavernState, MilitaryAcademyState,
-  ArmyOrder,
+  ArmyOrder, BattleRole,
 } from './types';
 import type { ProvinceData } from './types';
 import { findPath } from './features/map/mapUtils';
@@ -2638,6 +2638,160 @@ export default function ResourceVillageUI() {
       }));
   }
 
+  // ── Battle Role Classification ──────────────────────────────────────
+  const WEAK_FLANK_THRESHOLD = 0.25; // flank < 25% of opposing total = weak flank
+
+  function getBannerTroopCount(banner: Banner): number {
+    return (banner.squads || []).reduce((sum, sq) => sum + sq.currentSize, 0);
+  }
+
+  /**
+   * classifyBattleRoles — Assigns a BattleRole to each army in a province conflict.
+   *
+   * Role = who initiated the engagement (attacker vs defender), NOT stance.
+   * - Armies already at the province are DEFENDERS.
+   * - Armies moving into the province are ATTACKERS.
+   * - Among attackers: largest = primary_attacker, others from different origins = flank_attacker,
+   *   same origin = reinforcement.
+   * - Armies moving in to join an allied side that's already defending = reinforcement.
+   * - If both sides are moving in (head-on collision), both sides are attackers.
+   */
+  function classifyBattleRoles(
+    conflict: ProvinceConflict,
+    currentPositions: Record<number, string>,
+    pendingOrders: Record<number, ArmyOrder>,
+    allBanners: Banner[],
+    allEnemies: EnemyArmy[],
+  ): { playerRoles: Record<number, BattleRole>; enemyRoles: Record<number, BattleRole> } {
+    const playerRoles: Record<number, BattleRole> = {};
+    const enemyRoles: Record<number, BattleRole> = {};
+
+    // ── Partition each side into stationary vs moving ──
+    const stationaryPlayers: number[] = [];
+    const movingPlayers: Array<{ id: number; troops: number; origin: string }> = [];
+
+    for (const bid of conflict.playerBannerIds) {
+      const currentPos = currentPositions[bid];
+      const order = pendingOrders[bid];
+      const isMovingHere = order?.type === 'move' && order.targetProvinceId === conflict.provinceId;
+      const isAlreadyHere = currentPos === conflict.provinceId;
+
+      if (isAlreadyHere && !isMovingHere) {
+        stationaryPlayers.push(bid);
+      } else {
+        const banner = allBanners.find(b => b.id === bid);
+        const troops = banner ? getBannerTroopCount(banner) : 0;
+        movingPlayers.push({ id: bid, troops, origin: conflict.playerOrigins[bid] || conflict.provinceId });
+      }
+    }
+
+    const stationaryEnemies: number[] = [];
+    const movingEnemies: Array<{ id: number; troops: number; origin: string }> = [];
+
+    for (const eid of conflict.enemyIds) {
+      const enemy = allEnemies.find(e => e.id === eid);
+      if (!enemy) continue;
+      const origin = conflict.enemyOrigins[eid] || conflict.provinceId;
+      const isMovingHere = origin !== conflict.provinceId;
+
+      if (!isMovingHere) {
+        stationaryEnemies.push(eid);
+      } else {
+        movingEnemies.push({ id: eid, troops: enemy.totalTroops, origin });
+      }
+    }
+
+    // ── Helper: assign attacker roles to a list of moving armies ──
+    function assignAttackerRoles(
+      movers: Array<{ id: number; troops: number; origin: string }>,
+      rolesMap: Record<number, BattleRole>,
+    ) {
+      if (movers.length === 0) return;
+      movers.sort((a, b) => b.troops - a.troops);
+      const primaryOrigin = movers[0].origin;
+      rolesMap[movers[0].id] = 'primary_attacker';
+      for (let i = 1; i < movers.length; i++) {
+        rolesMap[movers[i].id] = movers[i].origin !== primaryOrigin ? 'flank_attacker' : 'reinforcement';
+      }
+    }
+
+    // ── Determine roles based on who is moving vs stationary ──
+    const playerHasStationary = stationaryPlayers.length > 0;
+
+    // Player side
+    if (playerHasStationary) {
+      // Player has armies already here → they are defenders
+      for (const bid of stationaryPlayers) playerRoles[bid] = 'defender';
+      // Any player movers joining them = reinforcement
+      for (const m of movingPlayers) playerRoles[m.id] = 'reinforcement';
+    } else {
+      // All player armies are moving in → they are the attacking side
+      assignAttackerRoles(movingPlayers, playerRoles);
+    }
+
+    // Enemy side — enemies are always attackers (they are the invading force).
+    // Even if "stationary" at the conflict province (arrived on a previous turn),
+    // they are still attacking the player's position.
+    const allEnemyForRoles = [...movingEnemies, ...stationaryEnemies.map(eid => {
+      const enemy = allEnemies.find(e => e.id === eid);
+      return { id: eid, troops: enemy?.totalTroops || 0, origin: conflict.enemyOrigins[eid] || conflict.provinceId };
+    })];
+    assignAttackerRoles(allEnemyForRoles, enemyRoles);
+
+    return { playerRoles, enemyRoles };
+  }
+
+  /**
+   * resolveWeakFlanks — Identifies and auto-resolves flank attackers that are too weak
+   * to meaningfully affect the battle. Returns weak flank IDs that should be excluded
+   * from the main battle, and the auto-resolved mini-battle results.
+   */
+  function resolveWeakFlanks(
+    conflict: ProvinceConflict,
+    playerRoles: Record<number, BattleRole>,
+    enemyRoles: Record<number, BattleRole>,
+    allBanners: Banner[],
+    allEnemies: EnemyArmy[],
+  ): { weakPlayerIds: Set<number>; weakEnemyIds: Set<number> } {
+    const weakPlayerIds = new Set<number>();
+    const weakEnemyIds = new Set<number>();
+
+    // Total troops for each side
+    const totalPlayerTroops = conflict.playerBannerIds.reduce((sum, bid) => {
+      const b = allBanners.find(bn => bn.id === bid);
+      return sum + (b ? getBannerTroopCount(b) : 0);
+    }, 0);
+    const totalEnemyTroops = conflict.enemyIds.reduce((sum, eid) => {
+      const e = allEnemies.find(en => en.id === eid);
+      return sum + (e ? e.totalTroops : 0);
+    }, 0);
+
+    // Check player flankers against enemy total
+    for (const bid of conflict.playerBannerIds) {
+      const role = playerRoles[bid];
+      if (role !== 'flank_attacker') continue;
+      const b = allBanners.find(bn => bn.id === bid);
+      if (!b) continue;
+      const troops = getBannerTroopCount(b);
+      if (totalEnemyTroops > 0 && troops / totalEnemyTroops < WEAK_FLANK_THRESHOLD) {
+        weakPlayerIds.add(bid);
+      }
+    }
+
+    // Check enemy flankers against player total
+    for (const eid of conflict.enemyIds) {
+      const role = enemyRoles[eid];
+      if (role !== 'flank_attacker') continue;
+      const e = allEnemies.find(en => en.id === eid);
+      if (!e) continue;
+      if (totalPlayerTroops > 0 && e.totalTroops / totalPlayerTroops < WEAK_FLANK_THRESHOLD) {
+        weakEnemyIds.add(eid);
+      }
+    }
+
+    return { weakPlayerIds, weakEnemyIds };
+  }
+
   function runFieldBattle(
     banner: Banner,
     enemy: EnemyArmy,
@@ -2664,12 +2818,17 @@ export default function ResourceVillageUI() {
       }
     }
 
-    // Classify enemy troops
+    // Classify enemy troops (use totalTroops as authoritative cap)
     let enemyWarriors = 0;
     let enemyArchers = 0;
     const enemyComp: BattleSquadEntry[] = [];
+    const squadBasedTotalSingle = (enemy.squads || []).reduce((sum, sq) => sum + sq.count * 10, 0);
+    const actualTotalSingle = Math.min(squadBasedTotalSingle, enemy.totalTroops);
+    let troopsRemainingSingle = actualTotalSingle;
     for (const sq of enemy.squads || []) {
-      const troopCount = sq.count * 10;
+      const rawCount = sq.count * 10;
+      const troopCount = Math.min(rawCount, troopsRemainingSingle);
+      troopsRemainingSingle -= troopCount;
       const entry = buildSquadEntry(sq.type, troopCount);
       enemyComp.push(entry);
       const cat = unitCategory[sq.type as UnitType] || 'infantry';
@@ -2689,8 +2848,13 @@ export default function ResourceVillageUI() {
       playerDiv[sq.type] = (playerDiv[sq.type] || 0) + sq.currentSize;
     }
     const enemyDiv: Record<string, number> = {};
+    // Use totalTroops-capped values for division
+    let divRemaining = actualTotalSingle;
     for (const sq of enemy.squads || []) {
-      enemyDiv[sq.type] = (enemyDiv[sq.type] || 0) + (sq.count * 10);
+      const raw = sq.count * 10;
+      const capped = Math.min(raw, divRemaining);
+      divRemaining -= capped;
+      enemyDiv[sq.type] = (enemyDiv[sq.type] || 0) + capped;
     }
 
     // Run full battle with morale tracking and pursuit phase
@@ -2781,6 +2945,9 @@ export default function ResourceVillageUI() {
     playerOrigins?: Record<number, string>,
     enemyOrigins?: Record<number, string>,
     pendingOrders?: Record<number, import('./types').ArmyOrder>,
+    playerRoles?: Record<number, BattleRole>,
+    enemyRoles?: Record<number, BattleRole>,
+    fortressProvinceId?: string,
   ): FieldBattleResult {
     const stats = unitStats;
     const p = battleParams;
@@ -2816,17 +2983,31 @@ export default function ResourceVillageUI() {
     for (const enemy of enemyForces) {
       let eWarr = 0, eArch = 0;
       const eComp: BattleSquadEntry[] = [];
+      const SQUAD_SIZE = 10;
+      // Use totalTroops as the authoritative cap (squads may over-count due to rounding)
+      const squadBasedTotal = (enemy.squads || []).reduce((sum, sq) => sum + sq.count * SQUAD_SIZE, 0);
+      const actualTotal = Math.min(squadBasedTotal, enemy.totalTroops);
+      let troopsRemaining = actualTotal;
+
       for (const sq of enemy.squads || []) {
-        const SQUAD_SIZE = 10;
-        // Expand each squad type into individual squad-of-10 entries
-        for (let i = 0; i < sq.count; i++) {
+        // Cap this squad type's troops to not exceed totalTroops
+        const rawTroopCount = sq.count * SQUAD_SIZE;
+        const cappedTroopCount = Math.min(rawTroopCount, troopsRemaining);
+        troopsRemaining -= cappedTroopCount;
+        const fullSquads = Math.floor(cappedTroopCount / SQUAD_SIZE);
+        const partialSize = cappedTroopCount % SQUAD_SIZE;
+
+        for (let i = 0; i < fullSquads; i++) {
           eComp.push(buildSquadEntry(sq.type, SQUAD_SIZE));
         }
-        const troopCount = sq.count * SQUAD_SIZE;
+        if (partialSize > 0) {
+          eComp.push(buildSquadEntry(sq.type, partialSize));
+        }
+
         if ((unitCategory[sq.type as UnitType] || 'infantry') === 'ranged_infantry') {
-          eArch += troopCount;
+          eArch += cappedTroopCount;
         } else {
-          eWarr += troopCount;
+          eWarr += cappedTroopCount;
         }
       }
       totalEnemyWarriors += eWarr;
@@ -2860,8 +3041,9 @@ export default function ResourceVillageUI() {
     };
     const hasFlank = flankingCtx.playerFlanking > 0 || flankingCtx.enemyFlanking > 0;
 
-    // Detect defend stance from pending orders
-    const playerDefending = playerBanners.some(b => pendingOrders?.[b.id]?.type === 'defend');
+    // Detect defend stance: explicit Defend order OR stationed at fortress (fortress = auto-defend)
+    const atFortress = fortressProvinceId != null && provinceId === fortressProvinceId;
+    const playerDefending = atFortress || playerBanners.some(b => pendingOrders?.[b.id]?.type === 'defend');
     const stanceCtx: import('./battleSimulator').BattleStance | undefined =
       playerDefending ? { playerDefending: true } : undefined;
 
@@ -2877,19 +3059,43 @@ export default function ResourceVillageUI() {
       : battleResult.winner === 'enemy' ? 'enemy_wins'
       : 'draw';
 
-    // Distribute casualties proportionally within a composition
+    // Distribute casualties proportionally within a composition using running-error accumulator
+    // to prevent small losses from rounding to 0 across all squads
     function distributeCasualties(comp: BattleSquadEntry[], totalLost: number, warriors: number, archers: number, total: number) {
       if (totalLost <= 0 || total <= 0) return;
       const meleeLost = warriors > 0 ? Math.round(totalLost * (warriors / total)) : 0;
       const rangedLost = totalLost - meleeLost;
-      for (const entry of comp) {
-        const roleLost = entry.role === 'melee' ? meleeLost : rangedLost;
-        const roleTotal = entry.role === 'melee' ? warriors : archers;
+
+      // Distribute within each role using running-error accumulator
+      for (const roleName of ['melee', 'ranged'] as const) {
+        const roleLost = roleName === 'melee' ? meleeLost : rangedLost;
+        const roleTotal = roleName === 'melee' ? warriors : archers;
         if (roleLost <= 0 || roleTotal <= 0) continue;
-        const proportion = entry.initial / roleTotal;
-        const loss = Math.min(entry.initial, Math.round(roleLost * proportion));
-        entry.lost = loss;
-        entry.final = entry.initial - loss;
+        const roleEntries = comp.filter(e => e.role === roleName);
+        let remaining = roleLost;
+        let error = 0;
+        for (const entry of roleEntries) {
+          if (remaining <= 0) break;
+          const exact = (entry.initial / roleTotal) * roleLost + error;
+          const rounded = Math.round(exact);
+          const clamped = Math.min(rounded, entry.initial, remaining);
+          entry.lost = clamped;
+          entry.final = entry.initial - clamped;
+          remaining -= clamped;
+          error = exact - clamped;
+        }
+        // Distribute any remainder to squads that still have troops
+        if (remaining > 0) {
+          for (const entry of roleEntries) {
+            if (remaining <= 0) break;
+            const canLose = entry.final;
+            if (canLose <= 0) continue;
+            const take = Math.min(remaining, canLose);
+            entry.lost += take;
+            entry.final -= take;
+            remaining -= take;
+          }
+        }
       }
     }
 
@@ -2907,6 +3113,7 @@ export default function ResourceVillageUI() {
         initialTroops: pb.total,
         finalTroops: Math.round(bannerFinal),
         composition: pb.comp,
+        role: playerRoles?.[pb.banner.id],
       });
     }
 
@@ -2924,6 +3131,7 @@ export default function ResourceVillageUI() {
         initialTroops: pe.total,
         finalTroops: Math.round(eFinal),
         composition: pe.comp,
+        role: enemyRoles?.[pe.enemy.id],
       });
     }
 
@@ -2977,6 +3185,10 @@ export default function ResourceVillageUI() {
       battleTakeaway,
       flanking: hasFlank ? { playerFlanking: flankingCtx.playerFlanking, enemyFlanking: flankingCtx.enemyFlanking } : undefined,
       stance: stanceCtx ? { playerDefending: stanceCtx.playerDefending, enemyDefending: stanceCtx.enemyDefending } : undefined,
+      roles: (playerRoles || enemyRoles) ? {
+        playerRoles: playerRoles || {},
+        enemyRoles: enemyRoles || {},
+      } : undefined,
     };
   }
 
@@ -7414,8 +7626,37 @@ Safe recruits (unassigned people): ${freePop}`;
 
                 // ── Phase 1: Detect province conflicts (multi-army) ──
                 const provinceConflicts = detectProvinceConflicts(currentPositions, playerDests, currentEnemies, enemyDests);
-                const battlePlayerIds = new Set(provinceConflicts.flatMap(c => c.playerBannerIds));
-                const battleEnemyIds = new Set(provinceConflicts.flatMap(c => c.enemyIds));
+
+                // Classify battle roles and resolve weak flanks for each conflict
+                const conflictRoles: Array<{ playerRoles: Record<number, BattleRole>; enemyRoles: Record<number, BattleRole> }> = [];
+                const weakFlankPlayerIds = new Set<number>();
+                const weakFlankEnemyIds = new Set<number>();
+
+                for (const conflict of provinceConflicts) {
+                  const roles = classifyBattleRoles(conflict, currentPositions, exp.mapState.pendingOrders, banners, currentEnemies);
+                  const weak = resolveWeakFlanks(conflict, roles.playerRoles, roles.enemyRoles, banners, currentEnemies);
+                  // Remove weak flankers from this conflict's roles (they won't participate in main battle)
+                  for (const wid of weak.weakPlayerIds) {
+                    weakFlankPlayerIds.add(wid);
+                    delete roles.playerRoles[wid];
+                  }
+                  for (const wid of weak.weakEnemyIds) {
+                    weakFlankEnemyIds.add(wid);
+                    delete roles.enemyRoles[wid];
+                  }
+                  conflictRoles.push(roles);
+                }
+
+                // Exclude fortress conflicts from Phase 2 — Phase 4 handles siege mechanics
+                const nonFortressConflicts = provinceConflicts.filter(c => c.provinceId !== fortId);
+                const battlePlayerIds = new Set(nonFortressConflicts.flatMap(c => c.playerBannerIds));
+                const battleEnemyIds = new Set(nonFortressConflicts.flatMap(c => c.enemyIds));
+                // Weak flankers should NOT pin the main army — remove them from battle tracking
+                for (const wid of weakFlankPlayerIds) battlePlayerIds.delete(wid);
+                for (const wid of weakFlankEnemyIds) battleEnemyIds.delete(wid);
+
+                // Track battle outcomes per conflict for role-aware Phase 3 movement
+                const conflictOutcomes = new Map<string, FieldBattleResult['outcome']>();
 
                 // ── Event log accumulator ──
                 const newLogEntries: import('./types').ExpeditionLogEntry[] = [];
@@ -7429,8 +7670,18 @@ Safe recruits (unassigned people): ${freePop}`;
 
                 for (let bi = 0; bi < provinceConflicts.length; bi++) {
                   const conflict = provinceConflicts[bi];
-                  const playerBanners = conflict.playerBannerIds.map(id => banners.find(b => b.id === id)).filter((b): b is Banner => !!b);
-                  const enemyForces = conflict.enemyIds.map(id => updatedEnemies.find(e => e.id === id && e.status === 'marching')).filter((e): e is EnemyArmy => !!e);
+
+                  // Skip fortress conflicts — Phase 4 handles siege mechanics (walls, towers, garrison)
+                  if (conflict.provinceId === fortId) continue;
+
+                  const roles = conflictRoles[bi];
+                  // Filter out weak flankers from participants
+                  const playerBanners = conflict.playerBannerIds
+                    .filter(id => !weakFlankPlayerIds.has(id))
+                    .map(id => banners.find(b => b.id === id)).filter((b): b is Banner => !!b);
+                  const enemyForces = conflict.enemyIds
+                    .filter(id => !weakFlankEnemyIds.has(id))
+                    .map(id => updatedEnemies.find(e => e.id === id && e.status === 'marching')).filter((e): e is EnemyArmy => !!e);
 
                   if (playerBanners.length === 0 || enemyForces.length === 0) continue;
 
@@ -7439,9 +7690,10 @@ Safe recruits (unassigned people): ${freePop}`;
                   dbg.log(`[FIELD] Battle at ${conflict.provinceId}: [${playerNames}] vs [${enemyNames}]`);
 
                   try {
-                    const result = runMergedBattle(playerBanners, enemyForces, conflict.provinceId, newTurnNumber, bi, conflict.playerOrigins, conflict.enemyOrigins, exp.mapState.pendingOrders);
+                    const result = runMergedBattle(playerBanners, enemyForces, conflict.provinceId, newTurnNumber, bi, conflict.playerOrigins, conflict.enemyOrigins, exp.mapState.pendingOrders, roles.playerRoles, roles.enemyRoles, fortId);
                     newFieldBattles.push(result);
                     battleProvs.push(conflict.provinceId);
+                    conflictOutcomes.set(conflict.provinceId, result.outcome);
 
                     // Log: battle resolved
                     const outcomeLabel = result.outcome === 'player_wins' ? 'Victory' : result.outcome === 'enemy_wins' ? 'Defeat' : 'Draw';
@@ -7482,15 +7734,18 @@ Safe recruits (unassigned people): ${freePop}`;
                             fieldBattleId: result.id,
                           };
                         }
-                        // Survived: scale troops by ratio
+                        // Survived: set exact totalTroops and scale squads by ratio
                         const origEnemy = enemyForces.find(ef => ef.id === e.id);
                         if (!origEnemy) return e;
                         const ratio = origEnemy.totalTroops > 0 ? eResult.finalTroops / origEnemy.totalTroops : 0;
+                        // Defeated enemies retreat to their origin province; winners/draws stay
+                        const enemyDefeated = result.outcome === 'player_wins';
+                        const retreatProvince = conflict.enemyOrigins[e.id] || origEnemy.provinceId;
                         return {
                           ...e,
                           totalTroops: Math.round(eResult.finalTroops),
                           squads: e.squads.map(sq => ({ ...sq, count: Math.max(0, Math.round(sq.count * ratio)) })),
-                          provinceId: conflict.provinceId,
+                          provinceId: enemyDefeated ? retreatProvince : conflict.provinceId,
                         };
                       });
                     }
@@ -7533,18 +7788,37 @@ Safe recruits (unassigned people): ${freePop}`;
                   }
                 }
 
-                // ── Phase 3: Apply movement for non-combatants ──
+                // ── Phase 3: Apply movement — role-aware (flanking winners preserve orders) ──
                 const newPositions: Record<number, string> = {};
+                const preservedOrders: Record<number, ArmyOrder> = {};
                 for (const [bidStr, pos] of Object.entries(currentPositions)) {
                   const bid = Number(bidStr);
                   if (destroyedPlayerIds.has(bid)) continue; // destroyed, remove from map
 
                   if (battlePlayerIds.has(bid)) {
-                    // Fought a battle — stay at battle province
+                    // Fought a battle — position at battle province
                     const conflict = provinceConflicts.find(c => c.playerBannerIds.includes(bid));
-                    newPositions[bid] = conflict?.provinceId || pos;
+                    const conflictIdx = conflict ? provinceConflicts.indexOf(conflict) : -1;
+                    const battleProvince = conflict?.provinceId || pos;
+                    newPositions[bid] = battleProvince;
+
+                    // Role-aware order preservation: flanking/reinforcing winners keep their original order
+                    if (conflict && conflictIdx >= 0) {
+                      const outcome = conflictOutcomes.get(conflict.provinceId);
+                      const role = conflictRoles[conflictIdx]?.playerRoles[bid];
+                      const isWinner = outcome === 'player_wins';
+                      const isFlankerOrReinforcement = role === 'flank_attacker' || role === 'reinforcement';
+
+                      if (isWinner && isFlankerOrReinforcement) {
+                        // Preserve original move order so army auto-continues next turn
+                        const originalOrder = exp.mapState.pendingOrders[bid];
+                        if (originalOrder?.type === 'move' && originalOrder.targetProvinceId) {
+                          preservedOrders[bid] = originalOrder;
+                        }
+                      }
+                    }
                   } else {
-                    // Normal movement
+                    // Normal movement (including weak flankers who were excluded from battle)
                     const dest = playerDests[bid];
                     newPositions[bid] = dest;
                   }
@@ -7699,67 +7973,8 @@ Safe recruits (unassigned people): ${freePop}`;
                 let updatedFortress = exp.fortress;
                 let pendingSiegeBattle: (import('./types').SiegeBattleResult & { enemyName: string }) | undefined;
 
-                // 4a: Deployed armies at fortress province intercept enemies in field battle FIRST
-                // Skip enemies that already fought in Phase 2 province conflicts — they already battled this turn
-                const deployedAtFortress = Object.entries(newPositions)
-                  .filter(([, prov]) => prov === fortId)
-                  .map(([bidStr]) => Number(bidStr))
-                  .filter(bid => !destroyedPlayerIds.has(bid));
-                const fortressFieldBanners = deployedAtFortress
-                  .map(bid => banners.find(b => b.id === bid))
-                  .filter((b): b is Banner => !!b && b.status !== 'destroyed');
-
-                if (fortressFieldBanners.length > 0) {
-                  for (let i = 0; i < updatedEnemies.length; i++) {
-                    const enemy = updatedEnemies[i];
-                    if (enemy.status !== 'marching' || enemy.provinceId !== fortId) continue;
-                    // Skip enemies that already fought a field battle this turn (Phase 2)
-                    if (battleEnemyIds.has(enemy.id)) continue;
-
-                    dbg.log(`[FIELD-FORT] Deployed armies intercept "${enemy.name}" at fortress province!`);
-                    const fbResult = runMergedBattle(fortressFieldBanners, [enemy], fortId, newTurnNumber, newFieldBattles.length);
-                    newFieldBattles.push(fbResult);
-
-                    // Apply casualties to player banners
-                    const pAll = fbResult.playerArmies || [fbResult.playerArmy];
-                    for (const pa of pAll) {
-                      const lossRatio = pa.initialTroops > 0 ? (pa.initialTroops - pa.finalTroops) / pa.initialTroops : 0;
-                      if (lossRatio > 0) {
-                        setBanners(prev => prev.map(b => {
-                          if (b.id !== pa.bannerId) return b;
-                          return { ...b, squads: b.squads.map(sq => ({
-                            ...sq, currentSize: Math.max(0, Math.round(sq.currentSize * (1 - lossRatio)))
-                          }))};
-                        }));
-                      }
-                      if (pa.finalTroops <= 0) {
-                        destroyedPlayerIds.add(pa.bannerId);
-                        delete newPositions[pa.bannerId];
-                        setBanners(prev => prev.map(b => b.id !== pa.bannerId ? b : {
-                          ...b, status: 'destroyed' as const, destroyedTurn: newTurnNumber,
-                          destroyedAt: fortId, destroyedBy: enemy.name,
-                        }));
-                      }
-                    }
-
-                    // Apply casualties to enemy
-                    const eAll = fbResult.enemyArmies || [fbResult.enemyArmy];
-                    for (const ea of eAll) {
-                      if (ea.finalTroops <= 0) {
-                        updatedEnemies = updatedEnemies.map((e, idx) =>
-                          idx === i ? { ...e, status: 'destroyed' as const, totalTroops: 0 } : e
-                        );
-                      } else {
-                        updatedEnemies = updatedEnemies.map((e, idx) =>
-                          idx === i ? { ...e, totalTroops: ea.finalTroops } : e
-                        );
-                      }
-                    }
-                  }
-                }
-
-                // 4b: Surviving enemies at fortress trigger siege
-                // Enemies that fought in Phase 2 are pushed back — they don't siege this turn
+                // All enemies at fortress go directly to siege — garrison defends from behind walls
+                // No field intercept: runSiegeBattle handles wall defense, archer fire, and inner battle
                 for (let i = 0; i < updatedEnemies.length; i++) {
                   const enemy = updatedEnemies[i];
                   if (enemy.status !== 'marching' || enemy.provinceId !== fortId) continue;
@@ -7773,7 +7988,15 @@ Safe recruits (unassigned people): ${freePop}`;
                     provinceId: fortId,
                   });
                   try {
-                    const result = runSiegeBattle(expeditionId, enemy.totalTroops, enemy.squads.map(s => ({ type: s.type, count: s.count * 10 })));
+                    // Cap squad expansion to totalTroops to avoid rounding-inflated troop counts
+                    let siegeTroopsLeft = enemy.totalTroops;
+                    const siegeSquadComp = enemy.squads.map(s => {
+                      const raw = s.count * 10;
+                      const capped = Math.min(raw, siegeTroopsLeft);
+                      siegeTroopsLeft -= capped;
+                      return { type: s.type, count: capped };
+                    });
+                    const result = runSiegeBattle(expeditionId, enemy.totalTroops, siegeSquadComp);
                     const destroyedBanners = applyFortressBattleCasualties(expeditionId, result);
 
                     if (updatedFortress) {
@@ -7900,7 +8123,7 @@ Safe recruits (unassigned people): ${freePop}`;
                     armyPositions: newPositions,
                     revealedProvinces: [...newRevealed],
                     turnNumber: newTurnNumber,
-                    pendingOrders: {},
+                    pendingOrders: preservedOrders,
                     enemyArmies: updatedEnemies,
                     nextEnemyId,
                     expeditionFailed: isFailed,
@@ -8386,12 +8609,7 @@ Safe recruits (unassigned people): ${freePop}`;
                 </button>
                 <button
                   onClick={() => {
-                    // Create reinforcement entry
-                    const { bannerId, squadId, soldiersNeeded } = reinforcementModal;
-                    if (!barracks) {
-                      setReinforcementModal(null);
-                      return;
-                    }
+                    const { bannerId, squadId, soldiersNeeded, goldCost } = reinforcementModal;
 
                     // Guard: Don't allow reinforcing destroyed banners
                     const banner = banners.find(b => b.id === bannerId);
@@ -8400,38 +8618,17 @@ Safe recruits (unassigned people): ${freePop}`;
                       return;
                     }
 
-                    // Check if this squad already has a reinforcement entry
-                    const hasActiveReinforcement = barracks.trainingQueue.some(
-                      entry => entry.type === 'reinforcement' && entry.bannerId === bannerId && entry.squadId === squadId
-                    );
-                    if (hasActiveReinforcement) {
-                      setReinforcementModal(null);
-                      return;
-                    }
-
-                    // Check if training slots are available
-                    const activeEntries = barracks.trainingQueue.filter(e => e.status === 'training' || e.status === 'arriving');
-                    const availableSlots = barracks.trainingSlots - activeEntries.length;
-
-                    // Create reinforcement training entry in barracks queue
-                    const reinforcementEntry: TrainingEntry = {
-                      id: Date.now(),
-                      type: 'reinforcement',
-                      bannerId,
-                      squadId,
-                      soldiersNeeded,
-                      soldiersTrained: 0,
-                      elapsedTime: 0,
-                      status: availableSlots > 0 ? 'training' : 'arriving',
-                    };
-
-                    setBarracks(prev => {
-                      if (!prev) return prev;
+                    // Instant reinforcement: deduct gold and refill squad immediately
+                    setWarehouse(w => ({ ...w, gold: w.gold - goldCost }));
+                    setBanners(bs => bs.map(b => {
+                      if (b.id !== bannerId) return b;
                       return {
-                        ...prev,
-                        trainingQueue: [...prev.trainingQueue, reinforcementEntry],
+                        ...b,
+                        squads: (b.squads || []).map(s =>
+                          s.id === squadId ? { ...s, currentSize: s.maxSize } : s
+                        ),
                       };
-                    });
+                    }));
 
                     setReinforcementModal(null);
                   }}
@@ -8489,50 +8686,22 @@ Safe recruits (unassigned people): ${freePop}`;
                       return;
                     }
 
-                    // Deduct gold
+                    // Deduct gold and instantly refill all damaged squads
                     setWarehouse(w => ({ ...w, gold: w.gold - hireAndRefillModal.totalCost }));
 
-                    if (banner) {
-                      let displaySquads = banner.squads;
-                      if (!displaySquads || displaySquads.length === 0) {
-                        const { squads } = initializeSquadsFromUnits(banner.units, squadSeqRef.current);
-                        displaySquads = squads;
+                    // Instant reinforcement: directly update squad sizes (no barracks queue)
+                    setBanners(bs => bs.map(b => {
+                      if (b.id !== hireAndRefillModal.bannerId) return b;
+                      let updatedSquads = b.squads;
+                      if (!updatedSquads || updatedSquads.length === 0) {
+                        const { squads } = initializeSquadsFromUnits(b.units, squadSeqRef.current);
+                        updatedSquads = squads;
                       }
-
-                      // Create reinforcement entries for all damaged squads
-                      displaySquads.forEach(squad => {
-                        if (squad.currentSize < squad.maxSize) {
-                          const missing = squad.maxSize - squad.currentSize;
-                          // Check if already has reinforcement entry
-                          const hasActiveReinforcement = barracks.trainingQueue.some(
-                            entry => entry.type === 'reinforcement' && entry.bannerId === banner.id && entry.squadId === squad.id
-                          );
-                          if (!hasActiveReinforcement) {
-                            const activeEntries = barracks.trainingQueue.filter(e => e.status === 'training' || e.status === 'arriving');
-                            const availableSlots = barracks.trainingSlots - activeEntries.length;
-
-                            const reinforcementEntry: TrainingEntry = {
-                              id: Date.now() + Math.random(), // Unique ID
-                              type: 'reinforcement',
-                              bannerId: banner.id,
-                              squadId: squad.id,
-                              soldiersNeeded: missing,
-                              soldiersTrained: 0,
-                              elapsedTime: 0,
-                              status: availableSlots > 0 ? 'training' : 'arriving',
-                            };
-
-                            setBarracks(prev => {
-                              if (!prev) return prev;
-                              return {
-                                ...prev,
-                                trainingQueue: [...prev.trainingQueue, reinforcementEntry],
-                              };
-                            });
-                          }
-                        }
-                      });
-                    }
+                      return {
+                        ...b,
+                        squads: updatedSquads.map(s => ({ ...s, currentSize: s.maxSize })),
+                      };
+                    }));
 
                     setHireAndRefillModal(null);
                   }}

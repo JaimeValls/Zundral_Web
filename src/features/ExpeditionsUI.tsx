@@ -6,7 +6,7 @@
 // ============================================================================
 
 import React, { useState } from 'react';
-import type { Expedition, Banner, Mission, WarehouseState, SiegeBattleResult, BattleSquadEntry, UnitType, ArmyOrder, ExpeditionLogEntry } from '../types';
+import type { Expedition, Banner, Mission, WarehouseState, SiegeBattleResult, BattleSquadEntry, UnitType, ArmyOrder, ExpeditionLogEntry, BattleRole } from '../types';
 import { BattleChart, SiegeGraphCanvas } from '../components/BattleChart';
 import { unitCategory, unitDisplayNames } from '../constants';
 import { ExpeditionMap } from './map/ExpeditionMap';
@@ -18,6 +18,23 @@ import { ExpeditionMap } from './map/ExpeditionMap';
 function formatInt(n: number) { return Math.floor(n).toLocaleString(); }
 
 const BATTLE_PROGRESS_DURATION_MS = 3000;
+
+/** Small colored badge showing army role in a multi-army battle */
+function RoleBadge({ role }: { role?: BattleRole }) {
+  if (!role) return null;
+  const config: Record<string, { label: string; color: string }> = {
+    primary_attacker: { label: 'Primary', color: 'bg-amber-700/60 text-amber-200 border-amber-500/40' },
+    flank_attacker: { label: 'Flank', color: 'bg-orange-700/60 text-orange-200 border-orange-500/40' },
+    defender: { label: 'Defender', color: 'bg-blue-700/60 text-blue-200 border-blue-500/40' },
+    reinforcement: { label: 'Reinforcement', color: 'bg-slate-600/60 text-slate-200 border-slate-400/40' },
+    // Backward compat for old saved battle results
+    primary_defender: { label: 'Defender', color: 'bg-blue-700/60 text-blue-200 border-blue-500/40' },
+    flank_defender: { label: 'Defender', color: 'bg-blue-700/60 text-blue-200 border-blue-500/40' },
+  };
+  const c = config[role];
+  if (!c) return null;
+  return <span className={`text-[8px] px-1 py-0 rounded border ${c.color} ml-1 font-semibold uppercase`}>{c.label}</span>;
+}
 
 // ---------------------------------------------------------------------------
 // Props
@@ -358,8 +375,9 @@ export default function ExpeditionsUI({
                                 <div className="grid grid-cols-4 gap-1">
                                   {(battle.attackerComposition || []).map((s, si) => {
                                     const sqIcon = s.role === 'ranged' ? '🏹' : '⚔️';
-                                    const isDamaged = s.final < s.initial;
-                                    const fillPct = s.initial > 0 ? (s.final / s.initial) * 100 : 100;
+                                    const SQUAD_MAX = 10;
+                                    const isDamaged = s.final < SQUAD_MAX;
+                                    const fillPct = (s.final / SQUAD_MAX) * 100;
                                     return (
                                       <div key={si} className="h-9 rounded-md border bg-slate-800/60 border-slate-700 flex items-center px-1.5 gap-1.5 overflow-hidden">
                                         <span className="text-sm shrink-0 leading-none">{sqIcon}</span>
@@ -367,7 +385,7 @@ export default function ExpeditionsUI({
                                           <div className="flex items-center justify-between gap-1 w-full">
                                             <span className="text-[9px] font-semibold text-slate-200 truncate">{s.displayName}</span>
                                             <span className={`text-[9px] font-medium shrink-0 ${s.final === 0 ? 'text-red-500' : isDamaged ? 'text-red-400' : 'text-slate-500'}`}>
-                                              {Math.round(s.final)}/{Math.round(s.initial)}
+                                              {Math.round(s.final)}/10
                                             </span>
                                           </div>
                                           <div className="w-full h-0.5 bg-slate-950/50 rounded-full mt-0.5 overflow-hidden">
@@ -397,8 +415,9 @@ export default function ExpeditionsUI({
                                     });
                                   }).map((s, si) => {
                                     const sqIcon = s.role === 'ranged' ? '🏹' : '⚔️';
-                                    const isDamaged = s.final < s.initial;
-                                    const fillPct = s.initial > 0 ? (s.final / s.initial) * 100 : 100;
+                                    const SQUAD_MAX = 10;
+                                    const isDamaged = s.final < SQUAD_MAX;
+                                    const fillPct = (s.final / SQUAD_MAX) * 100;
                                     return (
                                       <div key={si} className="h-9 rounded-md border bg-slate-800/60 border-slate-700 flex items-center px-1.5 gap-1.5 overflow-hidden">
                                         <span className="text-sm shrink-0 leading-none">{sqIcon}</span>
@@ -406,7 +425,7 @@ export default function ExpeditionsUI({
                                           <div className="flex items-center justify-between gap-1 w-full">
                                             <span className="text-[9px] font-semibold text-slate-200 truncate">{s.displayName}</span>
                                             <span className={`text-[9px] font-medium shrink-0 ${s.final === 0 ? 'text-red-500' : isDamaged ? 'text-amber-400' : 'text-slate-500'}`}>
-                                              {Math.round(s.final)}/{Math.round(s.initial)}
+                                              {Math.round(s.final)}/10
                                             </span>
                                           </div>
                                           <div className="w-full h-0.5 bg-slate-950/50 rounded-full mt-0.5 overflow-hidden">
@@ -523,7 +542,7 @@ export default function ExpeditionsUI({
                                       <span className="text-red-300 font-semibold">{formatInt(battle.initialAttackers)}</span> attackers assaulted the fortress walls over <strong>{battle.siegeRounds}</strong> rounds.
                                     </div>
                                     <div>
-                                      Wall archers killed <span className="text-red-300 font-semibold">{formatInt(totalAttackersKilled)}</span> attackers during the siege.
+                                      <span className="text-blue-300 font-semibold">{formatInt(battle.siegeTimeline[0]?.archers || 0)}</span> archers firing from the walls killed <span className="text-red-300 font-semibold">{formatInt(totalAttackersKilled)}</span> attackers during the siege.
                                     </div>
                                     <div>
                                       Wall HP reduced from <span className="text-amber-300">{formatInt(battle.initialFortHP)}</span> to <span className="text-amber-300">{formatInt(lastRound.fortHP)}</span> (<span className="text-amber-400">{formatInt(totalDamageToFort)}</span> damage).
@@ -713,41 +732,7 @@ export default function ExpeditionsUI({
                                 );
                               })()}
 
-                              {/* ── Casualties by Unit Type ──────────────────────── */}
-                              <div className="p-2 rounded-lg bg-slate-800 border border-slate-700">
-                                <div className="font-semibold text-slate-300 mb-2">Casualties by Unit Type</div>
-                                {(atkComp || defComp) ? (
-                                  <div className="grid grid-cols-2 gap-3">
-                                    <div className="p-2 rounded bg-red-950/20 border border-red-900/30">
-                                      <div className="text-[10px] text-red-400 font-semibold uppercase tracking-wider mb-1.5">
-                                        Attackers — Lost {formatInt(totalAtkLost)}/{formatInt(battle.initialAttackers)}
-                                      </div>
-                                      {atkComp ? renderCasualtyList(atkComp, 'text-red-200', 'text-red-400') : (
-                                        <div className="text-[11px] text-red-300">{formatInt(totalAtkLost)} killed</div>
-                                      )}
-                                    </div>
-                                    <div className="p-2 rounded bg-blue-950/20 border border-blue-900/30">
-                                      <div className="text-[10px] text-blue-400 font-semibold uppercase tracking-wider mb-1.5">
-                                        Defenders — Lost {formatInt(totalDefLost)}/{formatInt(totalDefenders)}
-                                      </div>
-                                      {defComp && defComp.length > 0 ? renderCasualtyList(defComp, 'text-blue-200', 'text-blue-400') : (
-                                        <div className="text-[11px] text-blue-300">{formatInt(totalDefLost)} killed</div>
-                                      )}
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <div className="grid grid-cols-2 gap-2 text-[11px]">
-                                    <div>
-                                      <div className="text-slate-400">Attackers Lost:</div>
-                                      <div className="text-red-300 font-semibold">{formatInt(totalAtkLost)} / {formatInt(battle.initialAttackers)}</div>
-                                    </div>
-                                    <div>
-                                      <div className="text-slate-400">Defenders Lost:</div>
-                                      <div className="text-blue-300 font-semibold">{formatInt(totalDefLost)} / {formatInt(totalDefenders)}</div>
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
+                              {/* Casualties by unit type removed — already shown in squad cards above */}
                             </div>
                           );
                         })()}
@@ -782,7 +767,11 @@ export default function ExpeditionsUI({
                               const destroyedPlayer = pAll.filter(a => a.finalTroops === 0);
                               const destroyedEnemy = eAll.filter(a => a.finalTroops === 0);
                               return (
-                                <details key={fb.id} className="rounded-lg border border-slate-700 bg-slate-800/50">
+                                <details key={fb.id} className={`rounded-lg border ${
+                                  isVictory ? 'border-emerald-800/60 bg-gradient-to-b from-emerald-950/30 via-slate-800/50 to-slate-800/50'
+                                  : isDefeat ? 'border-red-800/60 bg-gradient-to-b from-red-950/30 via-slate-800/50 to-slate-800/50'
+                                  : 'border-amber-800/60 bg-gradient-to-b from-amber-950/20 via-slate-800/50 to-slate-800/50'
+                                }`}>
                                   {/* ── Option D: Battle Header Card ── */}
                                   <summary className="p-3 cursor-pointer hover:bg-slate-700/30 list-none">
                                     <div className="flex items-center gap-3 mb-2">
@@ -826,6 +815,7 @@ export default function ExpeditionsUI({
                                               <span className="text-slate-300 truncate">
                                                 {a.bannerName}
                                                 {pAll.length > 1 && <span className="text-slate-600 ml-1 text-[9px]">{share}%</span>}
+                                                <RoleBadge role={a.role} />
                                               </span>
                                               <span className={severity}>
                                                 {Math.round(a.initialTroops)} → {Math.round(a.finalTroops)}
@@ -848,6 +838,7 @@ export default function ExpeditionsUI({
                                               <span className="text-slate-300 truncate">
                                                 {a.enemyName}
                                                 {eAll.length > 1 && <span className="text-slate-600 ml-1 text-[9px]">{share}%</span>}
+                                                <RoleBadge role={a.role} />
                                               </span>
                                               <span className={severity}>
                                                 {Math.round(a.initialTroops)} → {Math.round(a.finalTroops)}
@@ -876,7 +867,7 @@ export default function ExpeditionsUI({
                                     )}
                                     {/* Extended Report toggle button */}
                                     <div className="mt-2 flex justify-center">
-                                      <span className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-amber-900/40 hover:bg-amber-800/60 border border-amber-600/50 rounded text-[11px] text-amber-300 font-bold uppercase tracking-wider transition-colors">
+                                      <span className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-amber-900/40 hover:bg-amber-800/60 border border-amber-600/50 rounded text-[11px] text-amber-300 font-bold uppercase tracking-wider transition-colors [details[open]_&]:bg-amber-700/60 [details[open]_&]:border-amber-400 [details[open]_&]:text-amber-100 [details[open]_&]:shadow-[0_0_12px_rgba(245,158,11,0.3)]">
                                         📊 Extended Battle Report
                                         <svg className="w-3 h-3 transition-transform [details[open]_&]:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
                                       </span>
@@ -885,87 +876,81 @@ export default function ExpeditionsUI({
                                   <div className="px-3 pb-3 border-t border-slate-700">
                                     {/* Takeaway */}
                                     <div className="text-[11px] italic text-slate-400 mt-3 mb-3">{fb.battleTakeaway}</div>
-                                    {/* Phase Summary Cards */}
-                                    {fb.timeline.length > 0 && (() => {
-                                      const phases: Record<string, { steps: number; defKilled: number; atkKilled: number }> = {};
-                                      for (const step of fb.timeline) {
-                                        if (!phases[step.phase]) phases[step.phase] = { steps: 0, defKilled: 0, atkKilled: 0 };
-                                        phases[step.phase].steps++;
-                                        phases[step.phase].defKilled += step.BtoA;
-                                        phases[step.phase].atkKilled += step.AtoB;
-                                      }
-                                      const phaseOrder = ['skirmish', 'melee', 'pursuit'];
-                                      const phaseColors: Record<string, string> = {
-                                        skirmish: 'border-sky-800 bg-sky-950/30',
-                                        melee: 'border-red-800 bg-red-950/30',
-                                        pursuit: 'border-amber-800 bg-amber-950/30',
-                                      };
-                                      const phaseIcons: Record<string, string> = { skirmish: '🏹', melee: '⚔️', pursuit: '🏃' };
-                                      const activePhases = phaseOrder.filter(p => phases[p]);
-                                      if (activePhases.length === 0) return null;
-                                      return (
-                                        <div className={`grid grid-cols-${Math.min(activePhases.length, 3)} gap-2 mb-3`}>
-                                          {activePhases.map(p => {
-                                            const d = phases[p];
-                                            const totalKills = d.defKilled + d.atkKilled;
-                                            const isDecisive = totalKills > 0 && (d.atkKilled / Math.max(totalKills, 1)) > 0.5;
-                                            return (
-                                              <div key={p} className={`rounded-lg border p-2 ${phaseColors[p] || 'border-slate-700 bg-slate-800/30'}`}>
-                                                <div className="text-[9px] uppercase font-bold text-slate-400 mb-1">
-                                                  {phaseIcons[p]} {p} ({d.steps} step{d.steps !== 1 ? 's' : ''})
-                                                </div>
-                                                <div className="flex justify-between text-[10px]">
-                                                  <span className="text-blue-300">Your losses: <span className="text-red-400 font-semibold">{Math.round(d.defKilled)}</span></span>
-                                                </div>
-                                                <div className="flex justify-between text-[10px]">
-                                                  <span className="text-red-300">Enemy losses: <span className="text-red-400 font-semibold">{Math.round(d.atkKilled)}</span></span>
-                                                </div>
-                                                {isDecisive && <div className="text-[8px] text-amber-400 mt-0.5 font-bold uppercase">Decisive phase</div>}
-                                              </div>
-                                            );
-                                          })}
-                                        </div>
-                                      );
-                                    })()}
-                                    {/* Army compositions — per-army breakdown */}
+                                    {/* Army compositions — squad cards per army */}
                                     <div className="grid grid-cols-2 gap-3 mb-3">
                                       <div>
-                                        <div className="text-[10px] font-semibold text-blue-400 uppercase mb-1">Your Forces</div>
+                                        <div className="text-[10px] font-semibold text-blue-400 uppercase mb-1.5">Your Forces</div>
                                         {(fb.playerArmies || [fb.playerArmy]).map((army, ai) => (
-                                          <div key={ai} className="mb-1.5">
-                                            {(fb.playerArmies?.length || 0) > 1 && (
-                                              <div className="text-[9px] text-blue-300/70 font-semibold mb-0.5">
-                                                {army.bannerName} ({army.initialTroops} → {army.finalTroops})
-                                              </div>
-                                            )}
-                                            {army.composition.map((c, i) => (
-                                              <div key={i} className="flex justify-between text-[10px] py-0.5">
-                                                <span className="text-slate-300">{c.role === 'ranged' ? '🏹' : '⚔️'} {c.displayName}</span>
-                                                <span className={c.final === 0 ? 'text-slate-600' : 'text-slate-300'}>
-                                                  {c.initial} → {c.final} <span className="text-red-400">(-{c.lost})</span>
-                                                </span>
-                                              </div>
-                                            ))}
+                                          <div key={ai} className="mb-2.5">
+                                            <div className="text-[9px] text-blue-300/70 font-semibold mb-1">
+                                              {army.bannerName} ({army.initialTroops} → {army.finalTroops})
+                                              <RoleBadge role={army.role} />
+                                            </div>
+                                            <div className="grid grid-cols-4 gap-1">
+                                              {army.composition.map((s, si) => {
+                                                const sqIcon = s.role === 'ranged' ? '🏹' : '⚔️';
+                                                const SQUAD_MAX = 10;
+                                                const isDamaged = s.final < SQUAD_MAX;
+                                                const fillPct = (s.final / SQUAD_MAX) * 100;
+                                                return (
+                                                  <div key={si} className="h-9 rounded-md border bg-slate-800/60 border-slate-700 flex items-center px-1.5 gap-1.5 overflow-hidden">
+                                                    <span className="text-sm shrink-0 leading-none">{sqIcon}</span>
+                                                    <div className="flex flex-col min-w-0 flex-1 leading-none justify-center h-full py-0.5">
+                                                      <div className="flex items-center justify-between gap-1 w-full">
+                                                        <span className="text-[9px] font-semibold text-slate-200 truncate">{s.displayName}</span>
+                                                        <span className={`text-[9px] font-medium shrink-0 ${s.final === 0 ? 'text-red-500' : isDamaged ? 'text-amber-400' : 'text-slate-500'}`}>
+                                                          {Math.round(s.final)}/10
+                                                        </span>
+                                                      </div>
+                                                      <div className="w-full h-0.5 bg-slate-950/50 rounded-full mt-0.5 overflow-hidden">
+                                                        <div
+                                                          className={`h-full rounded-full ${s.final === 0 ? 'bg-red-600' : isDamaged ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                                                          style={{ width: `${Math.max(fillPct, s.final === 0 ? 0 : 2)}%` }}
+                                                        />
+                                                      </div>
+                                                    </div>
+                                                  </div>
+                                                );
+                                              })}
+                                            </div>
                                           </div>
                                         ))}
                                       </div>
                                       <div>
-                                        <div className="text-[10px] font-semibold text-red-400 uppercase mb-1">Enemy Forces</div>
+                                        <div className="text-[10px] font-semibold text-red-400 uppercase mb-1.5">Enemy Forces</div>
                                         {(fb.enemyArmies || [fb.enemyArmy]).map((army, ai) => (
-                                          <div key={ai} className="mb-1.5">
-                                            {(fb.enemyArmies?.length || 0) > 1 && (
-                                              <div className="text-[9px] text-red-300/70 font-semibold mb-0.5">
-                                                {army.enemyName} ({army.initialTroops} → {army.finalTroops})
-                                              </div>
-                                            )}
-                                            {army.composition.map((c, i) => (
-                                              <div key={i} className="flex justify-between text-[10px] py-0.5">
-                                                <span className="text-slate-300">{c.role === 'ranged' ? '🏹' : '⚔️'} {c.displayName}</span>
-                                                <span className={c.final === 0 ? 'text-slate-600' : 'text-slate-300'}>
-                                                  {c.initial} → {c.final} <span className="text-red-400">(-{c.lost})</span>
-                                                </span>
-                                              </div>
-                                            ))}
+                                          <div key={ai} className="mb-2.5">
+                                            <div className="text-[9px] text-red-300/70 font-semibold mb-1">
+                                              {army.enemyName} ({army.initialTroops} → {army.finalTroops})
+                                              <RoleBadge role={army.role} />
+                                            </div>
+                                            <div className="grid grid-cols-4 gap-1">
+                                              {army.composition.map((s, si) => {
+                                                const sqIcon = s.role === 'ranged' ? '🏹' : '⚔️';
+                                                const SQUAD_MAX = 10;
+                                                const isDamaged = s.final < SQUAD_MAX;
+                                                const fillPct = (s.final / SQUAD_MAX) * 100;
+                                                return (
+                                                  <div key={si} className="h-9 rounded-md border bg-slate-800/60 border-slate-700 flex items-center px-1.5 gap-1.5 overflow-hidden">
+                                                    <span className="text-sm shrink-0 leading-none">{sqIcon}</span>
+                                                    <div className="flex flex-col min-w-0 flex-1 leading-none justify-center h-full py-0.5">
+                                                      <div className="flex items-center justify-between gap-1 w-full">
+                                                        <span className="text-[9px] font-semibold text-slate-200 truncate">{s.displayName}</span>
+                                                        <span className={`text-[9px] font-medium shrink-0 ${s.final === 0 ? 'text-red-500' : isDamaged ? 'text-red-400' : 'text-slate-500'}`}>
+                                                          {Math.round(s.final)}/10
+                                                        </span>
+                                                      </div>
+                                                      <div className="w-full h-0.5 bg-slate-950/50 rounded-full mt-0.5 overflow-hidden">
+                                                        <div
+                                                          className={`h-full rounded-full ${s.final === 0 ? 'bg-red-600' : isDamaged ? 'bg-red-500' : 'bg-emerald-500'}`}
+                                                          style={{ width: `${Math.max(fillPct, s.final === 0 ? 0 : 2)}%` }}
+                                                        />
+                                                      </div>
+                                                    </div>
+                                                  </div>
+                                                );
+                                              })}
+                                            </div>
                                           </div>
                                         ))}
                                       </div>

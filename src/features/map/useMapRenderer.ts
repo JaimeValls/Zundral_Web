@@ -23,6 +23,7 @@ interface RendererOptions {
   fortressProvinceId?: string;
   deployableProvinces?: Set<string>;
   moveTargetProvinces?: Set<string>;
+  combatMoveProvinces?: Set<string>;
   pendingMoveArrows?: Array<{ from: [number, number]; to: [number, number] }>;
   enemyProvinces?: Set<string>;
   enemyMoveArrows?: Array<{ from: [number, number]; to: [number, number] }>;
@@ -131,6 +132,7 @@ export function useMapRenderer({
   revealedProvinces,
   deployableProvinces,
   moveTargetProvinces,
+  combatMoveProvinces,
   pendingMoveArrows,
   enemyProvinces,
   enemyMoveArrows,
@@ -251,12 +253,21 @@ export function useMapRenderer({
         }
       }
 
-      // Move-target province highlights (blue)
+      // Move-target province highlights (green = safe, orange = combat)
       if (moveTargetProvinces && moveTargetProvinces.size > 0) {
         for (const provId of moveTargetProvinces) {
           const prov = assets.provinceById.get(provId);
           if (prov) {
-            const hl = getProvinceHighlight(prov, [59, 130, 246, 70], mapW);
+            const hl = getProvinceHighlight(prov, [34, 197, 94, 70], mapW); // green
+            ctx!.drawImage(hl, prov.bbox.x, prov.bbox.y);
+          }
+        }
+      }
+      if (combatMoveProvinces && combatMoveProvinces.size > 0) {
+        for (const provId of combatMoveProvinces) {
+          const prov = assets.provinceById.get(provId);
+          if (prov) {
+            const hl = getProvinceHighlight(prov, [245, 158, 11, 90], mapW); // orange
             ctx!.drawImage(hl, prov.bbox.x, prov.bbox.y);
           }
         }
@@ -382,5 +393,5 @@ export function useMapRenderer({
     return () => {
       cancelAnimationFrame(animFrameRef.current);
     };
-  }, [canvasRef, assets, lookup, view, hoveredProvince, selectedProvince, revealedProvinces, deployableProvinces, moveTargetProvinces, pendingMoveArrows, enemyProvinces, enemyMoveArrows, battleProvinces]);
+  }, [canvasRef, assets, lookup, view, hoveredProvince, selectedProvince, revealedProvinces, deployableProvinces, moveTargetProvinces, combatMoveProvinces, pendingMoveArrows, enemyProvinces, enemyMoveArrows, battleProvinces]);
 }
