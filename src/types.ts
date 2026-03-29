@@ -340,6 +340,7 @@ export type SiegeBattleResult = {
   defenderComposition?: BattleSquadEntry[];
   battleTakeaway?: string;
   garrisonArmies?: SiegeGarrisonArmy[];
+  flankingArmies?: SiegeGarrisonArmy[];  // Player armies flanking from outside during siege
 };
 
 export type SiegeGarrisonArmy = {

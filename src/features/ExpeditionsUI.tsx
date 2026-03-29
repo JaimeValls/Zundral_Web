@@ -463,6 +463,30 @@ export default function ExpeditionsUI({
                                   </div>
                                 )}
                               </div>
+                              {/* Flanking armies (if any) */}
+                              {battle.flankingArmies && battle.flankingArmies.length > 0 && (
+                                <div className="mt-1.5 pt-1.5 border-t border-amber-900/30">
+                                  <div className="text-[9px] text-amber-400 uppercase font-bold mb-0.5">Flanking Support</div>
+                                  {battle.flankingArmies.map((a, i) => {
+                                    const lost = a.initialTroops - a.finalTroops;
+                                    const pct = a.initialTroops > 0 ? lost / a.initialTroops : 0;
+                                    const severity = a.finalTroops === 0 ? 'text-red-500 font-bold'
+                                      : pct > 0.3 ? 'text-red-400'
+                                      : pct > 0.1 ? 'text-amber-400'
+                                      : 'text-emerald-400';
+                                    return (
+                                      <div key={i} className="flex justify-between items-center py-0.5">
+                                        <span className="text-slate-300 truncate text-[9px]">⚔️ {a.bannerName} <span className="text-[8px] px-1 py-0 rounded border bg-orange-700/60 text-orange-200 border-orange-500/40 ml-1 font-semibold uppercase">Flank</span></span>
+                                        <span className={`text-[9px] ${severity}`}>
+                                          {Math.round(a.initialTroops)} → {Math.round(a.finalTroops)}
+                                          {lost > 0 && <span className="text-red-400 ml-1">(-{Math.round(lost)})</span>}
+                                          {a.finalTroops === 0 && <span className="ml-1">💀</span>}
+                                        </span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
                             </div>
                             {/* Wall HP + destroyed callouts */}
                             <div className="mt-2 flex items-center gap-3 text-[10px]">
@@ -542,7 +566,7 @@ export default function ExpeditionsUI({
                                       <span className="text-red-300 font-semibold">{formatInt(battle.initialAttackers)}</span> attackers assaulted the fortress walls over <strong>{battle.siegeRounds}</strong> rounds.
                                     </div>
                                     <div>
-                                      <span className="text-blue-300 font-semibold">{formatInt(battle.siegeTimeline[0]?.archers || 0)}</span> archers firing from the walls killed <span className="text-red-300 font-semibold">{formatInt(totalAttackersKilled)}</span> attackers during the siege.
+                                      <span className="text-blue-300 font-semibold">{formatInt(battle.siegeTimeline[0]?.archers || 0)}</span> archers firing from the walls{battle.flankingArmies && battle.flankingArmies.length > 0 ? <>, supported by <span className="text-amber-300 font-semibold">{battle.flankingArmies.length} flanking {battle.flankingArmies.length === 1 ? 'army' : 'armies'}</span> attacking from the field</> : ''}, killed <span className="text-red-300 font-semibold">{formatInt(totalAttackersKilled)}</span> attackers during the siege.
                                     </div>
                                     <div>
                                       Wall HP reduced from <span className="text-amber-300">{formatInt(battle.initialFortHP)}</span> to <span className="text-amber-300">{formatInt(lastRound.fortHP)}</span> (<span className="text-amber-400">{formatInt(totalDamageToFort)}</span> damage).

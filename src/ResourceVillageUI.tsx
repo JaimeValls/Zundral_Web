@@ -3323,6 +3323,7 @@ export default function ResourceVillageUI() {
     attackers: number,
     attackerSquads?: Array<{ type: string; count: number }>,
     currentArmyPositions?: Record<number, string>,
+    flankingBannerIds?: number[],
   ): SiegeBattleResult {
     const expedition = expeditions.find(exp => exp.expeditionId === expeditionId);
     if (!expedition?.fortress) {
@@ -3397,6 +3398,25 @@ export default function ResourceVillageUI() {
     const wMelee = stats.warrior?.melee_attack || 15;
     const aSkirmish = stats.archer?.skirmish_attack || 15;
 
+    // Calculate flanking army contribution (field units attacking enemy from outside during siege)
+    const flankingBanners = (flankingBannerIds || []).map(bid => banners.find(b => b.id === bid)).filter((b): b is Banner => !!b && b.status !== 'destroyed');
+    let flankingWarriors = 0, flankingArchers = 0;
+    for (const fb of flankingBanners) {
+      for (const sq of fb.squads || []) {
+        const cat = unitCategory[sq.type as UnitType] || 'infantry';
+        if (cat === 'ranged_infantry') flankingArchers += sq.currentSize;
+        else flankingWarriors += sq.currentSize;
+      }
+    }
+    const totalFlankingTroops = flankingWarriors + flankingArchers;
+
+    // Snapshot flanking army initial troops for report
+    const perFlankingInitial = flankingBanners.map(b => ({
+      bannerId: b.id,
+      bannerName: b.name,
+      initialTroops: b.squads.reduce((s, sq) => s + sq.currentSize, 0),
+    }));
+
     let fortHP = fortHPmax;
     let remainingAttackers = attackers;
     const siegeTimeline: SiegeRound[] = [];
@@ -3407,9 +3427,14 @@ export default function ResourceVillageUI() {
     while (fortHP > 0 && remainingAttackers > 0 && rounds < maxRounds) {
       rounds++;
 
+      // Wall archers fire from towers
       const dmgFromArchers = (activeArchers / 100) * aSkirmish * baseCas;
-      const killed = Math.min(remainingAttackers, dmgFromArchers);
-      remainingAttackers -= killed;
+      // Flanking army attacks enemy from outside (skirmish damage from flanking troops)
+      const flankingSkirmishDmg = totalFlankingTroops > 0
+        ? ((flankingArchers / 100) * aSkirmish + (flankingWarriors / 100) * wSkirmish) * baseCas * 0.5  // 50% effectiveness (field, not walls)
+        : 0;
+      const totalKilled = Math.min(remainingAttackers, dmgFromArchers + flankingSkirmishDmg);
+      remainingAttackers -= totalKilled;
 
       const fortDamagePerWarrior = wMelee * 0.2;
       const dmgToFort = remainingAttackers * fortDamagePerWarrior * baseCas;
@@ -3420,24 +3445,39 @@ export default function ResourceVillageUI() {
         fortHP,
         attackers: remainingAttackers,
         archers: activeArchers,
-        killed,
+        killed: totalKilled,
         dmgToFort
       });
     }
 
+    // Apply flanking army casualties (they take some damage from enemy during siege — proportional to siege length)
+    const flankingCasualtyRate = Math.min(0.3, rounds * 0.03); // Up to 30% losses over max siege
+    let flankingFinalTroops = Math.round(totalFlankingTroops * (1 - flankingCasualtyRate));
+
     // Inner battle phase (if walls fall)
-    // IMPORTANT: Inner battle uses ONLY actual units from banners, NOT Watch Post capacity
+    // IMPORTANT: Inner battle uses actual units from banners + any surviving flankers
     // Watch Post slots do NOT apply in inner battle - they only limit Phase 1 wall archers
     let innerTimeline: BattleResult['timeline'] = [];
     let innerWinner: 'player' | 'enemy' | 'draw' | null = null;
-    if (fortHP <= 0 && remainingAttackers > 0 && (garrisonWarriors + garrisonArchers) > 0) {
-      dbg.log('[SIEGE] Starting inner battle with defenders:', { garrisonWarriors, garrisonArchers });
+    const totalDefendersForInner = garrisonWarriors + garrisonArchers + flankingFinalTroops;
+    if (fortHP <= 0 && remainingAttackers > 0 && totalDefendersForInner > 0) {
+      dbg.log('[SIEGE] Starting inner battle with defenders:', { garrisonWarriors, garrisonArchers, flankingFinalTroops });
       // Build Division objects for the full morale-aware battle simulator
       const defDiv: Record<string, number> = {};
+      // Garrison banners (inside fortress)
       for (const bid of garrisonBannerIds) {
         const banner = banners.find(b => b.id === bid);
         for (const sq of banner?.squads || []) {
           defDiv[sq.type] = (defDiv[sq.type] || 0) + sq.currentSize;
+        }
+      }
+      // Flanking banners (joining from outside, scaled by casualties taken during siege)
+      if (flankingFinalTroops > 0) {
+        const flankScale = totalFlankingTroops > 0 ? flankingFinalTroops / totalFlankingTroops : 0;
+        for (const fb of flankingBanners) {
+          for (const sq of fb.squads || []) {
+            defDiv[sq.type] = (defDiv[sq.type] || 0) + Math.round(sq.currentSize * flankScale);
+          }
         }
       }
       // Attacker division from attacker squads
@@ -3605,6 +3645,10 @@ export default function ResourceVillageUI() {
           finalTroops: Math.max(0, Math.round(a.initialTroops * (1 - lossRatio))),
         }));
       })(),
+      flankingArmies: perFlankingInitial.length > 0 ? perFlankingInitial.map(a => ({
+        ...a,
+        finalTroops: Math.max(0, Math.round(a.initialTroops * (1 - flankingCasualtyRate))),
+      })) : undefined,
     };
   }
 
@@ -7652,8 +7696,36 @@ Safe recruits (unassigned people): ${freePop}`;
                   conflictRoles.push(roles);
                 }
 
-                // Exclude fortress conflicts from Phase 2 — Phase 4 handles siege mechanics
-                const nonFortressConflicts = provinceConflicts.filter(c => c.provinceId !== fortId);
+                // Identify enemies heading to fortress and player armies intercepting them (swap conflicts)
+                // These flankers should join the fortress siege, not fight separately
+                const fortressEnemyIds = new Set<number>();
+                for (const [, dest] of enemyDests) { /* enemyDests maps enemyId → dest province */ }
+                currentEnemies.forEach(e => {
+                  if (e.status === 'marching' && enemyDests.get(e.id) === fortId) fortressEnemyIds.add(e.id);
+                });
+
+                // Find swap conflicts where a player army intercepts a fortress-bound enemy
+                const siegeFlankerBannerIds = new Set<number>();
+                const siegeFlankerEnemyIds = new Set<number>();
+                for (const conflict of provinceConflicts) {
+                  if (conflict.provinceId === fortId) continue; // fortress conflict handled separately
+                  // Check if any enemy in this conflict is fortress-bound
+                  const fortBoundEnemies = conflict.enemyIds.filter(eid => fortressEnemyIds.has(eid));
+                  if (fortBoundEnemies.length > 0) {
+                    // These player armies are flankers for the fortress siege, not separate field combatants
+                    for (const bid of conflict.playerBannerIds) siegeFlankerBannerIds.add(bid);
+                    for (const eid of fortBoundEnemies) siegeFlankerEnemyIds.add(eid);
+                  }
+                }
+
+                // Exclude fortress conflicts AND flanker-intercept conflicts from Phase 2
+                const nonFortressConflicts = provinceConflicts.filter(c => {
+                  if (c.provinceId === fortId) return false; // fortress conflict
+                  // Skip conflicts that are purely fortress-bound intercepts
+                  const allEnemiesFortBound = c.enemyIds.every(eid => siegeFlankerEnemyIds.has(eid));
+                  if (allEnemiesFortBound && c.playerBannerIds.every(bid => siegeFlankerBannerIds.has(bid))) return false;
+                  return true;
+                });
                 const battlePlayerIds = new Set(nonFortressConflicts.flatMap(c => c.playerBannerIds));
                 const battleEnemyIds = new Set(nonFortressConflicts.flatMap(c => c.enemyIds));
                 // Weak flankers should NOT pin the main army — remove them from battle tracking
@@ -8028,7 +8100,8 @@ Safe recruits (unassigned people): ${freePop}`;
                       siegeTroopsLeft -= capped;
                       return { type: s.type, count: capped };
                     });
-                    const result = runSiegeBattle(expeditionId, enemy.totalTroops, siegeSquadComp, newPositions);
+                    const flankIds = Array.from(siegeFlankerBannerIds);
+                    const result = runSiegeBattle(expeditionId, enemy.totalTroops, siegeSquadComp, newPositions, flankIds.length > 0 ? flankIds : undefined);
                     const destroyedBanners = applyFortressBattleCasualties(expeditionId, result);
 
                     if (updatedFortress) {
@@ -8045,6 +8118,25 @@ Safe recruits (unassigned people): ${freePop}`;
                     updatedEnemies = updatedEnemies.map((e, idx) =>
                       idx === i ? { ...e, status: 'destroyed' as const } : e
                     );
+
+                    // Apply casualties to flanking banners
+                    if (result.flankingArmies && result.flankingArmies.length > 0) {
+                      for (const fa of result.flankingArmies) {
+                        const lossRatio = fa.initialTroops > 0 ? (fa.initialTroops - fa.finalTroops) / fa.initialTroops : 0;
+                        if (lossRatio > 0) {
+                          setBanners(prev => prev.map(b => {
+                            if (b.id !== fa.bannerId) return b;
+                            return { ...b, squads: b.squads.map(sq => ({
+                              ...sq, currentSize: Math.max(0, Math.round(sq.currentSize * (1 - lossRatio)))
+                            }))};
+                          }));
+                        }
+                        if (fa.finalTroops <= 0) {
+                          destroyedPlayerIds.add(fa.bannerId);
+                          delete newPositions[fa.bannerId];
+                        }
+                      }
+                    }
 
                     // Store for popup display
                     pendingSiegeBattle = { ...result, enemyName: enemy.name };
