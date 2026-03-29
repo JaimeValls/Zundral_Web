@@ -218,11 +218,15 @@ function qa14(): TestResult {
 
 // ─── QA-15: Min skirmish ticks enforced ───────────────────────────
 function qa15(): TestResult {
-  const playerDiv = makeDiv(0, 80); // All archers
-  const enemyDiv = makeDiv(10, 0);  // Tiny force, would break morale in 1 tick
+  // Use armies large enough to survive 3 ticks but small enough to break morale quickly
+  // 80 archers vs 40 warriors — warriors would morale-break in 1 tick without minimum
+  const playerDiv = makeDiv(0, 80);
+  const enemyDiv = makeDiv(40, 0);
   const result = simulateBattle(playerDiv, enemyDiv, stats, params);
 
   const skirmishTicks = result.timeline.filter(t => t.phase === 'skirmish').length;
+  // Min skirmish prevents morale break before 3 ticks (but not troop elimination)
+  // With 40 warriors vs 80 archers, warriors survive 3+ ticks but morale would break at tick 1
 
   return {
     id: 'QA-15',
