@@ -1017,6 +1017,50 @@ const MapView: React.FC<MapViewProps> = ({
                     </div>
                   )}
                   <button
+                    onClick={() => {
+                      onSetArmyOrder?.(orderingBannerId, {
+                        bannerId: orderingBannerId,
+                        type: 'aggressive',
+                      });
+                      setOrderMode('idle');
+                    }}
+                    className={`w-full px-3 py-1.5 rounded text-xs border transition-colors flex items-center gap-2 ${
+                      orderType === 'aggressive'
+                        ? 'bg-red-800/80 text-red-200 border-red-500/50'
+                        : 'bg-slate-700 hover:bg-slate-600 text-slate-300 border-slate-500/50'
+                    }`}
+                  >
+                    ⚔️ Aggressive Assault
+                    {orderType === 'aggressive' && <span className="ml-auto text-red-400 text-[10px]">ACTIVE</span>}
+                  </button>
+                  {orderType === 'aggressive' && (
+                    <div className="text-[10px] text-red-400/80 bg-red-900/20 rounded px-2 py-0.5 border border-red-700/20">
+                      Fights longer before morale breaks (-25% break threshold)
+                    </div>
+                  )}
+                  <button
+                    onClick={() => {
+                      onSetArmyOrder?.(orderingBannerId, {
+                        bannerId: orderingBannerId,
+                        type: 'no_retreat',
+                      });
+                      setOrderMode('idle');
+                    }}
+                    className={`w-full px-3 py-1.5 rounded text-xs border transition-colors flex items-center gap-2 ${
+                      orderType === 'no_retreat'
+                        ? 'bg-rose-900/80 text-rose-200 border-rose-500/50'
+                        : 'bg-slate-700 hover:bg-slate-600 text-slate-300 border-slate-500/50'
+                    }`}
+                  >
+                    💀 No-Retreat Assault
+                    {orderType === 'no_retreat' && <span className="ml-auto text-rose-400 text-[10px]">ACTIVE</span>}
+                  </button>
+                  {orderType === 'no_retreat' && (
+                    <div className="text-[10px] text-rose-400/80 bg-rose-900/20 rounded px-2 py-0.5 border border-rose-700/20">
+                      ⚠ Army fights to the death offensively — no retreat, high risk!
+                    </div>
+                  )}
+                  <button
                     onClick={() => { if (!isTraining) setOrderMode('selectingMoveTarget'); }}
                     disabled={isTraining}
                     title={isTraining ? 'Cannot move while reinforcing' : undefined}

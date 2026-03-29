@@ -350,7 +350,7 @@ export type SiegeGarrisonArmy = {
   finalTroops: number;
 };
 
-export type BattleRole = 'primary_attacker' | 'flank_attacker' | 'defender' | 'reinforcement';
+export type BattleRole = 'primary_attacker' | 'flank_attacker' | 'defender' | 'reinforcement' | 'garrison_defender';
 
 export type FieldBattlePlayerArmy = {
   bannerId: number;
@@ -395,6 +395,11 @@ export type FieldBattleResult = {
   roles?: {
     playerRoles: Record<number, BattleRole>;
     enemyRoles: Record<number, BattleRole>;
+  };
+  terrain?: {
+    type: string;         // 'forest', 'hills', etc.
+    defenseBonus: number; // e.g. 1.15
+    skirmishBonus: number;
   };
 };
 
@@ -447,7 +452,7 @@ export interface MapData {
 }
 
 // Turn-based order system
-export type ArmyOrderType = 'hold' | 'move' | 'defend';
+export type ArmyOrderType = 'hold' | 'move' | 'defend' | 'aggressive' | 'no_retreat';
 
 export interface ArmyOrder {
   bannerId: number;

@@ -43,6 +43,7 @@ import {
 import {
   simulateBattle,
   getDefaultUnitStats, getDefaultBattleParams,
+  getTerrainModifier,
   type UnitStats, type BattleParams,
 } from './battleSimulator';
 import { BattleChart } from './components/BattleChart';
@@ -3041,14 +3042,22 @@ export default function ResourceVillageUI() {
     };
     const hasFlank = flankingCtx.playerFlanking > 0 || flankingCtx.enemyFlanking > 0;
 
-    // Detect defend stance: explicit Defend order OR stationed at fortress (fortress = auto-defend)
+    // Detect stance from pending orders
     const atFortress = fortressProvinceId != null && provinceId === fortressProvinceId;
     const playerDefending = atFortress || playerBanners.some(b => pendingOrders?.[b.id]?.type === 'defend');
+    const playerAggressive = playerBanners.some(b => pendingOrders?.[b.id]?.type === 'aggressive');
+    const playerNoRetreat = playerBanners.some(b => pendingOrders?.[b.id]?.type === 'no_retreat');
     const stanceCtx: import('./battleSimulator').BattleStance | undefined =
-      playerDefending ? { playerDefending: true } : undefined;
+      (playerDefending || playerAggressive || playerNoRetreat)
+        ? { playerDefending, playerAggressive, playerNoRetreat }
+        : undefined;
+
+    // Get terrain modifier for battle location
+    const battleProv = provinceDataRef?.current?.provinces?.find((p: any) => p.id === provinceId);
+    const terrainMod = battleProv?.terrain ? getTerrainModifier(battleProv.terrain) : undefined;
 
     // Run full battle with morale tracking and pursuit phase
-    const battleResult = simulateBattle(playerDiv as any, enemyDiv as any, stats, p, undefined, hasFlank ? flankingCtx : undefined, stanceCtx);
+    const battleResult = simulateBattle(playerDiv as any, enemyDiv as any, stats, p, undefined, hasFlank ? flankingCtx : undefined, stanceCtx, terrainMod);
     const timeline = battleResult.timeline;
 
     const finalPlayerTroops = battleResult.playerFinal.total;
@@ -3188,6 +3197,11 @@ export default function ResourceVillageUI() {
       roles: (playerRoles || enemyRoles) ? {
         playerRoles: playerRoles || {},
         enemyRoles: enemyRoles || {},
+      } : undefined,
+      terrain: terrainMod && terrainMod.defenseBonus !== 1.0 ? {
+        type: terrainMod.terrain,
+        defenseBonus: terrainMod.defenseBonus,
+        skirmishBonus: terrainMod.skirmishBonus,
       } : undefined,
     };
   }
@@ -7181,6 +7195,17 @@ Safe recruits (unassigned people): ${freePop}`;
                 className="px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-lg bg-green-600 active:bg-green-700 hover:bg-green-700 text-white text-[10px] sm:text-xs font-semibold touch-manipulation min-h-[44px] sm:min-h-0"
               >
                 🚀 Quick Test Setup
+              </button>
+              <button
+                onClick={() => {
+                  import('./tests/combatTestHarness').then(mod => {
+                    const results = mod.runAllCombatTests();
+                    alert(`Combat Tests: ${results.passed}/${results.total} passed, ${results.failed} failed.\nCheck console for details.`);
+                  });
+                }}
+                className="px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-lg bg-purple-600 active:bg-purple-700 hover:bg-purple-700 text-white text-[10px] sm:text-xs font-semibold touch-manipulation min-h-[44px] sm:min-h-0"
+              >
+                🧪 Run Combat Tests
               </button>
             </div>
             {/* Simulators Section */}

@@ -27,6 +27,7 @@ function RoleBadge({ role }: { role?: BattleRole }) {
     flank_attacker: { label: 'Flank', color: 'bg-orange-700/60 text-orange-200 border-orange-500/40' },
     defender: { label: 'Defender', color: 'bg-blue-700/60 text-blue-200 border-blue-500/40' },
     reinforcement: { label: 'Reinforcement', color: 'bg-slate-600/60 text-slate-200 border-slate-400/40' },
+    garrison_defender: { label: 'Garrison', color: 'bg-cyan-700/60 text-cyan-200 border-cyan-500/40' },
     // Backward compat for old saved battle results
     primary_defender: { label: 'Defender', color: 'bg-blue-700/60 text-blue-200 border-blue-500/40' },
     flank_defender: { label: 'Defender', color: 'bg-blue-700/60 text-blue-200 border-blue-500/40' },
@@ -801,9 +802,13 @@ export default function ExpeditionsUI({
                                     <div className="flex items-center gap-3 mb-2">
                                       <span className="text-lg">⚔️</span>
                                       <div className="flex-1">
-                                        <div className="text-xs font-bold text-slate-200">Battle of {fb.provinceId.replace('prov_', 'Province ')}</div>
+                                        <div className="text-xs font-bold text-slate-200">
+                                          Battle of {fb.provinceId.replace('prov_', 'Province ')}
+                                          {fb.terrain && <span className="text-[9px] ml-1.5 px-1 py-0 rounded border bg-green-800/40 text-green-300 border-green-600/40 font-semibold capitalize">{fb.terrain.type}</span>}
+                                        </div>
                                         <div className="text-[10px] text-slate-500">
                                           Turn {fb.turn}{turnsAgo > 0 ? ` · ${turnsAgo} turn${turnsAgo !== 1 ? 's' : ''} ago` : ''} · {pAll.length} allied {pAll.length === 1 ? 'army' : 'armies'} vs {eAll.length} hostile {eAll.length === 1 ? 'force' : 'forces'}
+                                          {fb.terrain && fb.terrain.defenseBonus !== 1.0 && <span className="text-green-400 ml-1">· {fb.terrain.type}: +{Math.round((fb.terrain.defenseBonus - 1) * 100)}% def</span>}
                                         </div>
                                       </div>
                                       <span className={`text-[10px] px-2 py-0.5 rounded font-bold uppercase ${

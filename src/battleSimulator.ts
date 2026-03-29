@@ -42,6 +42,25 @@ export type FlankingContext = {
   enemyFlanking: number;
 };
 
+/** Terrain modifier — affects combat based on battle location terrain type. */
+export type TerrainModifier = {
+  terrain: string;           // e.g., 'forest', 'hills', 'plains'
+  defenseBonus: number;      // multiplier for defender's defense stats (e.g., 1.15 = +15%)
+  skirmishBonus: number;     // multiplier for defender's skirmish effectiveness (e.g., 1.1 = +10%)
+};
+
+/** Default terrain combat modifiers */
+export function getTerrainModifier(terrain: string): TerrainModifier {
+  switch (terrain) {
+    case 'forest':   return { terrain, defenseBonus: 1.15, skirmishBonus: 1.0 };
+    case 'hills':    return { terrain, defenseBonus: 1.10, skirmishBonus: 1.15 };
+    case 'mountain': return { terrain, defenseBonus: 1.20, skirmishBonus: 1.10 };
+    case 'swamp':    return { terrain, defenseBonus: 1.05, skirmishBonus: 0.9 };
+    case 'volcanic': return { terrain, defenseBonus: 1.0, skirmishBonus: 0.85 };
+    default:         return { terrain, defenseBonus: 1.0, skirmishBonus: 1.0 }; // plains, coast, etc.
+  }
+}
+
 // ----------------------------------------------------------------------------
 // Default data — used for state initialisation in the component
 // ----------------------------------------------------------------------------
@@ -258,8 +277,10 @@ export function getWarriorArcherTotals(div: Division): { warrior: number; archer
 }
 
 export type BattleStance = {
-  playerDefending?: boolean;  // player side fights to the death (no retreat)
+  playerDefending?: boolean;  // player side fights to the death defensively (no retreat, no pursuit)
   enemyDefending?: boolean;   // enemy side fights to the death
+  playerAggressive?: boolean; // player side fights more aggressively (lower morale break threshold)
+  playerNoRetreat?: boolean;  // player side fights to the death offensively (no retreat, but CAN pursue)
 };
 
 /**
@@ -281,6 +302,7 @@ export function simulateBattle(
   playerCommander?: Commander | null,
   flanking?: FlankingContext,
   stance?: BattleStance,
+  terrain?: TerrainModifier,
 ): BattleResult {
   // Deep copy divisions so originals are not mutated
   const A: Division = {};
@@ -321,8 +343,13 @@ export function simulateBattle(
     const SB = phaseStats(B, stats, phase);
     const sA = total(A) / 100;
     const sB = total(B) / 100;
-    const rA = SA.EA / SB.ED;
-    const rB = SB.EA / SA.ED;
+    // Apply terrain modifier: defender (side A) gets defense/skirmish bonus from terrain
+    const terrainDefBonus = terrain?.defenseBonus ?? 1.0;
+    const terrainSkirmBonus = (terrain?.skirmishBonus ?? 1.0);
+    const effectiveAED = SA.ED * terrainDefBonus;
+    const effectiveASkirmish = phase === 'skirmish' ? SA.EA * terrainSkirmBonus : SA.EA;
+    const rA = effectiveASkirmish / SB.ED;
+    const rB = SB.EA / effectiveAED;
     const nA = 1 + (Math.random() * 2 - 1) * params.rng_variance;
     const nB = 1 + (Math.random() * 2 - 1) * params.rng_variance;
     const lossB = params.base_casualty_rate * sA * rA * nA;
@@ -352,21 +379,33 @@ export function simulateBattle(
     step('skirmish');
   }
 
-  // Melee until one side breaks or is destroyed (defend stance = no rout)
+  // Melee until one side breaks or is destroyed
+  // Stances that prevent retreat: Defend (defensive last stand), No-Retreat Assault (offensive last stand)
   const playerDefends = stance?.playerDefending || false;
+  const playerNoRetreat = stance?.playerNoRetreat || false;
+  const playerWontRout = playerDefends || playerNoRetreat; // either stance prevents morale retreat
   const enemyDefends = stance?.enemyDefending || false;
+  // Aggressive stance: lower break threshold (fights 25% longer before morale breaks)
+  if (stance?.playerAggressive) {
+    const aggressiveReduction = 0.25; // 25% lower break threshold
+    // tA was already set; reduce it
+    // tA = break_pct% of original morale. Aggressive makes it break_pct * (1-0.25) = effectively fights longer
+    // We can't reassign const tA, so we use the already-mutable mA threshold approach
+    // Actually tA is const. Let's just track it differently.
+  }
   let guard = 0;
   while (total(A) > 0 && total(B) > 0) {
-    const aBroken = mA <= tA;
+    const effectiveTa = stance?.playerAggressive ? tA * 0.75 : tA; // Aggressive: 25% lower break threshold
+    const aBroken = mA <= effectiveTa;
     const bBroken = mB <= tB;
 
-    // Normal rout exit — unless the broken side is defending
-    if (aBroken && !playerDefends && !bBroken) break;
+    // Normal rout exit — unless the broken side has a no-retreat stance
+    if (aBroken && !playerWontRout && !bBroken) break;
     if (bBroken && !enemyDefends && !aBroken) break;
-    // Both broken: if neither is defending → draw exit; if one defends → they keep fighting
+    // Both broken: if neither side prevents retreat → draw exit
     if (aBroken && bBroken) {
-      if (!playerDefends && !enemyDefends) break;
-      // One or both defending: continue until troops gone
+      if (!playerWontRout && !enemyDefends) break;
+      // One or both refusing retreat: continue until troops gone
     }
     // Neither broken yet → normal melee
     if (!aBroken && !bBroken) {
@@ -391,7 +430,8 @@ export function simulateBattle(
   else if (mB <= tB || brokeB) winner = 'player';
   else winner = mA > mB ? 'player' : mB > mA ? 'enemy' : total(A) > total(B) ? 'player' : total(B) > total(A) ? 'enemy' : 'draw';
 
-  // Pursuit phase — only if winner exists AND winner is NOT defending (defenders don't chase)
+  // Pursuit phase — only if winner exists AND winner is NOT in defensive stance
+  // Note: No-Retreat Assault CAN pursue (it's offensive), only Defend blocks pursuit
   const winnerDefends = (winner === 'player' && playerDefends) || (winner === 'enemy' && enemyDefends);
   const loserDefends = (winner === 'player' && enemyDefends) || (winner === 'enemy' && playerDefends);
   if ((winner === 'player' || winner === 'enemy') && params.pursuit_ticks > 0 && !winnerDefends && !loserDefends) {
