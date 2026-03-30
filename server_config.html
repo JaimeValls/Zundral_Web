@@ -109,7 +109,8 @@ canvas{width:100%;height:180px;background:var(--bg);border:1px solid var(--borde
   <div class="tab active" data-tab="general">General</div>
   <div class="tab" data-tab="waves">Assault Waves</div>
   <div class="tab" data-tab="bandits">Bandits</div>
-  <div class="tab" data-tab="missions">Missions</div>
+  <div class="tab" data-tab="missioneditor">Mission Editor</div>
+  <div class="tab" data-tab="missions">Mission Schedule</div>
   <div class="tab" data-tab="fortress">Enemy Fortress</div>
   <div class="tab" data-tab="patrols">Patrols</div>
   <div class="tab" data-tab="export">Export / Import</div>
@@ -284,7 +285,42 @@ canvas{width:100%;height:180px;background:var(--bg);border:1px solid var(--borde
   </div>
 </div>
 
-<!-- ═══════════════ TAB: MISSIONS ═══════════════ -->
+<!-- ═══════════════ TAB: MISSION EDITOR ═══════════════ -->
+<div class="tab-content" id="tab-missioneditor">
+  <div style="display:grid;grid-template-columns:280px 1fr;gap:16px;min-height:600px">
+    <!-- Left: Mission List -->
+    <div class="card" style="overflow-y:auto;max-height:700px">
+      <h3>Mission Library</h3>
+      <div style="display:flex;gap:4px;margin-bottom:8px;flex-wrap:wrap">
+        <select id="editorFilterDiff" onchange="renderEditorList()" style="flex:1;padding:4px;border-radius:6px;border:1px solid var(--border);background:var(--panel-2);color:var(--text);font-size:11px">
+          <option value="all">All Difficulties</option>
+          <option value="easy">Easy</option>
+          <option value="medium">Medium</option>
+          <option value="hard">Hard</option>
+          <option value="very_hard">Very Hard</option>
+          <option value="extreme">Extreme</option>
+        </select>
+        <select id="editorFilterScope" onchange="renderEditorList()" style="flex:1;padding:4px;border-radius:6px;border:1px solid var(--border);background:var(--panel-2);color:var(--text);font-size:11px">
+          <option value="all">All Scopes</option>
+          <option value="main_base">Main Base</option>
+          <option value="expedition_1">Expedition 1</option>
+        </select>
+      </div>
+      <div id="editorMissionList"></div>
+      <div style="display:flex;gap:4px;margin-top:10px;flex-wrap:wrap">
+        <button class="btn btn-primary btn-sm" onclick="editorNewMission()">+ New Mission</button>
+        <button class="btn btn-ghost btn-sm" onclick="editorDuplicate()">&#128203; Duplicate</button>
+        <button class="btn btn-danger btn-sm" onclick="editorDelete()">&#128465; Delete</button>
+      </div>
+    </div>
+    <!-- Right: Editor Panel -->
+    <div class="card" id="editorPanel">
+      <div id="editorContent" style="color:var(--muted);text-align:center;padding:40px">Select a mission from the list to edit</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ TAB: MISSION SCHEDULE ═══════════════ -->
 <div class="tab-content" id="tab-missions">
   <div class="card">
     <h3>Mission Rotation</h3>
@@ -691,6 +727,7 @@ function applyConfigToUI() {
   renderWavesComp();
   renderFortLevels();
   renderPatrolTiers();
+  renderEditorList();
   renderMissionPlanner();
   renderMissionLibrary();
   updateDayCalc();
@@ -942,6 +979,226 @@ function removePatrolTier(tier) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// MISSION EDITOR
+// ═══════════════════════════════════════════════════════════════════
+let editorSelectedId = null;
+
+const REWARD_TIERS = [
+  {max:30,tier:'very_easy',name:"Scout's Cache",icon:'📦',gold:10,wood:15,stone:10,food:20,iron:5},
+  {max:100,tier:'easy',name:"Raider's Loot",icon:'🎒',gold:25,wood:40,stone:30,food:50,iron:15},
+  {max:300,tier:'medium',name:"War Chest",icon:'💼',gold:60,wood:100,stone:80,food:120,iron:40},
+  {max:600,tier:'hard',name:"Commander's Crate",icon:'📦',gold:150,wood:250,stone:200,food:300,iron:100},
+  {max:2500,tier:'very_hard',name:"Warlord's Hoard",icon:'🏆',gold:400,wood:600,stone:500,food:800,iron:250},
+  {max:Infinity,tier:'extreme',name:"Legendary Tribute",icon:'👑',gold:1000,wood:1500,stone:1200,food:2000,iron:600},
+];
+
+function getAutoRewards(totalTroops) {
+  const t = REWARD_TIERS.find(r => totalTroops <= r.max) || REWARD_TIERS[5];
+  const scale = 1 + (totalTroops % 100) / 1000;
+  return { tier: t.tier, name: t.name, icon: t.icon, gold: Math.floor(t.gold*scale), wood: Math.floor(t.wood*scale), stone: Math.floor(t.stone*scale), food: Math.floor(t.food*scale), iron: Math.floor(t.iron*scale) };
+}
+
+function ensureMissionLibrary() {
+  if (!config.missionLibrary || config.missionLibrary.length === 0) {
+    // Pre-populate from hardcoded missions
+    config.missionLibrary = MISSIONS.map(m => ({
+      id: m.id, name: m.name, description: '', terrain: 'plains',
+      difficulty: m.difficulty, scope: 'expedition_1',
+      enemySquads: guessSquadsFromTroops(m.troops),
+      rewards: { mode: 'auto', gold:0, wood:0, stone:0, food:0, iron:0, skillPoints:0 }
+    }));
+    saveConfig();
+  }
+}
+
+function guessSquadsFromTroops(troops) {
+  const warriors = Math.ceil(troops * 0.7 / 10);
+  const archers = Math.ceil(troops * 0.3 / 10);
+  const squads = [];
+  if (warriors > 0) squads.push({type:'warrior',count:warriors});
+  if (archers > 0) squads.push({type:'archer',count:archers});
+  return squads;
+}
+
+function getMissionTotalTroops(m) {
+  return (m.enemySquads || []).reduce((s, sq) => s + (sq.count || 0) * 10, 0);
+}
+
+function renderEditorList() {
+  ensureMissionLibrary();
+  const diffFilter = document.getElementById('editorFilterDiff').value;
+  const scopeFilter = document.getElementById('editorFilterScope').value;
+  let list = config.missionLibrary || [];
+  if (diffFilter !== 'all') list = list.filter(m => m.difficulty === diffFilter);
+  if (scopeFilter !== 'all') list = list.filter(m => m.scope === scopeFilter);
+
+  const el = document.getElementById('editorMissionList');
+  let html = '';
+  for (const m of list) {
+    const troops = getMissionTotalTroops(m);
+    const sel = editorSelectedId === m.id;
+    const scopeLabel = m.scope === 'main_base' ? 'Base' : m.scope === 'expedition_1' ? 'Exp 1' : 'All';
+    html += `<div onclick="editorSelect(${m.id})" style="padding:6px 8px;border-radius:6px;cursor:pointer;margin-bottom:3px;border:1px solid ${sel?'var(--accent)':'var(--border)'};background:${sel?'var(--panel-2)':'transparent'};transition:all .1s">`;
+    html += `<div style="font-size:12px;font-weight:700;color:${sel?'var(--accent)':'var(--text)'}">${m.name}</div>`;
+    html += `<div style="font-size:10px;color:var(--muted)"><span class="badge ${DIFF_BADGES[m.difficulty]||''}">${m.difficulty}</span> · ${troops} troops · ${scopeLabel}</div>`;
+    html += `</div>`;
+  }
+  if (list.length === 0) html = '<div style="color:var(--muted);font-size:11px;padding:8px">No missions match filters</div>';
+  el.innerHTML = html;
+}
+
+function editorSelect(id) {
+  editorSelectedId = id;
+  renderEditorList();
+  renderEditorPanel();
+}
+
+function renderEditorPanel() {
+  const el = document.getElementById('editorContent');
+  if (editorSelectedId === null) { el.innerHTML = '<div style="color:var(--muted);text-align:center;padding:40px">Select a mission from the list to edit</div>'; return; }
+  const m = (config.missionLibrary || []).find(x => x.id === editorSelectedId);
+  if (!m) { el.innerHTML = '<div style="color:var(--muted)">Mission not found</div>'; return; }
+  const troops = getMissionTotalTroops(m);
+  const autoR = getAutoRewards(troops);
+  const isAuto = !m.rewards || m.rewards.mode !== 'custom';
+
+  let html = '<h3 style="margin-bottom:12px">Edit Mission #' + m.id + '</h3>';
+
+  // Basic Info
+  html += '<h4>Basic Info</h4>';
+  html += '<div class="grid-2" style="gap:8px">';
+  html += `<div class="field"><label>Name</label><input type="text" id="edName" value="${esc(m.name)}" onchange="editorSaveField('name',this.value)" style="width:100%;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--panel-2);color:var(--text)"></div>`;
+  html += `<div class="field"><label>Terrain</label><select id="edTerrain" onchange="editorSaveField('terrain',this.value)" style="width:100%;padding:6px;border-radius:6px;border:1px solid var(--border);background:var(--panel-2);color:var(--text)">`;
+  for (const t of ['plains','hills','forest','building']) html += `<option value="${t}" ${m.terrain===t?'selected':''}>${t}</option>`;
+  html += `</select></div>`;
+  html += `<div class="field"><label>Difficulty</label><select id="edDiff" onchange="editorSaveField('difficulty',this.value)" style="width:100%;padding:6px;border-radius:6px;border:1px solid var(--border);background:var(--panel-2);color:var(--text)">`;
+  for (const d of ['easy','medium','hard','very_hard','extreme']) html += `<option value="${d}" ${m.difficulty===d?'selected':''}>${d}</option>`;
+  html += `</select></div>`;
+  html += `<div class="field"><label>Scope</label><select id="edScope" onchange="editorSaveField('scope',this.value)" style="width:100%;padding:6px;border-radius:6px;border:1px solid var(--border);background:var(--panel-2);color:var(--text)">`;
+  for (const s of [['all','All'],['main_base','Main Base'],['expedition_1','Expedition 1']]) html += `<option value="${s[0]}" ${m.scope===s[0]?'selected':''}>${s[1]}</option>`;
+  html += `</select></div>`;
+  html += '</div>';
+  html += `<div class="field" style="margin-top:8px"><label>Description</label><textarea id="edDesc" rows="2" onchange="editorSaveField('description',this.value)" style="width:100%;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--panel-2);color:var(--text);resize:vertical;font:inherit">${esc(m.description||'')}</textarea></div>`;
+
+  // Enemy Army
+  html += '<h4>Enemy Army</h4>';
+  html += `<div style="font-size:11px;color:var(--muted);margin-bottom:6px">Total troops: <strong style="color:var(--accent)">${troops}</strong> · Auto-tier: <span class="badge ${DIFF_BADGES[autoR.tier]||''}">${autoR.tier}</span> ${autoR.icon} ${autoR.name}</div>`;
+  html += '<table><thead><tr><th>Unit Type</th><th>Squads (×10)</th><th>Troops</th><th></th></tr></thead><tbody>';
+  for (let i = 0; i < (m.enemySquads||[]).length; i++) {
+    const sq = m.enemySquads[i];
+    html += `<tr>`;
+    html += `<td><select onchange="editorUpdateSquad(${i},'type',this.value)" style="padding:3px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:11px">`;
+    for (const ut of UNIT_TYPES) html += `<option value="${ut}" ${sq.type===ut?'selected':''}>${UNIT_NAMES[ut]}</option>`;
+    html += `</select></td>`;
+    html += `<td><input type="number" value="${sq.count}" min="1" max="500" onchange="editorUpdateSquad(${i},'count',+this.value)" style="width:50px"></td>`;
+    html += `<td style="color:var(--accent);font-weight:700">${sq.count*10}</td>`;
+    html += `<td><button class="btn btn-danger btn-sm" onclick="editorRemoveSquad(${i})">✕</button></td>`;
+    html += `</tr>`;
+  }
+  html += '</tbody></table>';
+  html += '<button class="btn btn-ghost btn-sm" onclick="editorAddSquad()" style="margin-top:4px">+ Add Unit Type</button>';
+
+  // Rewards
+  html += '<h4>Rewards</h4>';
+  html += `<div class="field-inline" style="margin-bottom:8px"><label>Mode</label>`;
+  html += `<label style="font-size:11px;cursor:pointer;display:flex;align-items:center;gap:4px"><input type="radio" name="rewardMode" value="auto" ${isAuto?'checked':''} onchange="editorSetRewardMode('auto')"> Auto-calculate</label>`;
+  html += `<label style="font-size:11px;cursor:pointer;display:flex;align-items:center;gap:4px"><input type="radio" name="rewardMode" value="custom" ${!isAuto?'checked':''} onchange="editorSetRewardMode('custom')"> Custom</label>`;
+  html += `</div>`;
+
+  const r = isAuto ? autoR : (m.rewards || autoR);
+  const disabled = isAuto ? 'disabled style="opacity:0.5"' : '';
+  html += '<div class="grid-3" style="gap:6px">';
+  html += `<div class="field-inline"><label>🪙 Gold</label><input type="number" id="edRGold" value="${r.gold}" ${disabled} onchange="editorSaveReward('gold',+this.value)"></div>`;
+  html += `<div class="field-inline"><label>🪵 Wood</label><input type="number" id="edRWood" value="${r.wood}" ${disabled} onchange="editorSaveReward('wood',+this.value)"></div>`;
+  html += `<div class="field-inline"><label>🪨 Stone</label><input type="number" id="edRStone" value="${r.stone}" ${disabled} onchange="editorSaveReward('stone',+this.value)"></div>`;
+  html += `<div class="field-inline"><label>🍖 Food</label><input type="number" id="edRFood" value="${r.food}" ${disabled} onchange="editorSaveReward('food',+this.value)"></div>`;
+  html += `<div class="field-inline"><label>⚒ Iron</label><input type="number" id="edRIron" value="${r.iron}" ${disabled} onchange="editorSaveReward('iron',+this.value)"></div>`;
+  html += `<div class="field-inline"><label>⭐ Skill</label><input type="number" id="edRSkill" value="${(m.rewards||{}).skillPoints||0}" ${disabled} onchange="editorSaveReward('skillPoints',+this.value)"></div>`;
+  html += '</div>';
+  if (isAuto) html += `<div style="font-size:10px;color:var(--muted);margin-top:4px">Rewards auto-calculated from ${troops} troops → ${autoR.icon} ${autoR.name}</div>`;
+
+  html += '<div style="margin-top:16px"><button class="btn btn-ok" onclick="editorSave()">&#128190; Save Mission</button></div>';
+
+  el.innerHTML = html;
+}
+
+function esc(s) { return String(s||'').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+
+function editorSaveField(field, value) {
+  const m = (config.missionLibrary||[]).find(x => x.id === editorSelectedId);
+  if (m) { m[field] = value; saveConfig(); }
+}
+
+function editorUpdateSquad(index, field, value) {
+  const m = (config.missionLibrary||[]).find(x => x.id === editorSelectedId);
+  if (m && m.enemySquads[index]) { m.enemySquads[index][field] = value; saveConfig(); renderEditorPanel(); renderEditorList(); }
+}
+
+function editorAddSquad() {
+  const m = (config.missionLibrary||[]).find(x => x.id === editorSelectedId);
+  if (m) { m.enemySquads.push({type:'warrior',count:1}); saveConfig(); renderEditorPanel(); renderEditorList(); }
+}
+
+function editorRemoveSquad(index) {
+  const m = (config.missionLibrary||[]).find(x => x.id === editorSelectedId);
+  if (m) { m.enemySquads.splice(index,1); saveConfig(); renderEditorPanel(); renderEditorList(); }
+}
+
+function editorSetRewardMode(mode) {
+  const m = (config.missionLibrary||[]).find(x => x.id === editorSelectedId);
+  if (m) {
+    if (!m.rewards) m.rewards = {mode:'auto',gold:0,wood:0,stone:0,food:0,iron:0,skillPoints:0};
+    m.rewards.mode = mode;
+    if (mode === 'auto') {
+      const auto = getAutoRewards(getMissionTotalTroops(m));
+      Object.assign(m.rewards, auto);
+    }
+    saveConfig(); renderEditorPanel();
+  }
+}
+
+function editorSaveReward(field, value) {
+  const m = (config.missionLibrary||[]).find(x => x.id === editorSelectedId);
+  if (m) { if (!m.rewards) m.rewards = {mode:'custom',gold:0,wood:0,stone:0,food:0,iron:0,skillPoints:0}; m.rewards[field] = value; saveConfig(); }
+}
+
+function editorSave() { saveConfig(); renderEditorList(); alert('Mission saved!'); }
+
+function editorNewMission() {
+  ensureMissionLibrary();
+  const maxId = Math.max(0, ...(config.missionLibrary||[]).map(m=>m.id));
+  config.missionLibrary.push({
+    id: maxId+1, name: 'New Mission', description: '', terrain: 'plains',
+    difficulty: 'easy', scope: 'expedition_1',
+    enemySquads: [{type:'warrior',count:5},{type:'archer',count:3}],
+    rewards: {mode:'auto',gold:0,wood:0,stone:0,food:0,iron:0,skillPoints:0}
+  });
+  editorSelectedId = maxId+1;
+  saveConfig(); renderEditorList(); renderEditorPanel();
+}
+
+function editorDuplicate() {
+  if (editorSelectedId===null) { alert('Select a mission first'); return; }
+  const m = (config.missionLibrary||[]).find(x => x.id === editorSelectedId);
+  if (!m) return;
+  const maxId = Math.max(0,...(config.missionLibrary||[]).map(x=>x.id));
+  const dup = JSON.parse(JSON.stringify(m));
+  dup.id = maxId+1;
+  dup.name += ' (Copy)';
+  config.missionLibrary.push(dup);
+  editorSelectedId = dup.id;
+  saveConfig(); renderEditorList(); renderEditorPanel();
+}
+
+function editorDelete() {
+  if (editorSelectedId===null) { alert('Select a mission first'); return; }
+  if (!confirm('Delete this mission?')) return;
+  config.missionLibrary = (config.missionLibrary||[]).filter(m => m.id !== editorSelectedId);
+  editorSelectedId = null;
+  saveConfig(); renderEditorList(); renderEditorPanel();
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // MISSION PLANNER
 // ═══════════════════════════════════════════════════════════════════
 function renderMissionPlanner() {
@@ -966,8 +1223,10 @@ function renderMissionPlanner() {
     html += `<span style="color:var(--muted);font-size:11px;width:40px">Slot ${i+1}</span>`;
     html += `<select style="flex:1" onchange="updateMissionSlot(${i},this.value)">`;
     html += `<option value="">(empty)</option>`;
-    for (const m of MISSIONS) {
-      html += `<option value="${m.id}" ${m.id===mid?'selected':''}>${m.name} (${m.difficulty})</option>`;
+    const missionSource = (config.missionLibrary && config.missionLibrary.length > 0) ? config.missionLibrary : MISSIONS;
+    for (const m of missionSource) {
+      const troops = m.troops || getMissionTotalTroops(m) || 0;
+      html += `<option value="${m.id}" ${m.id===mid?'selected':''}>${m.name} (${m.difficulty}) — ${troops} troops</option>`;
     }
     html += `</select>`;
     html += `<button class="btn btn-danger btn-sm" onclick="removeMissionSlot(${i})">&#10005;</button>`;
@@ -1017,11 +1276,13 @@ function copyPreviousDay() {
 function renderMissionLibrary() {
   const el = document.getElementById('missionLibrary');
   let html = '';
-  const filtered = missionFilter === 'all' ? MISSIONS : MISSIONS.filter(m => m.difficulty === missionFilter);
+  const source = (config.missionLibrary && config.missionLibrary.length > 0) ? config.missionLibrary : MISSIONS;
+  const filtered = missionFilter === 'all' ? source : source.filter(m => m.difficulty === missionFilter);
   for (const m of filtered) {
+    const troops = m.troops || getMissionTotalTroops(m) || 0;
     html += `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--border);font-size:11px">`;
     html += `<span style="color:var(--text)">${m.name}</span>`;
-    html += `<span><span class="badge ${DIFF_BADGES[m.difficulty]}">${m.difficulty}</span> <span style="color:var(--muted);margin-left:4px">${m.troops}</span></span>`;
+    html += `<span><span class="badge ${DIFF_BADGES[m.difficulty]}">${m.difficulty}</span> <span style="color:var(--muted);margin-left:4px">${troops}</span></span>`;
     html += `</div>`;
   }
   el.innerHTML = html;
