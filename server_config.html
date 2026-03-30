@@ -196,6 +196,7 @@ canvas{width:100%;height:180px;background:var(--bg);border:1px solid var(--borde
     </div>
     <div id="wavesScaleParams"></div>
     <canvas id="wavesScaleChart"></canvas>
+    <div id="wavesScaleTable"></div>
   </div>
 
   <div class="card">
@@ -276,6 +277,7 @@ canvas{width:100%;height:180px;background:var(--bg);border:1px solid var(--borde
     </div>
     <div id="banditsScaleParams"></div>
     <canvas id="banditsScaleChart"></canvas>
+    <div id="banditsScaleTable"></div>
   </div>
 </div>
 
@@ -436,6 +438,7 @@ canvas{width:100%;height:180px;background:var(--bg);border:1px solid var(--borde
     </div>
     <div id="patrolsScaleParams"></div>
     <canvas id="patrolsScaleChart"></canvas>
+    <div id="patrolsScaleTable"></div>
   </div>
 </div>
 
@@ -545,6 +548,8 @@ document.querySelectorAll('.tab').forEach(t => {
     document.querySelectorAll('.tab-content').forEach(x => x.classList.remove('active'));
     t.classList.add('active');
     document.getElementById('tab-' + t.dataset.tab).classList.add('active');
+    // Redraw charts when tab becomes visible (canvas needs layout dimensions)
+    setTimeout(() => { drawScalingChart('waves'); drawScalingChart('bandits'); drawScalingChart('patrols'); }, 50);
   });
 });
 
@@ -831,12 +836,27 @@ function drawScalingChart(prefix) {
     if (d === 1) ctx.moveTo(x, y); else ctx.lineTo(x, y);
   }
   ctx.stroke();
-  // Dots
-  ctx.fillStyle = '#2d9cff';
+  // Dots + value labels
   for (let d = 1; d <= days; d++) {
     const x = pad.l + ((d - 1) / (days - 1)) * cw;
     const y = pad.t + ch - (values[d - 1] / maxVal) * ch;
+    // Dot
+    ctx.fillStyle = '#2d9cff';
     ctx.beginPath(); ctx.arc(x, y, 5, 0, Math.PI * 2); ctx.fill();
+    // Value label above dot
+    ctx.fillStyle = '#e0e6f0'; ctx.font = 'bold 18px system-ui'; ctx.textAlign = 'center';
+    ctx.fillText(Math.round(values[d - 1]), x, y - 12);
+  }
+
+  // Render table below chart
+  const tableEl = document.getElementById(prefix + 'ScaleTable');
+  if (tableEl) {
+    let html = '<table style="margin-top:8px"><thead><tr><th>Day</th>';
+    for (let d = 1; d <= days; d++) html += `<th>D${d}</th>`;
+    html += '</tr></thead><tbody><tr><td style="font-weight:700;color:var(--muted)">Army Size</td>';
+    for (let d = 1; d <= days; d++) html += `<td style="color:var(--accent);font-weight:700">${Math.round(values[d-1])}</td>`;
+    html += '</tr></tbody></table>';
+    tableEl.innerHTML = html;
   }
 }
 
