@@ -65,6 +65,9 @@ export interface ExpeditionsUIProps {
   onShowResourceError?: (msg: string) => void;
   onRequestReinforcement?: (bannerId: number) => void;
   onCancelReinforcement?: (bannerId: number) => void;
+  onSpawnAssaultEnemy?: (expeditionId: string, armySize: number, archerRatio: number) => void;
+  onSpawnRoamingEnemies?: (expeditionId: string, count: number, minSize: number, maxSize: number) => void;
+  onUpdateHostileConfig?: (config: { enabled: boolean; frequency: number; startTurn: number; armySize: number; archerRatio: number }) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -94,6 +97,9 @@ export default function ExpeditionsUI({
   onShowResourceError,
   onRequestReinforcement,
   onCancelReinforcement,
+  onSpawnAssaultEnemy,
+  onSpawnRoamingEnemies,
+  onUpdateHostileConfig,
 }: ExpeditionsUIProps) {
   const [battleLoading, setBattleLoading] = useState<{ expeditionId: string; progress: number } | null>(null);
   const [battleError, setBattleError] = useState<{ expeditionId: string; message: string } | null>(null);
@@ -292,6 +298,9 @@ export default function ExpeditionsUI({
                         onClaimExpeditionReward={(missionId) => onClaimExpeditionReward(exp.expeditionId, missionId)}
                         onRequestReinforcement={onRequestReinforcement}
                         onCancelReinforcement={onCancelReinforcement}
+                        onSpawnAssaultEnemy={(armySize, archerRatio) => onSpawnAssaultEnemy?.(exp.expeditionId, armySize, archerRatio)}
+                        onSpawnRoamingEnemies={(count, minSize, maxSize) => onSpawnRoamingEnemies?.(exp.expeditionId, count, minSize, maxSize)}
+                        onUpdateHostileConfig={onUpdateHostileConfig}
                       />
                     </div>
 

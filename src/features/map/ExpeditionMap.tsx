@@ -29,9 +29,12 @@ interface Props {
   onClaimExpeditionReward?: (missionId: number) => void;
   onRequestReinforcement?: (bannerId: number) => void;
   onCancelReinforcement?: (bannerId: number) => void;
+  onSpawnAssaultEnemy?: (armySize: number, archerRatio: number) => void;
+  onSpawnRoamingEnemies?: (count: number, minSize: number, maxSize: number) => void;
+  onUpdateHostileConfig?: (config: { enabled: boolean; frequency: number; startTurn: number; armySize: number; archerRatio: number }) => void;
 }
 
-export const ExpeditionMap: React.FC<Props> = ({ expedition, banners, missions, onClose, onDeployArmy, onSetArmyOrder, onClearArmyOrder, onExecuteTurn, onClaimExpeditionReward, onRequestReinforcement, onCancelReinforcement }) => {
+export const ExpeditionMap: React.FC<Props> = ({ expedition, banners, missions, onClose, onDeployArmy, onSetArmyOrder, onClearArmyOrder, onExecuteTurn, onClaimExpeditionReward, onRequestReinforcement, onCancelReinforcement, onSpawnAssaultEnemy, onSpawnRoamingEnemies, onUpdateHostileConfig }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const mapLoadState = useMapData();
@@ -82,6 +85,9 @@ export const ExpeditionMap: React.FC<Props> = ({ expedition, banners, missions, 
       onClaimExpeditionReward={onClaimExpeditionReward}
       onRequestReinforcement={onRequestReinforcement}
       onCancelReinforcement={onCancelReinforcement}
+      onSpawnAssaultEnemy={onSpawnAssaultEnemy}
+      onSpawnRoamingEnemies={onSpawnRoamingEnemies}
+      onUpdateHostileConfig={onUpdateHostileConfig}
       canvasRef={canvasRef}
       containerRef={containerRef}
     />
@@ -105,6 +111,9 @@ interface MapViewProps {
   onClaimExpeditionReward?: (missionId: number) => void;
   onRequestReinforcement?: (bannerId: number) => void;
   onCancelReinforcement?: (bannerId: number) => void;
+  onSpawnAssaultEnemy?: (armySize: number, archerRatio: number) => void;
+  onSpawnRoamingEnemies?: (count: number, minSize: number, maxSize: number) => void;
+  onUpdateHostileConfig?: (config: { enabled: boolean; frequency: number; startTurn: number; armySize: number; archerRatio: number }) => void;
   canvasRef: React.RefObject<HTMLCanvasElement | null>;
   containerRef: React.RefObject<HTMLDivElement | null>;
 }
@@ -122,6 +131,9 @@ const MapView: React.FC<MapViewProps> = ({
   onClaimExpeditionReward,
   onRequestReinforcement,
   onCancelReinforcement,
+  onSpawnAssaultEnemy,
+  onSpawnRoamingEnemies,
+  onUpdateHostileConfig,
   canvasRef,
   containerRef,
 }) => {
@@ -408,6 +420,16 @@ const MapView: React.FC<MapViewProps> = ({
   const [cheatMenuOpen, setCheatMenuOpen] = useState(false);
   const [cheatFogEnabled, setCheatFogEnabled] = useState(true);
   const [cheatShowDebug, setCheatShowDebug] = useState(false);
+
+  // Hostile config state
+  const [hostileEnabled, setHostileEnabled] = useState(true);
+  const [hostileFrequency, setHostileFrequency] = useState(4);
+  const [hostileStartTurn, setHostileStartTurn] = useState(5);
+  const [hostileArmySize, setHostileArmySize] = useState(80);
+  const [hostileArcherRatio, setHostileArcherRatio] = useState(50);
+  const [roamingCount, setRoamingCount] = useState(3);
+  const [roamingMinSize, setRoamingMinSize] = useState(20);
+  const [roamingMaxSize, setRoamingMaxSize] = useState(60);
 
   // Render the canvas (fog disabled via cheat → pass undefined)
   useMapRenderer({
@@ -1402,7 +1424,7 @@ const MapView: React.FC<MapViewProps> = ({
         {/* Cheat menu panel — all events stopped so map doesn't react */}
         {cheatMenuOpen && (
           <div
-            className="absolute bottom-14 right-3 bg-slate-900/95 border border-slate-600/50 rounded-lg p-3 z-40 min-w-[180px] backdrop-blur-sm"
+            className="absolute bottom-14 right-3 bg-slate-900/95 border border-amber-600/50 rounded-lg p-3 z-40 w-[280px] max-h-[500px] overflow-y-auto backdrop-blur-sm"
             style={{ pointerEvents: 'auto' }}
             onClick={e => e.stopPropagation()}
             onMouseDown={e => e.stopPropagation()}
@@ -1410,26 +1432,106 @@ const MapView: React.FC<MapViewProps> = ({
             onWheel={e => e.stopPropagation()}
           >
             <div className="text-amber-400 font-bold text-xs mb-2 border-b border-slate-700 pb-1">
-              🔧 Debug Menu
+              ⚙ HOSTILE CONFIGURATION
             </div>
-            <label className="flex items-center gap-2 text-xs text-slate-300 mb-1.5 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={cheatFogEnabled}
-                onChange={e => setCheatFogEnabled(e.target.checked)}
-                className="rounded"
-              />
-              Fog of War
-            </label>
-            <label className="flex items-center gap-2 text-xs text-slate-300 mb-1.5 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={cheatShowDebug}
-                onChange={e => setCheatShowDebug(e.target.checked)}
-                className="rounded"
-              />
-              Debug Info
-            </label>
+
+            {/* Fog / Debug toggles */}
+            <div className="flex gap-3 mb-2">
+              <label className="flex items-center gap-1.5 text-[10px] text-slate-400 cursor-pointer">
+                <input type="checkbox" checked={cheatFogEnabled} onChange={e => setCheatFogEnabled(e.target.checked)} className="rounded w-3 h-3" />
+                Fog
+              </label>
+              <label className="flex items-center gap-1.5 text-[10px] text-slate-400 cursor-pointer">
+                <input type="checkbox" checked={cheatShowDebug} onChange={e => setCheatShowDebug(e.target.checked)} className="rounded w-3 h-3" />
+                Debug
+              </label>
+            </div>
+
+            {/* ── FORTRESS ASSAULT WAVES ── */}
+            <div className="border-t border-slate-700/50 pt-2 mt-1">
+              <div className="text-[9px] text-red-400 uppercase font-bold mb-1.5">Fortress Assault Waves</div>
+
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[10px] text-slate-400">Active</span>
+                <button
+                  onClick={() => {
+                    const next = !hostileEnabled;
+                    setHostileEnabled(next);
+                    onUpdateHostileConfig?.({ enabled: next, frequency: hostileFrequency, startTurn: hostileStartTurn, armySize: hostileArmySize, archerRatio: hostileArcherRatio / 100 });
+                  }}
+                  className={`px-2 py-0.5 rounded text-[10px] font-bold ${hostileEnabled ? 'bg-emerald-700 text-emerald-200' : 'bg-slate-700 text-slate-500'}`}
+                >
+                  {hostileEnabled ? 'ON' : 'OFF'}
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-x-2 gap-y-1 mb-1.5">
+                <label className="text-[10px] text-slate-400">Every</label>
+                <div className="flex items-center gap-1">
+                  <input type="number" min={1} max={20} value={hostileFrequency} onChange={e => { setHostileFrequency(Number(e.target.value) || 4); onUpdateHostileConfig?.({ enabled: hostileEnabled, frequency: Number(e.target.value) || 4, startTurn: hostileStartTurn, armySize: hostileArmySize, archerRatio: hostileArcherRatio / 100 }); }}
+                    className="bg-slate-800 border border-slate-600 rounded px-1.5 py-0.5 text-[10px] text-slate-200 w-10 text-center" />
+                  <span className="text-[10px] text-slate-500">turns</span>
+                </div>
+
+                <label className="text-[10px] text-slate-400">Start turn</label>
+                <input type="number" min={1} max={100} value={hostileStartTurn} onChange={e => { setHostileStartTurn(Number(e.target.value) || 5); onUpdateHostileConfig?.({ enabled: hostileEnabled, frequency: hostileFrequency, startTurn: Number(e.target.value) || 5, armySize: hostileArmySize, archerRatio: hostileArcherRatio / 100 }); }}
+                  className="bg-slate-800 border border-slate-600 rounded px-1.5 py-0.5 text-[10px] text-slate-200 w-10 text-center" />
+
+                <label className="text-[10px] text-slate-400">Army size</label>
+                <div className="flex items-center gap-1">
+                  <input type="number" min={10} max={300} step={10} value={hostileArmySize} onChange={e => { setHostileArmySize(Number(e.target.value) || 80); onUpdateHostileConfig?.({ enabled: hostileEnabled, frequency: hostileFrequency, startTurn: hostileStartTurn, armySize: Number(e.target.value) || 80, archerRatio: hostileArcherRatio / 100 }); }}
+                    className="bg-slate-800 border border-slate-600 rounded px-1.5 py-0.5 text-[10px] text-slate-200 w-12 text-center" />
+                  <span className="text-[10px] text-slate-500">troops</span>
+                </div>
+              </div>
+
+              <div className="mb-2">
+                <div className="flex items-center justify-between mb-0.5">
+                  <span className="text-[10px] text-slate-400">Archers</span>
+                  <span className="text-[10px] text-amber-300 font-semibold">{hostileArcherRatio}%</span>
+                </div>
+                <input type="range" min={0} max={100} step={10} value={hostileArcherRatio} onChange={e => { setHostileArcherRatio(Number(e.target.value)); onUpdateHostileConfig?.({ enabled: hostileEnabled, frequency: hostileFrequency, startTurn: hostileStartTurn, armySize: hostileArmySize, archerRatio: Number(e.target.value) / 100 }); }}
+                  className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-amber-500" />
+                <div className="flex justify-between text-[8px] text-slate-600">
+                  <span>Warriors</span>
+                  <span>Archers</span>
+                </div>
+              </div>
+
+              <button
+                onClick={() => onSpawnAssaultEnemy?.(hostileArmySize, hostileArcherRatio / 100)}
+                className="w-full px-2 py-1.5 rounded text-[10px] font-bold bg-red-800 hover:bg-red-700 text-red-200 transition-colors"
+              >
+                ⚔ Spawn Assault Now
+              </button>
+            </div>
+
+            {/* ── ROAMING FOREST ARMIES ── */}
+            <div className="border-t border-slate-700/50 pt-2 mt-2">
+              <div className="text-[9px] text-amber-400 uppercase font-bold mb-1.5">Roaming Forest Armies</div>
+
+              <div className="grid grid-cols-2 gap-x-2 gap-y-1 mb-2">
+                <label className="text-[10px] text-slate-400">Count</label>
+                <input type="number" min={1} max={10} value={roamingCount} onChange={e => setRoamingCount(Number(e.target.value) || 3)}
+                  className="bg-slate-800 border border-slate-600 rounded px-1.5 py-0.5 text-[10px] text-slate-200 w-10 text-center" />
+
+                <label className="text-[10px] text-slate-400">Size range</label>
+                <div className="flex items-center gap-1">
+                  <input type="number" min={10} max={200} step={10} value={roamingMinSize} onChange={e => setRoamingMinSize(Number(e.target.value) || 20)}
+                    className="bg-slate-800 border border-slate-600 rounded px-1 py-0.5 text-[10px] text-slate-200 w-10 text-center" />
+                  <span className="text-[9px] text-slate-600">to</span>
+                  <input type="number" min={10} max={200} step={10} value={roamingMaxSize} onChange={e => setRoamingMaxSize(Number(e.target.value) || 60)}
+                    className="bg-slate-800 border border-slate-600 rounded px-1 py-0.5 text-[10px] text-slate-200 w-10 text-center" />
+                </div>
+              </div>
+
+              <button
+                onClick={() => onSpawnRoamingEnemies?.(roamingCount, roamingMinSize, roamingMaxSize)}
+                className="w-full px-2 py-1.5 rounded text-[10px] font-bold bg-amber-800 hover:bg-amber-700 text-amber-200 transition-colors"
+              >
+                ☠ Spawn Roaming
+              </button>
+            </div>
           </div>
         )}
 

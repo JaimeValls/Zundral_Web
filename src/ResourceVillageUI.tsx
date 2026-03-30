@@ -110,6 +110,15 @@ export default function ResourceVillageUI() {
   // === Iron Consumption Feedback ===
   const [ironConsumptionFeedback, setIronConsumptionFeedback] = useState<{ message: string; timestamp: number } | null>(null);
 
+  // === Hostile Configuration (cheat/testing) ===
+  const [hostileConfig, setHostileConfig] = useState({
+    enabled: true,
+    frequency: 4,
+    startTurn: 5,
+    armySize: 80,
+    archerRatio: 0.5, // 0.0 = all warriors, 1.0 = all archers
+  });
+
   // === Banner Templates ===
   const [bannerTemplates, setBannerTemplates] = useState<BannerTemplate[]>([
     { id: 'spearmen', name: 'Bloody Warriors', squads: [{ type: 'warrior', count: 8 }], upkeepPerSecond: 0, requiredPopulation: 80, cost: 50 }, // 8 squads * 10 pop = 80
@@ -3923,6 +3932,60 @@ export default function ResourceVillageUI() {
     setBanners(bs => bs.map(b => {
       if (b.id !== bannerId || b.status !== 'training') return b;
       return { ...b, status: 'deployed', reinforcingSquadId: undefined, trainingPaused: undefined };
+    }));
+  }
+
+  // === Hostile Spawn Functions (cheat/testing) ===
+  function spawnAssaultEnemy(expeditionId: string, armySize: number, archerRatio: number) {
+    const pd = provinceDataRef.current;
+    if (!pd) return;
+    setExpeditions(prev => prev.map(exp => {
+      if (exp.expeditionId !== expeditionId || !exp.mapState) return exp;
+      const fortId = exp.mapState.fortressProvinceId;
+      const occupied = new Set([fortId, ...Object.values(exp.mapState.armyPositions), ...(exp.mapState.enemyArmies || []).filter(e => e.status === 'marching').map(e => e.provinceId)]);
+      const candidates = pd.provinces.filter((p: any) => p.isLand && !occupied.has(p.id));
+      if (candidates.length === 0) return exp;
+      const spawnProv = candidates[Math.floor(Math.random() * candidates.length)];
+      const archerCount = Math.round((armySize / 10) * archerRatio);
+      const warriorCount = Math.round(armySize / 10) - archerCount;
+      const squads: Array<{ type: string; count: number }> = [];
+      if (warriorCount > 0) squads.push({ type: 'warrior', count: warriorCount });
+      if (archerCount > 0) squads.push({ type: 'archer', count: archerCount });
+      const nextId = (exp.mapState.nextEnemyId ?? 1);
+      const newEnemy: EnemyArmy = {
+        id: nextId, templateId: 'cheat_assault', name: `Assault Force`, squads, provinceId: spawnProv.id,
+        totalTroops: armySize, spawnTurn: exp.mapState.turnNumber, status: 'marching',
+      };
+      return { ...exp, mapState: { ...exp.mapState, enemyArmies: [...(exp.mapState.enemyArmies || []), newEnemy], nextEnemyId: nextId + 1 } };
+    }));
+  }
+
+  function spawnRoamingEnemies(expeditionId: string, count: number, minSize: number, maxSize: number) {
+    const pd = provinceDataRef.current;
+    if (!pd) return;
+    setExpeditions(prev => prev.map(exp => {
+      if (exp.expeditionId !== expeditionId || !exp.mapState) return exp;
+      const fortId = exp.mapState.fortressProvinceId;
+      const occupied = new Set([fortId, ...Object.values(exp.mapState.armyPositions), ...(exp.mapState.enemyArmies || []).filter(e => e.status === 'marching').map(e => e.provinceId)]);
+      const forests = pd.provinces.filter((p: any) => p.terrain === 'forest' && p.isLand && !occupied.has(p.id));
+      const newEnemies: EnemyArmy[] = [];
+      let nextId = exp.mapState.nextEnemyId ?? 1;
+      for (let i = 0; i < count && forests.length > 0; i++) {
+        const idx = Math.floor(Math.random() * forests.length);
+        const prov = forests.splice(idx, 1)[0];
+        const size = Math.round(minSize + Math.random() * (maxSize - minSize));
+        const archerCount = Math.round((size / 10) * 0.5);
+        const warriorCount = Math.round(size / 10) - archerCount;
+        const squads: Array<{ type: string; count: number }> = [];
+        if (warriorCount > 0) squads.push({ type: 'warrior', count: warriorCount });
+        if (archerCount > 0) squads.push({ type: 'archer', count: archerCount });
+        newEnemies.push({
+          id: nextId++, templateId: 'cheat_roaming', name: `Forest Raiders`, squads, provinceId: prov.id,
+          totalTroops: size, spawnTurn: exp.mapState.turnNumber, status: 'marching',
+        });
+        occupied.add(prov.id);
+      }
+      return { ...exp, mapState: { ...exp.mapState, enemyArmies: [...(exp.mapState.enemyArmies || []), ...newEnemies], nextEnemyId: nextId } };
     }));
   }
 
@@ -8327,7 +8390,8 @@ Safe recruits (unassigned people): ${freePop}`;
 
                 // ── Phase 5: Spawn new enemies ──
                 let nextEnemyId = exp.mapState.nextEnemyId ?? 1;
-                if (pd && newTurnNumber >= 5 && ((newTurnNumber - 5) % 4 === 0)) {
+                const hc = hostileConfig;
+                if (pd && hc.enabled && newTurnNumber >= hc.startTurn && ((newTurnNumber - hc.startTurn) % hc.frequency === 0)) {
                   const newEnemy = spawnEnemyArmy(
                     { ...exp.mapState, turnNumber: newTurnNumber, enemyArmies: updatedEnemies, nextEnemyId },
                     pd
@@ -8445,6 +8509,9 @@ Safe recruits (unassigned people): ${freePop}`;
             onShowResourceError={(msg) => setToastMessage(msg)}
             onRequestReinforcement={(bannerId) => requestReinforcement(bannerId)}
             onCancelReinforcement={(bannerId) => cancelReinforcement(bannerId)}
+            onSpawnAssaultEnemy={(expeditionId, armySize, archerRatio) => spawnAssaultEnemy(expeditionId, armySize, archerRatio)}
+            onSpawnRoamingEnemies={(expeditionId, count, minSize, maxSize) => spawnRoamingEnemies(expeditionId, count, minSize, maxSize)}
+            onUpdateHostileConfig={(config) => setHostileConfig(config)}
             onRunBattle={(expeditionId) => {
               try {
                 const result = runSiegeBattle(expeditionId, 100);
