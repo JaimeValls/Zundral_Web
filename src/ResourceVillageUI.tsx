@@ -8171,14 +8171,15 @@ Safe recruits (unassigned people): ${freePop}`;
                   .map(([bidStr]) => Number(bidStr))
                   .filter(bid => !destroyedPlayerIds.has(bid));
 
-                for (let i = 0; i < updatedEnemies.length; i++) {
-                  const enemy = updatedEnemies[i];
-                  if (enemy.status !== 'marching' || enemy.provinceId !== fortId) continue;
-                  if (battleEnemyIds.has(enemy.id)) continue;
+                // Collect ALL enemies at fortress into one combined assault
+                const siegeEnemies = updatedEnemies.filter(e =>
+                  e.status === 'marching' && e.provinceId === fortId && !battleEnemyIds.has(e.id)
+                );
 
+                if (siegeEnemies.length > 0) {
                   // If no garrison at fortress, it falls without a battle
                   if (garrisonAtFort.length === 0) {
-                    dbg.log(`[NPC] Enemy "${enemy.name}" reached undefended fortress — fortress falls!`);
+                    dbg.log(`[NPC] ${siegeEnemies.length} enemies reached undefended fortress — fortress falls!`);
                     expeditionFailed = true;
                     newLogEntries.push({
                       id: `log_${newTurnNumber}_${logIdx++}`,
@@ -8186,133 +8187,141 @@ Safe recruits (unassigned people): ${freePop}`;
                       text: `Fortress fell without resistance — no garrison present`,
                       provinceId: fortId,
                     });
-                    updatedEnemies = updatedEnemies.map((e, idx) =>
-                      idx === i ? { ...e, status: 'destroyed' as const } : e
-                    );
-                    continue;
-                  }
+                    for (const se of siegeEnemies) {
+                      updatedEnemies = updatedEnemies.map(e => e.id === se.id ? { ...e, status: 'destroyed' as const } : e);
+                    }
+                  } else {
+                    // Combine all enemy forces into one assault
+                    const combinedTroops = siegeEnemies.reduce((sum, e) => sum + e.totalTroops, 0);
+                    const combinedSquadComp: Array<{ type: string; count: number }> = [];
+                    const perEnemyInitial = siegeEnemies.map(e => ({ enemyId: e.id, enemyName: e.name, initialTroops: e.totalTroops }));
+                    for (const se of siegeEnemies) {
+                      let troopsLeft = se.totalTroops;
+                      for (const s of se.squads) {
+                        const raw = s.count * 10;
+                        const capped = Math.min(raw, troopsLeft);
+                        troopsLeft -= capped;
+                        // Merge into combined composition
+                        const existing = combinedSquadComp.find(c => c.type === s.type);
+                        if (existing) existing.count += capped;
+                        else combinedSquadComp.push({ type: s.type, count: capped });
+                      }
+                    }
 
-                  dbg.log(`[NPC] Enemy "${enemy.name}" (${enemy.totalTroops} troops) reached fortress! Triggering siege...`);
-                  newLogEntries.push({
-                    id: `log_${newTurnNumber}_${logIdx++}`,
-                    turn: newTurnNumber, type: 'fortress_attacked',
-                    text: `Fortress under attack by ${enemy.name}!`,
-                    provinceId: fortId,
-                  });
-                  try {
-                    // Cap squad expansion to totalTroops to avoid rounding-inflated troop counts
-                    let siegeTroopsLeft = enemy.totalTroops;
-                    const siegeSquadComp = enemy.squads.map(s => {
-                      const raw = s.count * 10;
-                      const capped = Math.min(raw, siegeTroopsLeft);
-                      siegeTroopsLeft -= capped;
-                      return { type: s.type, count: capped };
+                    const enemyNames = siegeEnemies.map(e => e.name).join(' + ');
+                    dbg.log(`[NPC] Combined assault: ${siegeEnemies.length} armies (${combinedTroops} troops) attack fortress!`);
+                    newLogEntries.push({
+                      id: `log_${newTurnNumber}_${logIdx++}`,
+                      turn: newTurnNumber, type: 'fortress_attacked',
+                      text: `Fortress under attack by ${enemyNames}!`,
+                      provinceId: fortId,
                     });
-                    const flankIds = Array.from(siegeFlankerBannerIds);
-                    const result = runSiegeBattle(expeditionId, enemy.totalTroops, siegeSquadComp, newPositions, flankIds.length > 0 ? flankIds : undefined);
-                    // Only apply garrison casualties if an Inner Battle occurred — wall-only victories leave garrison untouched
-                    const destroyedBanners = (result.innerTimeline.length > 0)
-                      ? applyFortressBattleCasualties(expeditionId, result)
-                      : [];
 
-                    if (updatedFortress) {
-                      const updatedGarrison = destroyedBanners.length > 0
-                        ? (updatedFortress.garrison || []).filter(id => !destroyedBanners.includes(id))
-                        : updatedFortress.garrison;
-                      updatedFortress = {
-                        ...updatedFortress,
-                        garrison: updatedGarrison,
-                        lastBattle: result,
-                      };
-                    }
+                    try {
+                      const flankIds = Array.from(siegeFlankerBannerIds);
+                      const result = runSiegeBattle(expeditionId, combinedTroops, combinedSquadComp, newPositions, flankIds.length > 0 ? flankIds : undefined);
 
-                    // Enemy outcome: destroyed only if 0 troops, otherwise retreats to origin
-                    const enemyDestroyed = result.finalAttackers <= 0;
-                    if (enemyDestroyed) {
-                      updatedEnemies = updatedEnemies.map((e, idx) =>
-                        idx === i ? { ...e, status: 'destroyed' as const, totalTroops: 0 } : e
-                      );
-                    } else if (result.outcome === 'fortress_falls') {
-                      // Attacker won — stays at fortress
-                      updatedEnemies = updatedEnemies.map((e, idx) =>
-                        idx === i ? { ...e, provinceId: fortId, totalTroops: Math.round(result.finalAttackers) } : e
-                      );
-                    } else {
-                      // Attacker survived but fortress held — retreats to ORIGINAL province (before movement)
-                      const retreatTo = fortressEnemyOriginalProvince.get(enemy.id) || enemy.provinceId;
-                      updatedEnemies = updatedEnemies.map((e, idx) =>
-                        idx === i ? { ...e, provinceId: retreatTo, totalTroops: Math.round(result.finalAttackers) } : e
-                      );
-                    }
+                      // Add attacking armies info to result
+                      const totalLost = combinedTroops - result.finalAttackers;
+                      result.attackingArmies = perEnemyInitial.map(a => {
+                        const share = combinedTroops > 0 ? a.initialTroops / combinedTroops : 0;
+                        const lost = Math.round(totalLost * share);
+                        return { ...a, finalTroops: Math.max(0, a.initialTroops - lost) };
+                      });
 
-                    // Apply casualties to flanking banners
-                    if (result.flankingArmies && result.flankingArmies.length > 0) {
-                      for (const fa of result.flankingArmies) {
-                        const lossRatio = fa.initialTroops > 0 ? (fa.initialTroops - fa.finalTroops) / fa.initialTroops : 0;
-                        if (lossRatio > 0) {
-                          setBanners(prev => prev.map(b => {
-                            if (b.id !== fa.bannerId) return b;
-                            return { ...b, squads: b.squads.map(sq => ({
-                              ...sq, currentSize: Math.max(0, Math.round(sq.currentSize * (1 - lossRatio)))
-                            }))};
-                          }));
-                        }
-                        if (fa.finalTroops <= 0) {
-                          destroyedPlayerIds.add(fa.bannerId);
-                          delete newPositions[fa.bannerId];
+                      // Only apply garrison casualties if Inner Battle occurred
+                      const destroyedBanners = (result.innerTimeline.length > 0)
+                        ? applyFortressBattleCasualties(expeditionId, result)
+                        : [];
+
+                      if (updatedFortress) {
+                        const updatedGarrison = destroyedBanners.length > 0
+                          ? (updatedFortress.garrison || []).filter(id => !destroyedBanners.includes(id))
+                          : updatedFortress.garrison;
+                        updatedFortress = { ...updatedFortress, garrison: updatedGarrison, lastBattle: result };
+                      }
+
+                      // Distribute outcome to each enemy proportionally
+                      const allEnemiesDestroyed = result.finalAttackers <= 0;
+                      for (const ea of (result.attackingArmies || perEnemyInitial)) {
+                        const eid = ea.enemyId;
+                        if (ea.finalTroops <= 0) {
+                          updatedEnemies = updatedEnemies.map(e => e.id === eid ? { ...e, status: 'destroyed' as const, totalTroops: 0 } : e);
+                        } else if (result.outcome === 'fortress_falls') {
+                          updatedEnemies = updatedEnemies.map(e => e.id === eid ? { ...e, provinceId: fortId, totalTroops: Math.round(ea.finalTroops) } : e);
+                        } else {
+                          const retreatTo = fortressEnemyOriginalProvince.get(eid) || fortId;
+                          updatedEnemies = updatedEnemies.map(e => e.id === eid ? { ...e, provinceId: retreatTo, totalTroops: Math.round(ea.finalTroops) } : e);
                         }
                       }
-                    }
 
-                    // Flanker position: advance to enemy ORIGINAL province ONLY if enemy destroyed (cell is empty)
-                    // Use saved origin from detection time (before Phase 3 moved enemy to fortress)
-                    const enemyOriginalProvince = siegeFlankerEnemyOrigins.get(enemy.id) || enemy.provinceId;
-                    for (const flankBid of siegeFlankerBannerIds) {
-                      if (destroyedPlayerIds.has(flankBid)) continue;
-                      if (enemyDestroyed) {
-                        // Enemy destroyed → flanker advances to enemy's original province
-                        newPositions[flankBid] = enemyOriginalProvince;
+                      // Apply casualties to flanking banners
+                      if (result.flankingArmies && result.flankingArmies.length > 0) {
+                        for (const fa of result.flankingArmies) {
+                          const lossRatio = fa.initialTroops > 0 ? (fa.initialTroops - fa.finalTroops) / fa.initialTroops : 0;
+                          if (lossRatio > 0) {
+                            setBanners(prev => prev.map(b => {
+                              if (b.id !== fa.bannerId) return b;
+                              return { ...b, squads: b.squads.map(sq => ({
+                                ...sq, currentSize: Math.max(0, Math.round(sq.currentSize * (1 - lossRatio)))
+                              }))};
+                            }));
+                          }
+                          if (fa.finalTroops <= 0) {
+                            destroyedPlayerIds.add(fa.bannerId);
+                            delete newPositions[fa.bannerId];
+                          }
+                        }
+                      }
+
+                      // Flanker position based on whether ALL enemies destroyed
+                      for (const flankBid of siegeFlankerBannerIds) {
+                        if (destroyedPlayerIds.has(flankBid)) continue;
+                        if (allEnemiesDestroyed) {
+                          // All enemies destroyed → flanker advances to first enemy's original province
+                          const firstOrigin = siegeFlankerEnemyOrigins.get(siegeEnemies[0]?.id) || fortId;
+                          newPositions[flankBid] = firstOrigin;
+                        } else {
+                          newPositions[flankBid] = currentPositions[flankBid] || newPositions[flankBid];
+                        }
+                      }
+
+                      // Store for popup display
+                      pendingSiegeBattle = { ...result, enemyName: enemyNames };
+
+                      const isVictory = result.outcome === 'fortress_holds_walls' || result.outcome === 'fortress_holds_inner';
+                      if (!isVictory && result.outcome === 'fortress_falls') {
+                        dbg.log('[NPC] Fortress has fallen! Expedition failed.');
+                        expeditionFailed = true;
+                        newLogEntries.push({
+                          id: `log_${newTurnNumber}_${logIdx++}`,
+                          turn: newTurnNumber, type: 'fortress_damaged',
+                          text: 'Fortress has fallen — expedition lost',
+                          provinceId: fortId,
+                        });
                       } else {
-                        // Enemy survived (retreated or won) → flanker stays at own origin
-                        newPositions[flankBid] = currentPositions[flankBid] || newPositions[flankBid];
+                        newLogEntries.push({
+                          id: `log_${newTurnNumber}_${logIdx++}`,
+                          turn: newTurnNumber, type: 'fortress_attacked',
+                          text: `Fortress assault repelled — ${enemyNames} destroyed`,
+                          provinceId: fortId,
+                        });
                       }
-                    }
 
-                    // Store for popup display
-                    pendingSiegeBattle = { ...result, enemyName: enemy.name };
-
-                    const isVictory = result.outcome === 'fortress_holds_walls' || result.outcome === 'fortress_holds_inner';
-                    if (!isVictory && result.outcome === 'fortress_falls') {
-                      dbg.log('[NPC] Fortress has fallen! Expedition failed.');
-                      expeditionFailed = true;
-                      newLogEntries.push({
-                        id: `log_${newTurnNumber}_${logIdx++}`,
-                        turn: newTurnNumber, type: 'fortress_damaged',
-                        text: 'Fortress has fallen — expedition lost',
-                        provinceId: fortId,
-                      });
-                    } else {
-                      newLogEntries.push({
-                        id: `log_${newTurnNumber}_${logIdx++}`,
-                        turn: newTurnNumber, type: 'fortress_attacked',
-                        text: `Fortress assault repelled — ${enemy.name} destroyed`,
-                        provinceId: fortId,
-                      });
+                      const lastRound = result.siegeTimeline[result.siegeTimeline.length - 1];
+                      if (lastRound) {
+                        const enemyUnitsKilled = result.initialAttackers - lastRound.attackers;
+                        setLeaderboard(lprev => updateLeaderboardFromBattleResult(lprev, {
+                          enemyUnitsKilled,
+                          isVictory,
+                          playerId: REAL_PLAYER_ID,
+                          playerName: REAL_PLAYER_NAME,
+                          faction: REAL_PLAYER_FACTION,
+                        }));
+                      }
+                    } catch (err) {
+                      dbg.error('[NPC] Siege battle error:', err);
                     }
-
-                    const lastRound = result.siegeTimeline[result.siegeTimeline.length - 1];
-                    if (lastRound) {
-                      const enemyUnitsKilled = result.initialAttackers - lastRound.attackers;
-                      setLeaderboard(lprev => updateLeaderboardFromBattleResult(lprev, {
-                        enemyUnitsKilled,
-                        isVictory,
-                        playerId: REAL_PLAYER_ID,
-                        playerName: REAL_PLAYER_NAME,
-                        faction: REAL_PLAYER_FACTION,
-                      }));
-                    }
-                  } catch (err) {
-                    dbg.error('[NPC] Siege battle error:', err);
                   }
                 }
 

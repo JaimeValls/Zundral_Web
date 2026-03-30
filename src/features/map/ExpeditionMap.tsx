@@ -810,6 +810,43 @@ const MapView: React.FC<MapViewProps> = ({
           />
         ))}
 
+        {/* Enemy stack tooltips: show when 2+ hostile armies share a province */}
+        {(() => {
+          const enemyStacks = new Map<string, number>();
+          for (const m of enemyMarkers) {
+            const provId = marchingEnemies.find(e => `enemy_${e.id}` === m.key)?.provinceId;
+            if (!provId) continue;
+            enemyStacks.set(provId, (enemyStacks.get(provId) || 0) + m.size);
+          }
+          // Count armies per province
+          const enemyCounts = new Map<string, number>();
+          for (const m of enemyMarkers) {
+            const provId = marchingEnemies.find(e => `enemy_${e.id}` === m.key)?.provinceId;
+            if (!provId) continue;
+            enemyCounts.set(provId, (enemyCounts.get(provId) || 0) + 1);
+          }
+          return Array.from(enemyStacks.entries()).map(([provId, totalTroops]) => {
+            const count = enemyCounts.get(provId) || 0;
+            if (count < 2) return null;
+            const prov = assets.provinceById.get(provId);
+            if (!prov) return null;
+            const [sx, sy] = mapToScreen(prov.center[0], prov.center[1], view);
+            return (
+              <div
+                key={`estack_${provId}`}
+                className="absolute pointer-events-none"
+                style={{ left: sx, top: sy + 46, transform: 'translateX(-50%)', zIndex: 36 }}
+              >
+                <div className="bg-red-950/90 border border-red-600/50 rounded px-2 py-1 text-center backdrop-blur-sm shadow-lg shadow-black/40">
+                  <div className="text-[10px] font-bold text-red-300">
+                    ☠ {count} Armies · {totalTroops} Troops
+                  </div>
+                </div>
+              </div>
+            );
+          });
+        })()}
+
         {/* Battle markers (crossed swords at battle provinces) */}
         {[...battleProvinceSet].map(provId => {
           const prov = assets.provinceById.get(provId);

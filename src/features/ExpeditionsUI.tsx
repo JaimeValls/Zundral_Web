@@ -400,6 +400,26 @@ export default function ExpeditionsUI({
                                     );
                                   })}
                                 </div>
+                                {/* Per-army breakdown for combined assaults */}
+                                {battle.attackingArmies && battle.attackingArmies.length > 1 && (
+                                  <div className="mt-1.5 pt-1.5 border-t border-red-900/30 space-y-0.5">
+                                    {battle.attackingArmies.map((a, i) => {
+                                      const lost = a.initialTroops - a.finalTroops;
+                                      const pct = a.initialTroops > 0 ? lost / a.initialTroops : 0;
+                                      const sev = a.finalTroops === 0 ? 'text-red-500 font-bold' : pct > 0.3 ? 'text-red-400' : pct > 0.1 ? 'text-amber-400' : 'text-emerald-400';
+                                      return (
+                                        <div key={i} className="flex justify-between items-center py-0.5">
+                                          <span className="text-slate-300 truncate text-[9px]">☠️ {a.enemyName}</span>
+                                          <span className={`text-[9px] ${sev}`}>
+                                            {Math.round(a.initialTroops)} → {Math.round(a.finalTroops)}
+                                            {lost > 0 && <span className="text-red-400 ml-1">(-{Math.round(lost)})</span>}
+                                            {a.finalTroops === 0 && <span className="ml-1">💀</span>}
+                                          </span>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
                               </div>
                               <div className="bg-blue-950/20 border border-blue-900/30 rounded px-2 py-1.5">
                                 <div className="text-[9px] text-blue-400 uppercase font-bold mb-1.5">Defenders — {totalDef} → {Math.round(battle.finalDefenders)}</div>

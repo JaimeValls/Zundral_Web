@@ -344,6 +344,7 @@ export type SiegeBattleResult = {
   finalGarrison: { warriors: number; archers: number };
   attackerComposition?: BattleSquadEntry[];
   defenderComposition?: BattleSquadEntry[];
+  attackingArmies?: Array<{ enemyId: number; enemyName: string; initialTroops: number; finalTroops: number }>;
   battleTakeaway?: string;
   garrisonArmies?: SiegeGarrisonArmy[];
   flankingArmies?: SiegeGarrisonArmy[];  // Player armies flanking from outside during siege
