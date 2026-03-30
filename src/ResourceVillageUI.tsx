@@ -4005,6 +4005,23 @@ export default function ResourceVillageUI() {
     }));
   }
 
+  // === Server Config Command Listener (extinction wave from web tool) ===
+  useEffect(() => {
+    function handleStorageCommand(e: StorageEvent) {
+      if (e.key !== 'zundral_serverCommand' || !e.newValue) return;
+      try {
+        const cmd = JSON.parse(e.newValue);
+        if (cmd.type === 'spawn_extinction_wave') {
+          spawnAssaultEnemy('godonis_mountain_expedition', cmd.armySize || 2000, cmd.archerRatio ?? 0.5);
+          console.log(`[SERVER CMD] Extinction wave spawned: ${cmd.armySize} troops`);
+          localStorage.removeItem('zundral_serverCommand');
+        }
+      } catch (err) { /* ignore parse errors */ }
+    }
+    window.addEventListener('storage', handleStorageCommand);
+    return () => window.removeEventListener('storage', handleStorageCommand);
+  }, []);
+
   // === Battle Simulation Functions ===
   // Unit stats state (can be updated with tested values from simulator)
   const [unitStats, setUnitStats] = useState<UnitStats>(() => {

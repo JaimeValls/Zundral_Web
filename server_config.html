@@ -216,6 +216,9 @@ canvas{width:100%;height:180px;background:var(--bg);border:1px solid var(--borde
         <span class="unit">troops</span>
       </div>
     </div>
+    <div style="margin-top:10px">
+      <button class="btn btn-danger" onclick="launchExtinctionWave()">&#9760; Launch Extinction Wave Now</button>
+    </div>
   </div>
 </div>
 
@@ -1029,6 +1032,14 @@ function filterMissions(filter) { missionFilter = filter; renderMissionLibrary()
 // ═══════════════════════════════════════════════════════════════════
 // EXPORT / IMPORT
 // ═══════════════════════════════════════════════════════════════════
+function launchExtinctionWave() {
+  const size = +document.getElementById('extinctionSize').value || 2000;
+  const comp = config.assaultWaves.extinctionWave.composition || config.assaultWaves.composition;
+  const cmd = { type: 'spawn_extinction_wave', armySize: size, composition: comp, timestamp: Date.now() };
+  localStorage.setItem('zundral_serverCommand', JSON.stringify(cmd));
+  alert('Extinction Wave launched! (' + size + ' troops) — switch to game tab to see it spawn.');
+}
+
 function exportJSON() {
   const blob = new Blob([JSON.stringify(config, null, 2)], {type:'application/json'});
   const a = document.createElement('a');
