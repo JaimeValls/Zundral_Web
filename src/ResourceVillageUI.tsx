@@ -7775,9 +7775,14 @@ Safe recruits (unassigned people): ${freePop}`;
                 // Identify enemies heading to fortress and player armies intercepting them (swap conflicts)
                 // These flankers should join the fortress siege, not fight separately
                 const fortressEnemyIds = new Set<number>();
+                // Save ALL fortress-bound enemy origins (before Phase 3 moves them to fortress)
+                const fortressEnemyOriginalProvince = new Map<number, string>();
                 for (const [, dest] of enemyDests) { /* enemyDests maps enemyId → dest province */ }
                 currentEnemies.forEach(e => {
-                  if (e.status === 'marching' && enemyDests.get(e.id) === fortId) fortressEnemyIds.add(e.id);
+                  if (e.status === 'marching' && enemyDests.get(e.id) === fortId) {
+                    fortressEnemyIds.add(e.id);
+                    fortressEnemyOriginalProvince.set(e.id, e.provinceId);
+                  }
                 });
 
                 // Find player armies intercepting fortress-bound enemies
@@ -8233,9 +8238,10 @@ Safe recruits (unassigned people): ${freePop}`;
                         idx === i ? { ...e, provinceId: fortId, totalTroops: Math.round(result.finalAttackers) } : e
                       );
                     } else {
-                      // Attacker survived but fortress held — retreats to origin
+                      // Attacker survived but fortress held — retreats to ORIGINAL province (before movement)
+                      const retreatTo = fortressEnemyOriginalProvince.get(enemy.id) || enemy.provinceId;
                       updatedEnemies = updatedEnemies.map((e, idx) =>
-                        idx === i ? { ...e, provinceId: enemy.provinceId, totalTroops: Math.round(result.finalAttackers) } : e
+                        idx === i ? { ...e, provinceId: retreatTo, totalTroops: Math.round(result.finalAttackers) } : e
                       );
                     }
 
