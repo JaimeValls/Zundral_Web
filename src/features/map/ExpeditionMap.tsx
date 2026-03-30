@@ -355,6 +355,17 @@ const MapView: React.FC<MapViewProps> = ({
     [enemyArmies]
   );
 
+  const roamingEnemies = useMemo(() =>
+    enemyArmies.filter(e => e.status === 'roaming'),
+    [enemyArmies]
+  );
+
+  // All visible hostile armies (marching + roaming)
+  const allHostileEnemies = useMemo(() =>
+    enemyArmies.filter(e => e.status === 'marching' || e.status === 'roaming'),
+    [enemyArmies]
+  );
+
   // Enemy provinces visible through fog (for red canvas highlights)
   const enemyProvinces = useMemo(() => {
     const set = new Set<string>();
@@ -528,6 +539,26 @@ const MapView: React.FC<MapViewProps> = ({
         size: number;
       }>;
   }, [marchingEnemies, assets.provinceById, view, revealedProvinces]);
+
+  // Roaming enemy markers (amber/wolf icon to distinguish from marching enemies)
+  const roamingMarkers = useMemo(() => {
+    const revealed = revealedProvinces;
+    return roamingEnemies
+      .filter(enemy => !revealed || revealed.has(enemy.provinceId))
+      .map(enemy => {
+        const prov = assets.provinceById.get(enemy.provinceId);
+        if (!prov) return null;
+        const [sx, sy] = mapToScreen(prov.center[0], prov.center[1], view);
+        return {
+          key: `roam_${enemy.id}`,
+          screenX: sx,
+          screenY: sy - 15,
+          name: enemy.name,
+          size: enemy.totalTroops,
+        };
+      })
+      .filter(Boolean) as Array<{ key: string; screenX: number; screenY: number; name: string; size: number }>;
+  }, [roamingEnemies, assets.provinceById, view, revealedProvinces]);
 
   // Mission markers (list missions: available/running; expedition missions: all statuses including completed)
   const missionMarkers = useMemo(() => {
@@ -714,9 +745,9 @@ const MapView: React.FC<MapViewProps> = ({
               <span className="text-slate-400">{selectedProvince.adjacentProvinces.length} neighbors</span>
             </div>
           )}
-          {marchingEnemies.length > 0 && (
+          {allHostileEnemies.length > 0 && (
             <span className="bg-red-900/60 text-red-300 font-bold text-xs px-2.5 py-1 rounded border border-red-700/50">
-              ☠️ {marchingEnemies.length} Hostile {marchingEnemies.length === 1 ? 'Army' : 'Armies'}
+              ☠️ {marchingEnemies.length > 0 ? `${marchingEnemies.length} Hostile` : ''}{marchingEnemies.length > 0 && roamingEnemies.length > 0 ? ' · ' : ''}{roamingEnemies.length > 0 ? `${roamingEnemies.length} Roaming` : ''} {allHostileEnemies.length === 1 ? 'Army' : 'Armies'}
             </span>
           )}
           {expedition.mapState && !expedition.mapState.expeditionFailed && (
@@ -830,6 +861,23 @@ const MapView: React.FC<MapViewProps> = ({
             armySize={m.size}
             hostile
           />
+        ))}
+
+        {/* Roaming enemy markers (amber, different from marching) */}
+        {roamingMarkers.map(m => (
+          <div
+            key={m.key}
+            className="absolute pointer-events-none"
+            style={{ left: m.screenX, top: m.screenY, transform: 'translate(-50%, -50%)', zIndex: 30 }}
+          >
+            <div className="flex flex-col items-center">
+              <div className="text-lg drop-shadow-lg">🐺</div>
+              <div className="text-xs font-bold border px-1.5 py-0.5 rounded whitespace-nowrap mt-0.5 flex items-center gap-1 bg-amber-900/90 border-amber-500/70 text-amber-200">
+                🐺 {m.name}
+                <span className="text-amber-400 ml-1">({m.size})</span>
+              </div>
+            </div>
+          </div>
         ))}
 
         {/* Enemy stack tooltips: show when 2+ hostile armies share a province */}

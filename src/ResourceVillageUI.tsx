@@ -3942,7 +3942,7 @@ export default function ResourceVillageUI() {
     setExpeditions(prev => prev.map(exp => {
       if (exp.expeditionId !== expeditionId || !exp.mapState) return exp;
       const fortId = exp.mapState.fortressProvinceId;
-      const occupied = new Set([fortId, ...Object.values(exp.mapState.armyPositions), ...(exp.mapState.enemyArmies || []).filter(e => e.status === 'marching').map(e => e.provinceId)]);
+      const occupied = new Set([fortId, ...Object.values(exp.mapState.armyPositions), ...(exp.mapState.enemyArmies || []).filter(e => e.status === 'marching' || e.status === 'roaming').map(e => e.provinceId)]);
       const candidates = pd.provinces.filter((p: any) => p.isLand && !occupied.has(p.id));
       if (candidates.length === 0) return exp;
       const spawnProv = candidates[Math.floor(Math.random() * candidates.length)];
@@ -3966,7 +3966,7 @@ export default function ResourceVillageUI() {
     setExpeditions(prev => prev.map(exp => {
       if (exp.expeditionId !== expeditionId || !exp.mapState) return exp;
       const fortId = exp.mapState.fortressProvinceId;
-      const occupied = new Set([fortId, ...Object.values(exp.mapState.armyPositions), ...(exp.mapState.enemyArmies || []).filter(e => e.status === 'marching').map(e => e.provinceId)]);
+      const occupied = new Set([fortId, ...Object.values(exp.mapState.armyPositions), ...(exp.mapState.enemyArmies || []).filter(e => e.status === 'marching' || e.status === 'roaming').map(e => e.provinceId)]);
       const forests = pd.provinces.filter((p: any) => p.terrain === 'forest' && p.isLand && !occupied.has(p.id));
       const newEnemies: EnemyArmy[] = [];
       let nextId = exp.mapState.nextEnemyId ?? 1;
@@ -3981,7 +3981,7 @@ export default function ResourceVillageUI() {
         if (archerCount > 0) squads.push({ type: 'archer', count: archerCount });
         newEnemies.push({
           id: nextId++, templateId: 'cheat_roaming', name: `Forest Raiders`, squads, provinceId: prov.id,
-          totalTroops: size, spawnTurn: exp.mapState.turnNumber, status: 'marching',
+          totalTroops: size, spawnTurn: exp.mapState.turnNumber, status: 'roaming' as const,
         });
         occupied.add(prov.id);
       }
@@ -7814,6 +7814,37 @@ Safe recruits (unassigned people): ${freePop}`;
 
                 // ── Phase 1: Detect province conflicts (multi-army) ──
                 const provinceConflicts = detectProvinceConflicts(currentPositions, playerDests, currentEnemies, enemyDests);
+
+                // Roaming enemy aggression: roaming enemies attack weaker player armies entering their province
+                const roamingEnemies = currentEnemies.filter(e => e.status === 'roaming');
+                for (const re of roamingEnemies) {
+                  // Check if any player army is moving TO the roaming enemy's province
+                  for (const [bidStr, dest] of Object.entries(playerDests)) {
+                    if (dest !== re.provinceId) continue;
+                    const bid = Number(bidStr);
+                    const banner = banners.find(b => b.id === bid);
+                    if (!banner) continue;
+                    const playerTroops = banner.squads.reduce((s, sq) => s + sq.currentSize, 0);
+                    // Only attack if player is weaker
+                    if (playerTroops >= re.totalTroops) continue;
+                    // Check if this conflict already exists
+                    const existing = provinceConflicts.find(c => c.provinceId === re.provinceId);
+                    if (existing) {
+                      if (!existing.enemyIds.includes(re.id)) {
+                        existing.enemyIds.push(re.id);
+                        existing.enemyOrigins[re.id] = re.provinceId;
+                      }
+                    } else {
+                      provinceConflicts.push({
+                        provinceId: re.provinceId,
+                        playerBannerIds: [bid],
+                        enemyIds: [re.id],
+                        playerOrigins: { [bid]: currentPositions[bid] || dest },
+                        enemyOrigins: { [re.id]: re.provinceId },
+                      });
+                    }
+                  }
+                }
 
                 // Classify battle roles and resolve weak flanks for each conflict
                 const conflictRoles: Array<{ playerRoles: Record<number, BattleRole>; enemyRoles: Record<number, BattleRole> }> = [];

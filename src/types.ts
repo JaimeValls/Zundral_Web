@@ -476,7 +476,7 @@ export interface EnemyArmy {
   provinceId: string;       // current location on map
   totalTroops: number;      // sum of count * 10 per squad (e.g. 80)
   spawnTurn: number;        // turn when spawned
-  status: 'marching' | 'destroyed';
+  status: 'marching' | 'destroyed' | 'roaming';
   // Field battle destruction context
   destroyedTurn?: number;
   destroyedByBannerId?: number;
