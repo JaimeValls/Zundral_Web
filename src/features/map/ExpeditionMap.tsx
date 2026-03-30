@@ -565,7 +565,14 @@ const MapView: React.FC<MapViewProps> = ({
     prevBattleCountRef.current = results.length;
 
     if (newEvents.length > 0) {
-      setBattlePopupQueue(prev => [...prev, ...newEvents]);
+      // Delay battle popups so the turn banner shows first (2500ms = banner duration + buffer)
+      const currentTurn = expedition.mapState?.turnNumber || 1;
+      const isNewTurn = currentTurn > prevTurnRef.current;
+      if (isNewTurn) {
+        setTimeout(() => setBattlePopupQueue(prev => [...prev, ...newEvents]), 2500);
+      } else {
+        setBattlePopupQueue(prev => [...prev, ...newEvents]);
+      }
     }
   }, [expedition.mapState?.fieldBattleResults, expedition.mapState?.pendingSiegeBattle, expedition.mapState?.turnNumber]);
 
