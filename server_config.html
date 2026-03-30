@@ -1,0 +1,1059 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Zundral — Server Configuration</title>
+<style>
+:root{--bg:#0f1216;--panel:#171b21;--panel-2:#1e2430;--text:#e0e6f0;--muted:#8390a5;--accent:#2d9cff;--accent-2:#9dffa6;--danger:#ff5d5d;--ok:#8ee59c;--border:#2a313d;--warn:#f59e0b}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font:13px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+/* Header */
+.header{background:var(--panel);border-bottom:1px solid var(--border);padding:12px 24px;display:flex;align-items:center;gap:16px}
+.header h1{font-size:18px;font-weight:800;color:var(--warn)}
+.header .sub{color:var(--muted);font-size:11px}
+/* Tab bar */
+.tabs{display:flex;background:var(--panel);border-bottom:2px solid var(--border);padding:0 16px;overflow-x:auto}
+.tab{padding:10px 18px;font-size:12px;font-weight:700;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;white-space:nowrap;transition:all .15s}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+/* Content */
+.content{max-width:1200px;margin:0 auto;padding:20px 24px}
+.tab-content{display:none}
+.tab-content.active{display:block}
+/* Cards */
+.card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px}
+.card h3{font-size:14px;font-weight:800;margin-bottom:8px;color:var(--accent)}
+.card h4{font-size:12px;font-weight:700;margin:12px 0 6px;color:var(--warn);text-transform:uppercase;letter-spacing:0.5px}
+.card .sub{color:var(--muted);font-size:11px;margin-bottom:8px}
+/* Grid */
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+@media(max-width:800px){.grid-2,.grid-3{grid-template-columns:1fr}}
+/* Form controls */
+.field{margin-bottom:10px}
+.field label{display:block;font-size:11px;font-weight:700;color:var(--muted);margin-bottom:3px;text-transform:uppercase;letter-spacing:0.3px}
+.field input[type=number],.field select{width:100%;padding:7px 10px;border-radius:8px;border:1px solid var(--border);background:var(--panel-2);color:var(--text);font-size:13px}
+.field input[type=number]{text-align:center}
+.field-inline{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.field-inline label{margin:0;white-space:nowrap}
+.field-inline input[type=number]{width:60px}
+.field-inline select{width:auto}
+.field-inline .unit{color:var(--muted);font-size:11px}
+/* Toggle */
+.toggle{display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;font-weight:700}
+.toggle input{display:none}
+.toggle .pill{width:36px;height:20px;border-radius:10px;background:#2a3341;position:relative;transition:background .2s}
+.toggle .pill::after{content:'';position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:var(--muted);transition:all .2s}
+.toggle input:checked+.pill{background:var(--ok)}
+.toggle input:checked+.pill::after{left:18px;background:#fff}
+/* Buttons */
+.btn{appearance:none;border:0;border-radius:8px;padding:8px 16px;font-size:12px;font-weight:800;cursor:pointer;transition:all .15s}
+.btn-primary{background:var(--accent);color:#051018}
+.btn-primary:hover{background:#4bb0ff}
+.btn-danger{background:var(--danger);color:#fff}
+.btn-danger:hover{background:#ff7a7a}
+.btn-warn{background:var(--warn);color:#000}
+.btn-warn:hover{background:#fbbf24}
+.btn-ok{background:var(--ok);color:#000}
+.btn-ok:hover{background:#a8f0b5}
+.btn-ghost{background:var(--panel-2);color:var(--text);border:1px solid var(--border)}
+.btn-ghost:hover{background:#2a3341}
+.btn-sm{padding:5px 10px;font-size:11px}
+/* Range slider */
+input[type=range]{width:100%;height:4px;background:var(--panel-2);border-radius:2px;appearance:none;cursor:pointer}
+input[type=range]::-webkit-slider-thumb{appearance:none;width:16px;height:16px;border-radius:50%;background:var(--accent);cursor:pointer}
+/* Tables */
+table{width:100%;border-collapse:collapse;font-size:12px;margin:8px 0}
+th,td{border:1px solid var(--border);padding:6px 8px;text-align:center}
+th{background:var(--panel-2);font-weight:700;color:var(--muted);text-transform:uppercase;font-size:10px;letter-spacing:0.3px}
+td input[type=number]{width:60px;padding:4px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);text-align:center;font-size:12px}
+/* Badges */
+.badge{display:inline-block;padding:2px 8px;border-radius:99px;font-size:10px;font-weight:700}
+.badge-easy{background:#12371f;color:#89f9a8}
+.badge-medium{background:#33380a;color:#e5f07a}
+.badge-hard{background:#3a2214;color:#ffb07a}
+.badge-vhard{background:#3a1414;color:#ff9c9c}
+.badge-extreme{background:#3a0a3a;color:#f09cf0}
+/* Canvas preview */
+canvas{width:100%;height:180px;background:var(--bg);border:1px solid var(--border);border-radius:8px;margin-top:8px}
+/* Status */
+.status-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px}
+.status-dot.on{background:var(--ok)}
+.status-dot.off{background:var(--danger)}
+/* Day tabs */
+.day-tabs{display:flex;gap:4px;margin-bottom:12px;flex-wrap:wrap}
+.day-tab{padding:5px 12px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;background:var(--panel-2);color:var(--muted);border:1px solid var(--border)}
+.day-tab.active{background:var(--accent);color:#051018;border-color:var(--accent)}
+.day-tab.add{background:transparent;border-style:dashed;color:var(--muted)}
+/* Composition grid */
+.comp-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.comp-row{display:flex;align-items:center;gap:6px;font-size:11px}
+.comp-row .name{width:80px;color:var(--muted);font-weight:600}
+.comp-row input[type=range]{flex:1}
+.comp-row .pct{width:30px;text-align:right;color:var(--accent);font-weight:700}
+/* Scrollbar */
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>&#9881; ZUNDRAL &mdash; Server Configuration</h1>
+  <span class="sub">Expedition editor &middot; Real-time sync via localStorage</span>
+</div>
+
+<div class="tabs" id="tabBar">
+  <div class="tab active" data-tab="general">General</div>
+  <div class="tab" data-tab="waves">Assault Waves</div>
+  <div class="tab" data-tab="bandits">Bandits</div>
+  <div class="tab" data-tab="missions">Missions</div>
+  <div class="tab" data-tab="fortress">Enemy Fortress</div>
+  <div class="tab" data-tab="patrols">Patrols</div>
+  <div class="tab" data-tab="export">Export / Import</div>
+</div>
+
+<div class="content">
+
+<!-- ═══════════════ TAB: GENERAL ═══════════════ -->
+<div class="tab-content active" id="tab-general">
+  <div class="grid-2">
+    <div class="card">
+      <h3>Turn Timer</h3>
+      <div class="field">
+        <label>Duration per turn</label>
+        <select id="turnDuration" onchange="updateConfig()">
+          <option value="0">Manual (no timer)</option>
+          <option value="10">10 seconds</option>
+          <option value="30">30 seconds</option>
+          <option value="60">1 minute</option>
+          <option value="120">2 minutes</option>
+          <option value="300" selected>5 minutes</option>
+          <option value="600">10 minutes</option>
+        </select>
+      </div>
+      <div class="field-inline">
+        <label>Auto-advance</label>
+        <label class="toggle"><input type="checkbox" id="autoAdvance" checked onchange="updateConfig()"><span class="pill"></span></label>
+      </div>
+      <div class="field">
+        <label>Total expedition turns (0 = unlimited)</label>
+        <input type="number" id="totalTurns" value="288" min="0" onchange="updateConfig()">
+      </div>
+    </div>
+    <div class="card">
+      <h3>Day Reference Calculator</h3>
+      <div class="sub">Automatically calculated from turn duration</div>
+      <div id="dayCalc" style="margin-top:8px"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ TAB: ASSAULT WAVES ═══════════════ -->
+<div class="tab-content" id="tab-waves">
+  <div class="card">
+    <h3>Assault Wave Settings</h3>
+    <div style="display:flex;gap:20px;align-items:center;flex-wrap:wrap">
+      <div class="field-inline">
+        <label>Active</label>
+        <label class="toggle"><input type="checkbox" id="wavesEnabled" checked onchange="updateConfig()"><span class="pill"></span></label>
+      </div>
+      <div class="field-inline">
+        <label>Every</label>
+        <input type="number" id="wavesFreq" value="4" min="1" max="50" onchange="updateConfig()">
+        <span class="unit">turns</span>
+      </div>
+      <div class="field-inline">
+        <label>Start turn</label>
+        <input type="number" id="wavesStart" value="5" min="1" max="999" onchange="updateConfig()">
+      </div>
+      <div class="field-inline">
+        <label>Base army size</label>
+        <input type="number" id="wavesSize" value="80" min="10" max="5000" step="10" onchange="updateConfig()">
+        <span class="unit">troops</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Army Composition</h3>
+    <div class="sub">Adjust the ratio of each unit type. Total should equal 100%.</div>
+    <div class="comp-grid" id="wavesComp"></div>
+    <div style="margin-top:6px;font-size:11px;color:var(--muted)">Total: <span id="wavesCompTotal" style="color:var(--accent);font-weight:700">100%</span></div>
+  </div>
+
+  <div class="card">
+    <h3>Difficulty Scaling</h3>
+    <div class="field-inline">
+      <label>Mode</label>
+      <select id="wavesScaleMode" onchange="updateScalingUI('waves');updateConfig()">
+        <option value="linear">Linear</option>
+        <option value="exponential">Exponential</option>
+        <option value="table">Custom Table</option>
+      </select>
+    </div>
+    <div id="wavesScaleParams"></div>
+    <canvas id="wavesScaleChart"></canvas>
+  </div>
+
+  <div class="card">
+    <h3>Extinction Wave</h3>
+    <div style="display:flex;gap:20px;align-items:center;flex-wrap:wrap">
+      <div class="field-inline">
+        <label>Enabled</label>
+        <label class="toggle"><input type="checkbox" id="extinctionEnabled" onchange="updateConfig()"><span class="pill"></span></label>
+      </div>
+      <div class="field-inline">
+        <label>Trigger on day</label>
+        <input type="number" id="extinctionDay" value="7" min="1" max="30" onchange="updateConfig()">
+      </div>
+      <div class="field-inline">
+        <label>Army size</label>
+        <input type="number" id="extinctionSize" value="2000" min="100" max="50000" step="100" onchange="updateConfig()">
+        <span class="unit">troops</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ TAB: BANDITS ═══════════════ -->
+<div class="tab-content" id="tab-bandits">
+  <div class="card">
+    <h3>Forest Bandit Spawn</h3>
+    <div style="display:flex;gap:20px;align-items:center;flex-wrap:wrap">
+      <div class="field-inline">
+        <label>Enabled</label>
+        <label class="toggle"><input type="checkbox" id="banditsEnabled" checked onchange="updateConfig()"><span class="pill"></span></label>
+      </div>
+      <div class="field-inline">
+        <label>Count</label>
+        <input type="number" id="banditsCount" value="5" min="0" max="20" onchange="updateConfig()">
+        <span class="unit">groups</span>
+      </div>
+      <div class="field-inline">
+        <label>Size</label>
+        <input type="number" id="banditsMinSize" value="20" min="10" max="500" step="10" onchange="updateConfig()">
+        <span class="unit">to</span>
+        <input type="number" id="banditsMaxSize" value="60" min="10" max="500" step="10" onchange="updateConfig()">
+        <span class="unit">troops</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Behavior</h3>
+    <div class="grid-2">
+      <div class="field">
+        <label>Aggression</label>
+        <select id="banditsBehavior" onchange="updateConfig()">
+          <option value="always_attack">Always attack</option>
+          <option value="attack_weaker" selected>Attack weaker targets only</option>
+          <option value="passive">Passive (defend only)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Detection radius (provinces)</label>
+        <input type="number" id="banditsRadius" value="2" min="0" max="5" onchange="updateConfig()">
+      </div>
+    </div>
+    <div class="field-inline" style="margin-top:8px">
+      <label>Forest only</label>
+      <label class="toggle"><input type="checkbox" id="banditsForestOnly" checked onchange="updateConfig()"><span class="pill"></span></label>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Scaling</h3>
+    <div class="field-inline">
+      <label>Mode</label>
+      <select id="banditsScaleMode" onchange="updateScalingUI('bandits');updateConfig()">
+        <option value="linear">Linear</option>
+        <option value="exponential">Exponential</option>
+        <option value="table">Custom Table</option>
+      </select>
+    </div>
+    <div id="banditsScaleParams"></div>
+    <canvas id="banditsScaleChart"></canvas>
+  </div>
+</div>
+
+<!-- ═══════════════ TAB: MISSIONS ═══════════════ -->
+<div class="tab-content" id="tab-missions">
+  <div class="card">
+    <h3>Mission Rotation</h3>
+    <div style="display:flex;gap:20px;align-items:center;flex-wrap:wrap">
+      <div class="field-inline">
+        <label>Max active</label>
+        <input type="number" id="missionsMax" value="3" min="1" max="10" onchange="updateConfig()">
+      </div>
+      <div class="field-inline">
+        <label>Renewal every</label>
+        <input type="number" id="missionsRenewal" value="288" min="1" max="999" onchange="updateConfig()">
+        <span class="unit">turns (= 1 day)</span>
+      </div>
+      <div class="field-inline">
+        <label>Auto-replace</label>
+        <label class="toggle"><input type="checkbox" id="missionsAutoReplace" checked onchange="updateConfig()"><span class="pill"></span></label>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3>Day-by-Day Planner</h3>
+      <div class="day-tabs" id="missionDayTabs"></div>
+      <div id="missionDaySlots"></div>
+      <div style="margin-top:8px;display:flex;gap:8px">
+        <button class="btn btn-ghost btn-sm" onclick="copyPreviousDay()">&#128203; Copy from previous day</button>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Mission Library</h3>
+      <div style="display:flex;gap:4px;margin-bottom:8px;flex-wrap:wrap">
+        <button class="btn btn-sm btn-ghost" onclick="filterMissions('all')" style="font-size:10px">All</button>
+        <button class="btn btn-sm" onclick="filterMissions('easy')" style="font-size:10px;background:#12371f;color:#89f9a8">Easy</button>
+        <button class="btn btn-sm" onclick="filterMissions('medium')" style="font-size:10px;background:#33380a;color:#e5f07a">Medium</button>
+        <button class="btn btn-sm" onclick="filterMissions('hard')" style="font-size:10px;background:#3a2214;color:#ffb07a">Hard</button>
+        <button class="btn btn-sm" onclick="filterMissions('very_hard')" style="font-size:10px;background:#3a1414;color:#ff9c9c">V.Hard</button>
+        <button class="btn btn-sm" onclick="filterMissions('extreme')" style="font-size:10px;background:#3a0a3a;color:#f09cf0">Extreme</button>
+      </div>
+      <div id="missionLibrary"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ TAB: ENEMY FORTRESS ═══════════════ -->
+<div class="tab-content" id="tab-fortress">
+  <div class="card">
+    <h3>Enemy Fortress</h3>
+    <div style="display:flex;gap:20px;align-items:center;flex-wrap:wrap">
+      <div class="field-inline">
+        <label>Enabled</label>
+        <label class="toggle"><input type="checkbox" id="eFortEnabled" onchange="updateConfig()"><span class="pill"></span></label>
+      </div>
+      <div class="field-inline">
+        <label>Min distance from player</label>
+        <input type="number" id="eFortDistance" value="6" min="2" max="20" onchange="updateConfig()">
+        <span class="unit">provinces</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Fortress Level Progression</h3>
+    <table id="eFortLevelsTable">
+      <thead>
+        <tr><th>Level</th><th>Wall HP</th><th>Archers</th><th>Towers</th><th>Garrison</th><th>Comp (W/A %)</th><th></th></tr>
+      </thead>
+      <tbody id="eFortLevelsBody"></tbody>
+    </table>
+    <button class="btn btn-ghost btn-sm" onclick="addFortLevel()" style="margin-top:6px">+ Add Level</button>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3>Punishment Armies</h3>
+      <div class="field-inline"><label>Count</label><input type="number" id="eFortPunishCount" value="3" min="0" max="10" onchange="updateConfig()"></div>
+      <div class="field-inline"><label>Army size</label><input type="number" id="eFortPunishSize" value="200" min="10" max="5000" step="10" onchange="updateConfig()"><span class="unit">troops</span></div>
+      <div class="field-inline"><label>Detection radius</label><input type="number" id="eFortPunishRadius" value="2" min="0" max="5" onchange="updateConfig()"><span class="unit">provinces</span></div>
+      <div class="field-inline"><label>Patrol duration</label><input type="number" id="eFortPunishDuration" value="20" min="1" max="100" onchange="updateConfig()"><span class="unit">turns</span></div>
+      <div class="field">
+        <label>Retreat behavior</label>
+        <select id="eFortPunishRetreat" onchange="updateConfig()">
+          <option value="return_to_fortress">Return to fortress</option>
+          <option value="roam">Roam</option>
+          <option value="despawn">Despawn</option>
+        </select>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Repair & Rewards</h3>
+      <div class="field-inline"><label>Turns to repair</label><input type="number" id="eFortRepairTurns" value="10" min="1" max="100" onchange="updateConfig()"></div>
+      <div class="field-inline">
+        <label>Level up on repair</label>
+        <label class="toggle"><input type="checkbox" id="eFortLevelUp" checked onchange="updateConfig()"><span class="pill"></span></label>
+      </div>
+      <div class="field-inline"><label>Max level</label><input type="number" id="eFortMaxLevel" value="5" min="1" max="20" onchange="updateConfig()"></div>
+      <h4>Rewards per Destruction</h4>
+      <div class="grid-3">
+        <div class="field-inline"><label>Gold</label><input type="number" id="eFortRewardGold" value="500" onchange="updateConfig()"></div>
+        <div class="field-inline"><label>Wood</label><input type="number" id="eFortRewardWood" value="200" onchange="updateConfig()"></div>
+        <div class="field-inline"><label>Stone</label><input type="number" id="eFortRewardStone" value="200" onchange="updateConfig()"></div>
+        <div class="field-inline"><label>Food</label><input type="number" id="eFortRewardFood" value="100" onchange="updateConfig()"></div>
+        <div class="field-inline"><label>Iron</label><input type="number" id="eFortRewardIron" value="100" onchange="updateConfig()"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ TAB: PATROLS ═══════════════ -->
+<div class="tab-content" id="tab-patrols">
+  <div class="card">
+    <h3>Patrol Configuration</h3>
+    <div style="display:flex;gap:20px;align-items:center;flex-wrap:wrap">
+      <div class="field-inline">
+        <label>Enabled</label>
+        <label class="toggle"><input type="checkbox" id="patrolsEnabled" onchange="updateConfig()"><span class="pill"></span></label>
+      </div>
+      <div class="field-inline"><label>Count</label><input type="number" id="patrolsCount" value="3" min="0" max="10" onchange="updateConfig()"></div>
+      <div class="field-inline"><label>Route length</label><input type="number" id="patrolsRouteLen" value="2" min="2" max="6" onchange="updateConfig()"><span class="unit">provinces</span></div>
+      <div class="field-inline">
+        <label>Near fortress</label>
+        <label class="toggle"><input type="checkbox" id="patrolsNearFort" checked onchange="updateConfig()"><span class="pill"></span></label>
+      </div>
+      <div class="field-inline"><label>Detection</label><input type="number" id="patrolsDetection" value="2" min="0" max="5" onchange="updateConfig()"><span class="unit">provinces</span></div>
+      <div class="field">
+        <label>Reaction</label>
+        <select id="patrolsReaction" onchange="updateConfig()">
+          <option value="engage">Engage</option>
+          <option value="flee">Flee</option>
+          <option value="ignore">Ignore</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Patrol Tiers</h3>
+    <table id="patrolTiersTable">
+      <thead><tr><th>Tier</th><th>Army Size</th><th>Warriors %</th><th>Archers %</th><th></th></tr></thead>
+      <tbody id="patrolTiersBody"></tbody>
+    </table>
+    <button class="btn btn-ghost btn-sm" onclick="addPatrolTier()" style="margin-top:6px">+ Add Tier</button>
+  </div>
+
+  <div class="card">
+    <h3>Day-Based Scaling</h3>
+    <div class="field-inline">
+      <label>Mode</label>
+      <select id="patrolsScaleMode" onchange="updateScalingUI('patrols');updateConfig()">
+        <option value="linear">Linear</option>
+        <option value="exponential">Exponential</option>
+        <option value="table">Custom Table</option>
+      </select>
+    </div>
+    <div id="patrolsScaleParams"></div>
+    <canvas id="patrolsScaleChart"></canvas>
+  </div>
+</div>
+
+<!-- ═══════════════ TAB: EXPORT / IMPORT ═══════════════ -->
+<div class="tab-content" id="tab-export">
+  <div class="card">
+    <h3>Configuration Management</h3>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
+      <button class="btn btn-primary" onclick="exportJSON()">&#128229; Export JSON</button>
+      <button class="btn btn-warn" onclick="document.getElementById('importFile').click()">&#128228; Import JSON</button>
+      <input type="file" id="importFile" accept=".json" style="display:none" onchange="importJSON(event)">
+      <button class="btn btn-danger" onclick="resetDefaults()">&#128260; Reset to Defaults</button>
+      <button class="btn btn-ghost" onclick="copyToClipboard()">&#128203; Copy to Clipboard</button>
+    </div>
+    <div style="border-top:1px solid var(--border);padding-top:12px;font-size:12px;color:var(--muted)">
+      <div>Last saved: <span id="lastSaved">—</span></div>
+      <div>Config size: <span id="configSize">—</span></div>
+      <div><span class="status-dot on" id="statusDot"></span> Game tab sync: active (via localStorage)</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Raw JSON Preview</h3>
+    <pre id="jsonPreview" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;font-size:11px;max-height:400px;overflow:auto;color:var(--muted);white-space:pre-wrap;word-break:break-all"></pre>
+  </div>
+</div>
+
+</div><!-- .content -->
+
+<script>
+// ═══════════════════════════════════════════════════════════════════
+// MISSION LIBRARY DATA (from expeditionMissions.ts)
+// ═══════════════════════════════════════════════════════════════════
+const MISSIONS = [
+  {id:6,name:'Break the Southern Blockade',difficulty:'easy',troops:65},
+  {id:15,name:'Intercept the Supply Caravan',difficulty:'easy',troops:80},
+  {id:10,name:'Cleanse the Bandit Warrens',difficulty:'medium',troops:130},
+  {id:21,name:'Clear the Ruined Barracks',difficulty:'medium',troops:160},
+  {id:7,name:'Destroy the War Camp at Red Valley',difficulty:'medium',troops:200},
+  {id:11,name:'Eliminate the Elite Vanguard',difficulty:'medium',troops:240},
+  {id:22,name:'Seize the Broken Gatehouse',difficulty:'medium',troops:250},
+  {id:13,name:'Assault the Siege Workshop',difficulty:'hard',troops:600},
+  {id:23,name:'Purge the Desecrated Chapel',difficulty:'hard',troops:650},
+  {id:16,name:'Break the Ironclad Phalanx',difficulty:'hard',troops:900},
+  {id:24,name:'Break the Hall of Chains',difficulty:'hard',troops:900},
+  {id:17,name:'Storm the Fortress of Grey Ridge',difficulty:'very_hard',troops:2500},
+  {id:18,name:"Defeat the Beastlord's Horde",difficulty:'very_hard',troops:3200},
+  {id:19,name:'Burn the Great Encampment',difficulty:'extreme',troops:5000},
+];
+
+const UNIT_TYPES = ['warrior','militia','longsword','pikemen','light_cavalry','heavy_cavalry','archer','skirmisher','crossbowmen'];
+const UNIT_NAMES = {warrior:'Warrior',militia:'Militia',longsword:'Longsword',pikemen:'Pikemen',light_cavalry:'Light Cavalry',heavy_cavalry:'Heavy Cavalry',archer:'Archer',skirmisher:'Skirmisher',crossbowmen:'Crossbowmen'};
+const DIFF_BADGES = {easy:'badge-easy',medium:'badge-medium',hard:'badge-hard',very_hard:'badge-vhard',extreme:'badge-extreme'};
+
+// ═══════════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════════
+const STORAGE_KEY = 'zundral_serverConfig';
+
+let config = getDefaults();
+let missionSelectedDay = 1;
+let missionFilter = 'all';
+
+function getDefaults() {
+  return {
+    version: 1,
+    general: { turnDurationSeconds: 300, totalExpeditionTurns: 288, autoAdvanceTurns: true },
+    assaultWaves: {
+      enabled: true, frequency: 4, startTurn: 5, baseArmySize: 80,
+      composition: [{unitType:'warrior',ratio:50},{unitType:'archer',ratio:50}],
+      scaling: { mode: 'linear', linearIncrement: 20, exponentialMultiplier: 1.3, table: [{day:1,armySize:80},{day:3,armySize:120},{day:5,armySize:200}] },
+      extinctionWave: { enabled: false, triggerDay: 7, armySize: 2000, composition: [{unitType:'warrior',ratio:60},{unitType:'archer',ratio:40}] }
+    },
+    bandits: {
+      enabled: true, count: 5, minSize: 20, maxSize: 60,
+      composition: [{unitType:'warrior',ratio:50},{unitType:'archer',ratio:50}],
+      forestOnly: true, behavior: 'attack_weaker', detectionRadius: 2,
+      scaling: { mode: 'linear', linearIncrement: 10, exponentialMultiplier: 1.2, table: [] }
+    },
+    missions: { maxActive: 3, renewalTurns: 288, autoReplace: true, dayPlans: [{day:1,missionIds:[6,10,13]}] },
+    enemyFortress: {
+      enabled: false, minDistanceFromPlayer: 6,
+      levels: [
+        {level:1,wallHP:400,archerSlots:5,towerCount:1,garrisonTroops:40,warriorPct:80},
+        {level:2,wallHP:800,archerSlots:10,towerCount:2,garrisonTroops:80,warriorPct:70},
+        {level:3,wallHP:1200,archerSlots:15,towerCount:3,garrisonTroops:120,warriorPct:60},
+      ],
+      destruction: { punishmentArmyCount:3, punishmentArmySize:200, detectionRadius:2, patrolDuration:20, retreatBehavior:'return_to_fortress' },
+      repair: { turnsToRepair:10, levelUpOnRepair:true, maxLevel:5 },
+      rewards: { gold:500, wood:200, stone:200, food:100, iron:100 }
+    },
+    patrols: {
+      enabled: false, count: 3, patrolProvinceCount: 2, preferFortressAdjacent: true,
+      playerDetectionRadius: 2, reaction: 'engage',
+      tiers: [{tier:1,armySize:40,warriorPct:70},{tier:2,armySize:80,warriorPct:60},{tier:3,armySize:120,warriorPct:50}],
+      scaling: { mode: 'linear', linearIncrement: 1, exponentialMultiplier: 1.1, table: [] }
+    }
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// TAB SWITCHING
+// ═══════════════════════════════════════════════════════════════════
+document.querySelectorAll('.tab').forEach(t => {
+  t.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    document.getElementById('tab-' + t.dataset.tab).classList.add('active');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// CONFIG READ/WRITE
+// ═══════════════════════════════════════════════════════════════════
+let saveTimer = null;
+function updateConfig() {
+  // Read all UI values into config
+  config.general.turnDurationSeconds = +document.getElementById('turnDuration').value;
+  config.general.autoAdvanceTurns = document.getElementById('autoAdvance').checked;
+  config.general.totalExpeditionTurns = +document.getElementById('totalTurns').value;
+
+  config.assaultWaves.enabled = document.getElementById('wavesEnabled').checked;
+  config.assaultWaves.frequency = +document.getElementById('wavesFreq').value;
+  config.assaultWaves.startTurn = +document.getElementById('wavesStart').value;
+  config.assaultWaves.baseArmySize = +document.getElementById('wavesSize').value;
+  config.assaultWaves.scaling.mode = document.getElementById('wavesScaleMode').value;
+  config.assaultWaves.extinctionWave.enabled = document.getElementById('extinctionEnabled').checked;
+  config.assaultWaves.extinctionWave.triggerDay = +document.getElementById('extinctionDay').value;
+  config.assaultWaves.extinctionWave.armySize = +document.getElementById('extinctionSize').value;
+
+  config.bandits.enabled = document.getElementById('banditsEnabled').checked;
+  config.bandits.count = +document.getElementById('banditsCount').value;
+  config.bandits.minSize = +document.getElementById('banditsMinSize').value;
+  config.bandits.maxSize = +document.getElementById('banditsMaxSize').value;
+  config.bandits.behavior = document.getElementById('banditsBehavior').value;
+  config.bandits.detectionRadius = +document.getElementById('banditsRadius').value;
+  config.bandits.forestOnly = document.getElementById('banditsForestOnly').checked;
+  config.bandits.scaling.mode = document.getElementById('banditsScaleMode').value;
+
+  config.missions.maxActive = +document.getElementById('missionsMax').value;
+  config.missions.renewalTurns = +document.getElementById('missionsRenewal').value;
+  config.missions.autoReplace = document.getElementById('missionsAutoReplace').checked;
+
+  config.enemyFortress.enabled = document.getElementById('eFortEnabled').checked;
+  config.enemyFortress.minDistanceFromPlayer = +document.getElementById('eFortDistance').value;
+  readFortLevels();
+  config.enemyFortress.destruction.punishmentArmyCount = +document.getElementById('eFortPunishCount').value;
+  config.enemyFortress.destruction.punishmentArmySize = +document.getElementById('eFortPunishSize').value;
+  config.enemyFortress.destruction.detectionRadius = +document.getElementById('eFortPunishRadius').value;
+  config.enemyFortress.destruction.patrolDuration = +document.getElementById('eFortPunishDuration').value;
+  config.enemyFortress.destruction.retreatBehavior = document.getElementById('eFortPunishRetreat').value;
+  config.enemyFortress.repair.turnsToRepair = +document.getElementById('eFortRepairTurns').value;
+  config.enemyFortress.repair.levelUpOnRepair = document.getElementById('eFortLevelUp').checked;
+  config.enemyFortress.repair.maxLevel = +document.getElementById('eFortMaxLevel').value;
+  config.enemyFortress.rewards.gold = +document.getElementById('eFortRewardGold').value;
+  config.enemyFortress.rewards.wood = +document.getElementById('eFortRewardWood').value;
+  config.enemyFortress.rewards.stone = +document.getElementById('eFortRewardStone').value;
+  config.enemyFortress.rewards.food = +document.getElementById('eFortRewardFood').value;
+  config.enemyFortress.rewards.iron = +document.getElementById('eFortRewardIron').value;
+
+  config.patrols.enabled = document.getElementById('patrolsEnabled').checked;
+  config.patrols.count = +document.getElementById('patrolsCount').value;
+  config.patrols.patrolProvinceCount = +document.getElementById('patrolsRouteLen').value;
+  config.patrols.preferFortressAdjacent = document.getElementById('patrolsNearFort').checked;
+  config.patrols.playerDetectionRadius = +document.getElementById('patrolsDetection').value;
+  config.patrols.reaction = document.getElementById('patrolsReaction').value;
+  config.patrols.scaling.mode = document.getElementById('patrolsScaleMode').value;
+  readPatrolTiers();
+
+  // Debounced save
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveConfig, 300);
+
+  // Update derived displays
+  updateDayCalc();
+  drawScalingChart('waves');
+  drawScalingChart('bandits');
+  drawScalingChart('patrols');
+  updateJSONPreview();
+}
+
+function saveConfig() {
+  config.lastModified = Date.now();
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+  document.getElementById('lastSaved').textContent = new Date().toLocaleTimeString();
+  const size = new Blob([JSON.stringify(config)]).size;
+  document.getElementById('configSize').textContent = (size / 1024).toFixed(1) + ' KB';
+}
+
+function loadConfig() {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) config = { ...getDefaults(), ...JSON.parse(saved) };
+  } catch(e) { config = getDefaults(); }
+  applyConfigToUI();
+}
+
+function applyConfigToUI() {
+  document.getElementById('turnDuration').value = config.general.turnDurationSeconds;
+  document.getElementById('autoAdvance').checked = config.general.autoAdvanceTurns;
+  document.getElementById('totalTurns').value = config.general.totalExpeditionTurns;
+  document.getElementById('wavesEnabled').checked = config.assaultWaves.enabled;
+  document.getElementById('wavesFreq').value = config.assaultWaves.frequency;
+  document.getElementById('wavesStart').value = config.assaultWaves.startTurn;
+  document.getElementById('wavesSize').value = config.assaultWaves.baseArmySize;
+  document.getElementById('wavesScaleMode').value = config.assaultWaves.scaling.mode;
+  document.getElementById('extinctionEnabled').checked = config.assaultWaves.extinctionWave.enabled;
+  document.getElementById('extinctionDay').value = config.assaultWaves.extinctionWave.triggerDay;
+  document.getElementById('extinctionSize').value = config.assaultWaves.extinctionWave.armySize;
+  document.getElementById('banditsEnabled').checked = config.bandits.enabled;
+  document.getElementById('banditsCount').value = config.bandits.count;
+  document.getElementById('banditsMinSize').value = config.bandits.minSize;
+  document.getElementById('banditsMaxSize').value = config.bandits.maxSize;
+  document.getElementById('banditsBehavior').value = config.bandits.behavior;
+  document.getElementById('banditsRadius').value = config.bandits.detectionRadius;
+  document.getElementById('banditsForestOnly').checked = config.bandits.forestOnly;
+  document.getElementById('banditsScaleMode').value = config.bandits.scaling.mode;
+  document.getElementById('missionsMax').value = config.missions.maxActive;
+  document.getElementById('missionsRenewal').value = config.missions.renewalTurns;
+  document.getElementById('missionsAutoReplace').checked = config.missions.autoReplace;
+  document.getElementById('eFortEnabled').checked = config.enemyFortress.enabled;
+  document.getElementById('eFortDistance').value = config.enemyFortress.minDistanceFromPlayer;
+  document.getElementById('eFortPunishCount').value = config.enemyFortress.destruction.punishmentArmyCount;
+  document.getElementById('eFortPunishSize').value = config.enemyFortress.destruction.punishmentArmySize;
+  document.getElementById('eFortPunishRadius').value = config.enemyFortress.destruction.detectionRadius;
+  document.getElementById('eFortPunishDuration').value = config.enemyFortress.destruction.patrolDuration;
+  document.getElementById('eFortPunishRetreat').value = config.enemyFortress.destruction.retreatBehavior;
+  document.getElementById('eFortRepairTurns').value = config.enemyFortress.repair.turnsToRepair;
+  document.getElementById('eFortLevelUp').checked = config.enemyFortress.repair.levelUpOnRepair;
+  document.getElementById('eFortMaxLevel').value = config.enemyFortress.repair.maxLevel;
+  document.getElementById('eFortRewardGold').value = config.enemyFortress.rewards.gold;
+  document.getElementById('eFortRewardWood').value = config.enemyFortress.rewards.wood;
+  document.getElementById('eFortRewardStone').value = config.enemyFortress.rewards.stone;
+  document.getElementById('eFortRewardFood').value = config.enemyFortress.rewards.food;
+  document.getElementById('eFortRewardIron').value = config.enemyFortress.rewards.iron;
+  document.getElementById('patrolsEnabled').checked = config.patrols.enabled;
+  document.getElementById('patrolsCount').value = config.patrols.count;
+  document.getElementById('patrolsRouteLen').value = config.patrols.patrolProvinceCount;
+  document.getElementById('patrolsNearFort').checked = config.patrols.preferFortressAdjacent;
+  document.getElementById('patrolsDetection').value = config.patrols.playerDetectionRadius;
+  document.getElementById('patrolsReaction').value = config.patrols.reaction;
+  document.getElementById('patrolsScaleMode').value = config.patrols.scaling.mode;
+
+  renderWavesComp();
+  renderFortLevels();
+  renderPatrolTiers();
+  renderMissionPlanner();
+  renderMissionLibrary();
+  updateDayCalc();
+  updateScalingUI('waves');
+  updateScalingUI('bandits');
+  updateScalingUI('patrols');
+  updateJSONPreview();
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// DAY CALCULATOR
+// ═══════════════════════════════════════════════════════════════════
+function updateDayCalc() {
+  const sec = config.general.turnDurationSeconds;
+  const total = config.general.totalExpeditionTurns;
+  const el = document.getElementById('dayCalc');
+  if (sec <= 0) { el.innerHTML = '<div style="color:var(--muted)">Manual mode — no timer</div>'; return; }
+  const tph = Math.floor(3600 / sec);
+  const tpd = tph * 24;
+  const days = total > 0 ? (total / tpd).toFixed(1) : '&infin;';
+  let html = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:12px">`;
+  html += `<div style="color:var(--muted)">Turns per hour</div><div style="font-weight:700">${tph}</div>`;
+  html += `<div style="color:var(--muted)">Turns per day</div><div style="font-weight:700">${tpd}</div>`;
+  html += `<div style="color:var(--muted)">Total days</div><div style="font-weight:700">${days}</div>`;
+  html += `</div>`;
+  if (total > 0 && tpd > 0) {
+    html += `<div style="margin-top:10px;border-top:1px solid var(--border);padding-top:8px;font-size:11px">`;
+    const numDays = Math.ceil(total / tpd);
+    for (let d = 1; d <= Math.min(numDays, 10); d++) {
+      const from = (d-1)*tpd + 1;
+      const to = Math.min(d*tpd, total);
+      html += `<div style="color:var(--muted)">Day ${d} <span style="color:var(--text);margin-left:8px">Turns ${from} &ndash; ${to}</span></div>`;
+    }
+    if (numDays > 10) html += `<div style="color:var(--muted)">... ${numDays - 10} more days</div>`;
+    html += `</div>`;
+  }
+  el.innerHTML = html;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// COMPOSITION EDITOR (Waves)
+// ═══════════════════════════════════════════════════════════════════
+function renderWavesComp() {
+  const el = document.getElementById('wavesComp');
+  const comp = config.assaultWaves.composition;
+  let html = '';
+  for (const ut of UNIT_TYPES) {
+    const existing = comp.find(c => c.unitType === ut);
+    const val = existing ? existing.ratio : 0;
+    html += `<div class="comp-row"><span class="name">${UNIT_NAMES[ut]}</span><input type="range" min="0" max="100" step="5" value="${val}" data-unit="${ut}" oninput="updateWavesComp(this)"><span class="pct" id="wcomp_${ut}">${val}%</span></div>`;
+  }
+  el.innerHTML = html;
+  updateWavesCompTotal();
+}
+
+function updateWavesComp(input) {
+  const ut = input.dataset.unit;
+  const val = +input.value;
+  document.getElementById('wcomp_' + ut).textContent = val + '%';
+  const comp = [];
+  document.querySelectorAll('#wavesComp input[type=range]').forEach(r => {
+    if (+r.value > 0) comp.push({unitType: r.dataset.unit, ratio: +r.value});
+  });
+  config.assaultWaves.composition = comp;
+  updateWavesCompTotal();
+  clearTimeout(saveTimer); saveTimer = setTimeout(saveConfig, 300);
+}
+
+function updateWavesCompTotal() {
+  const total = config.assaultWaves.composition.reduce((s,c) => s + c.ratio, 0);
+  const el = document.getElementById('wavesCompTotal');
+  el.textContent = total + '%';
+  el.style.color = total === 100 ? 'var(--ok)' : 'var(--danger)';
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// SCALING CHART
+// ═══════════════════════════════════════════════════════════════════
+function updateScalingUI(prefix) {
+  const mode = document.getElementById(prefix + 'ScaleMode').value;
+  const el = document.getElementById(prefix + 'ScaleParams');
+  let html = '';
+  if (mode === 'linear') {
+    const inc = prefix === 'waves' ? config.assaultWaves.scaling.linearIncrement : prefix === 'bandits' ? config.bandits.scaling.linearIncrement : config.patrols.scaling.linearIncrement;
+    html = `<div class="field-inline"><label>Increment per day</label><input type="number" id="${prefix}LinearInc" value="${inc||20}" min="0" max="1000" onchange="readScalingParam('${prefix}');updateConfig()"><span class="unit">${prefix==='patrols'?'tier':'troops'}</span></div>`;
+  } else if (mode === 'exponential') {
+    const mul = prefix === 'waves' ? config.assaultWaves.scaling.exponentialMultiplier : prefix === 'bandits' ? config.bandits.scaling.exponentialMultiplier : config.patrols.scaling.exponentialMultiplier;
+    html = `<div class="field-inline"><label>Multiplier per day</label><input type="number" id="${prefix}ExpMul" value="${mul||1.3}" min="1" max="5" step="0.1" onchange="readScalingParam('${prefix}');updateConfig()"></div>`;
+  } else {
+    html = `<div style="font-size:11px;color:var(--muted)">Use the Custom Table editor (coming soon)</div>`;
+  }
+  el.innerHTML = html;
+  drawScalingChart(prefix);
+}
+
+function readScalingParam(prefix) {
+  const mode = document.getElementById(prefix + 'ScaleMode').value;
+  const sc = prefix === 'waves' ? config.assaultWaves.scaling : prefix === 'bandits' ? config.bandits.scaling : config.patrols.scaling;
+  sc.mode = mode;
+  if (mode === 'linear') { const el = document.getElementById(prefix+'LinearInc'); if(el) sc.linearIncrement = +el.value; }
+  if (mode === 'exponential') { const el = document.getElementById(prefix+'ExpMul'); if(el) sc.exponentialMultiplier = +el.value; }
+}
+
+function drawScalingChart(prefix) {
+  const canvas = document.getElementById(prefix + 'ScaleChart');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width = canvas.offsetWidth * 2;
+  const h = canvas.height = 360;
+  ctx.clearRect(0, 0, w, h);
+
+  const sc = prefix === 'waves' ? config.assaultWaves.scaling : prefix === 'bandits' ? config.bandits.scaling : config.patrols.scaling;
+  const base = prefix === 'waves' ? config.assaultWaves.baseArmySize : prefix === 'bandits' ? config.bandits.maxSize : (config.patrols.tiers[0]?.armySize || 40);
+  const days = 10;
+  const values = [];
+  for (let d = 1; d <= days; d++) {
+    if (sc.mode === 'linear') values.push(base + (sc.linearIncrement || 0) * (d - 1));
+    else if (sc.mode === 'exponential') values.push(base * Math.pow(sc.exponentialMultiplier || 1, d - 1));
+    else values.push(base);
+  }
+  const maxVal = Math.max(...values, 1);
+  const pad = { t: 30, b: 30, l: 60, r: 20 };
+  const cw = w - pad.l - pad.r;
+  const ch = h - pad.t - pad.b;
+
+  // Grid
+  ctx.strokeStyle = '#1a2030'; ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    const y = pad.t + (ch / 4) * i;
+    ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(w - pad.r, y); ctx.stroke();
+    ctx.fillStyle = '#5a6a80'; ctx.font = '20px system-ui'; ctx.textAlign = 'right';
+    ctx.fillText(Math.round(maxVal * (1 - i / 4)), pad.l - 8, y + 6);
+  }
+  // X labels
+  ctx.textAlign = 'center';
+  for (let d = 1; d <= days; d++) {
+    const x = pad.l + ((d - 1) / (days - 1)) * cw;
+    ctx.fillText('D' + d, x, h - 6);
+  }
+  // Line
+  ctx.strokeStyle = '#2d9cff'; ctx.lineWidth = 3; ctx.lineJoin = 'round';
+  ctx.beginPath();
+  for (let d = 1; d <= days; d++) {
+    const x = pad.l + ((d - 1) / (days - 1)) * cw;
+    const y = pad.t + ch - (values[d - 1] / maxVal) * ch;
+    if (d === 1) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+  // Dots
+  ctx.fillStyle = '#2d9cff';
+  for (let d = 1; d <= days; d++) {
+    const x = pad.l + ((d - 1) / (days - 1)) * cw;
+    const y = pad.t + ch - (values[d - 1] / maxVal) * ch;
+    ctx.beginPath(); ctx.arc(x, y, 5, 0, Math.PI * 2); ctx.fill();
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// FORTRESS LEVELS TABLE
+// ═══════════════════════════════════════════════════════════════════
+function renderFortLevels() {
+  const tbody = document.getElementById('eFortLevelsBody');
+  let html = '';
+  for (const lv of config.enemyFortress.levels) {
+    html += `<tr>
+      <td>${lv.level}</td>
+      <td><input type="number" value="${lv.wallHP}" min="0" step="100" onchange="updateConfig()"></td>
+      <td><input type="number" value="${lv.archerSlots}" min="0" onchange="updateConfig()"></td>
+      <td><input type="number" value="${lv.towerCount}" min="0" onchange="updateConfig()"></td>
+      <td><input type="number" value="${lv.garrisonTroops}" min="0" step="10" onchange="updateConfig()"></td>
+      <td><input type="number" value="${lv.warriorPct||80}" min="0" max="100" onchange="updateConfig()">%</td>
+      <td><button class="btn btn-danger btn-sm" onclick="removeFortLevel(${lv.level})">&#10005;</button></td>
+    </tr>`;
+  }
+  tbody.innerHTML = html;
+}
+
+function readFortLevels() {
+  const rows = document.querySelectorAll('#eFortLevelsBody tr');
+  config.enemyFortress.levels = Array.from(rows).map((row, i) => {
+    const inputs = row.querySelectorAll('input');
+    return { level: i+1, wallHP: +inputs[0].value, archerSlots: +inputs[1].value, towerCount: +inputs[2].value, garrisonTroops: +inputs[3].value, warriorPct: +inputs[4].value };
+  });
+}
+
+function addFortLevel() {
+  const last = config.enemyFortress.levels[config.enemyFortress.levels.length - 1] || {level:0,wallHP:400,archerSlots:5,towerCount:1,garrisonTroops:40,warriorPct:80};
+  config.enemyFortress.levels.push({ level: last.level+1, wallHP: last.wallHP+400, archerSlots: last.archerSlots+5, towerCount: last.towerCount+1, garrisonTroops: last.garrisonTroops+40, warriorPct: Math.max(40, last.warriorPct-10) });
+  renderFortLevels(); saveConfig();
+}
+
+function removeFortLevel(level) {
+  config.enemyFortress.levels = config.enemyFortress.levels.filter(l => l.level !== level);
+  config.enemyFortress.levels.forEach((l,i) => l.level = i+1);
+  renderFortLevels(); saveConfig();
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// PATROL TIERS TABLE
+// ═══════════════════════════════════════════════════════════════════
+function renderPatrolTiers() {
+  const tbody = document.getElementById('patrolTiersBody');
+  let html = '';
+  for (const t of config.patrols.tiers) {
+    html += `<tr>
+      <td>${t.tier}</td>
+      <td><input type="number" value="${t.armySize}" min="10" step="10" onchange="updateConfig()"></td>
+      <td><input type="number" value="${t.warriorPct||70}" min="0" max="100" onchange="updateConfig()">%</td>
+      <td>${100-(t.warriorPct||70)}%</td>
+      <td><button class="btn btn-danger btn-sm" onclick="removePatrolTier(${t.tier})">&#10005;</button></td>
+    </tr>`;
+  }
+  tbody.innerHTML = html;
+}
+
+function readPatrolTiers() {
+  const rows = document.querySelectorAll('#patrolTiersBody tr');
+  config.patrols.tiers = Array.from(rows).map((row, i) => {
+    const inputs = row.querySelectorAll('input');
+    return { tier: i+1, armySize: +inputs[0].value, warriorPct: +inputs[1].value };
+  });
+}
+
+function addPatrolTier() {
+  const last = config.patrols.tiers[config.patrols.tiers.length - 1] || {tier:0,armySize:40,warriorPct:70};
+  config.patrols.tiers.push({ tier: last.tier+1, armySize: last.armySize+40, warriorPct: Math.max(30, last.warriorPct-10) });
+  renderPatrolTiers(); saveConfig();
+}
+
+function removePatrolTier(tier) {
+  config.patrols.tiers = config.patrols.tiers.filter(t => t.tier !== tier);
+  config.patrols.tiers.forEach((t,i) => t.tier = i+1);
+  renderPatrolTiers(); saveConfig();
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MISSION PLANNER
+// ═══════════════════════════════════════════════════════════════════
+function renderMissionPlanner() {
+  const plans = config.missions.dayPlans;
+  // Day tabs
+  const tabsEl = document.getElementById('missionDayTabs');
+  let html = '';
+  for (const p of plans) {
+    html += `<div class="day-tab ${p.day===missionSelectedDay?'active':''}" onclick="selectMissionDay(${p.day})">Day ${p.day}</div>`;
+  }
+  html += `<div class="day-tab add" onclick="addMissionDay()">+</div>`;
+  tabsEl.innerHTML = html;
+
+  // Slots for selected day
+  const slotsEl = document.getElementById('missionDaySlots');
+  const plan = plans.find(p => p.day === missionSelectedDay);
+  if (!plan) { slotsEl.innerHTML = '<div style="color:var(--muted);font-size:12px">No plan for this day</div>'; return; }
+  html = '';
+  for (let i = 0; i < plan.missionIds.length; i++) {
+    const mid = plan.missionIds[i];
+    html += `<div class="field-inline" style="margin-bottom:4px">`;
+    html += `<span style="color:var(--muted);font-size:11px;width:40px">Slot ${i+1}</span>`;
+    html += `<select style="flex:1" onchange="updateMissionSlot(${i},this.value)">`;
+    html += `<option value="">(empty)</option>`;
+    for (const m of MISSIONS) {
+      html += `<option value="${m.id}" ${m.id===mid?'selected':''}>${m.name} (${m.difficulty})</option>`;
+    }
+    html += `</select>`;
+    html += `<button class="btn btn-danger btn-sm" onclick="removeMissionSlot(${i})">&#10005;</button>`;
+    html += `</div>`;
+  }
+  html += `<button class="btn btn-ghost btn-sm" onclick="addMissionSlot()" style="margin-top:4px">+ Add Slot</button>`;
+  slotsEl.innerHTML = html;
+}
+
+function selectMissionDay(day) { missionSelectedDay = day; renderMissionPlanner(); }
+
+function addMissionDay() {
+  const plans = config.missions.dayPlans;
+  const newDay = plans.length > 0 ? plans[plans.length-1].day + 1 : 1;
+  plans.push({ day: newDay, missionIds: [] });
+  missionSelectedDay = newDay;
+  renderMissionPlanner(); saveConfig();
+}
+
+function updateMissionSlot(index, value) {
+  const plan = config.missions.dayPlans.find(p => p.day === missionSelectedDay);
+  if (plan) { plan.missionIds[index] = +value; saveConfig(); }
+}
+
+function addMissionSlot() {
+  const plan = config.missions.dayPlans.find(p => p.day === missionSelectedDay);
+  if (plan) { plan.missionIds.push(0); renderMissionPlanner(); }
+}
+
+function removeMissionSlot(index) {
+  const plan = config.missions.dayPlans.find(p => p.day === missionSelectedDay);
+  if (plan) { plan.missionIds.splice(index, 1); renderMissionPlanner(); saveConfig(); }
+}
+
+function copyPreviousDay() {
+  const plans = config.missions.dayPlans;
+  const currIdx = plans.findIndex(p => p.day === missionSelectedDay);
+  if (currIdx <= 0) { alert('No previous day to copy from'); return; }
+  const prev = plans[currIdx - 1];
+  plans[currIdx].missionIds = [...prev.missionIds];
+  renderMissionPlanner(); saveConfig();
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MISSION LIBRARY
+// ═══════════════════════════════════════════════════════════════════
+function renderMissionLibrary() {
+  const el = document.getElementById('missionLibrary');
+  let html = '';
+  const filtered = missionFilter === 'all' ? MISSIONS : MISSIONS.filter(m => m.difficulty === missionFilter);
+  for (const m of filtered) {
+    html += `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--border);font-size:11px">`;
+    html += `<span style="color:var(--text)">${m.name}</span>`;
+    html += `<span><span class="badge ${DIFF_BADGES[m.difficulty]}">${m.difficulty}</span> <span style="color:var(--muted);margin-left:4px">${m.troops}</span></span>`;
+    html += `</div>`;
+  }
+  el.innerHTML = html;
+}
+
+function filterMissions(filter) { missionFilter = filter; renderMissionLibrary(); }
+
+// ═══════════════════════════════════════════════════════════════════
+// EXPORT / IMPORT
+// ═══════════════════════════════════════════════════════════════════
+function exportJSON() {
+  const blob = new Blob([JSON.stringify(config, null, 2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'zundral_server_config.json';
+  a.click();
+}
+
+function importJSON(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      config = { ...getDefaults(), ...JSON.parse(e.target.result) };
+      saveConfig();
+      applyConfigToUI();
+      alert('Config imported successfully!');
+    } catch(err) { alert('Invalid JSON file: ' + err.message); }
+  };
+  reader.readAsText(file);
+  event.target.value = '';
+}
+
+function resetDefaults() {
+  if (!confirm('Reset all configuration to defaults?')) return;
+  config = getDefaults();
+  saveConfig();
+  applyConfigToUI();
+}
+
+function copyToClipboard() {
+  navigator.clipboard.writeText(JSON.stringify(config, null, 2)).then(() => alert('Copied to clipboard!'));
+}
+
+function updateJSONPreview() {
+  document.getElementById('jsonPreview').textContent = JSON.stringify(config, null, 2);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════════════
+loadConfig();
+// Delayed chart draw — canvas needs layout dimensions
+setTimeout(() => { drawScalingChart('waves'); drawScalingChart('bandits'); drawScalingChart('patrols'); }, 100);
+</script>
+</body>
+</html>

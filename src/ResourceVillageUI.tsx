@@ -7376,6 +7376,14 @@ Safe recruits (unassigned people): ${freePop}`;
                 >
                   ⚔ Combat Simulator
                 </a>
+                <a
+                  href="/server_config.html"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-lg bg-purple-600 active:bg-purple-700 hover:bg-purple-700 text-white text-[10px] sm:text-xs font-semibold touch-manipulation min-h-[44px] sm:min-h-0 inline-flex items-center gap-1"
+                >
+                  ⚙ Server Config
+                </a>
               </div>
             </div>
           </div>
