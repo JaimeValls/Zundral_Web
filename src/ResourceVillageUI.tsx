@@ -2636,6 +2636,22 @@ export default function ResourceVillageUI() {
       }
     }
 
+    // Roaming enemies: if a player army moves to a roaming enemy's province, conflict triggers
+    // Roaming enemies are static bandits — they defend their province against anyone who enters
+    for (const enemy of enemies) {
+      if (enemy.status !== 'roaming') continue;
+      for (const [bidStr, pDest] of Object.entries(playerDests)) {
+        if (pDest === enemy.provinceId) {
+          const bid = Number(bidStr);
+          const entry = getEntry(pDest);
+          entry.players.add(bid);
+          entry.playerOrigins[bid] = playerPositions[bid] || pDest;
+          entry.enemies.add(enemy.id);
+          entry.enemyOrigins[enemy.id] = enemy.provinceId;
+        }
+      }
+    }
+
     // Return only provinces where BOTH sides are present
     return Array.from(provinceMap.entries())
       .filter(([_, v]) => v.players.size > 0 && v.enemies.size > 0)
@@ -3980,7 +3996,7 @@ export default function ResourceVillageUI() {
         if (warriorCount > 0) squads.push({ type: 'warrior', count: warriorCount });
         if (archerCount > 0) squads.push({ type: 'archer', count: archerCount });
         newEnemies.push({
-          id: nextId++, templateId: 'cheat_roaming', name: `Forest Raiders`, squads, provinceId: prov.id,
+          id: nextId++, templateId: 'cheat_roaming', name: `Forest Bandits`, squads, provinceId: prov.id,
           totalTroops: size, spawnTurn: exp.mapState.turnNumber, status: 'roaming' as const,
         });
         occupied.add(prov.id);
@@ -7815,36 +7831,7 @@ Safe recruits (unassigned people): ${freePop}`;
                 // ── Phase 1: Detect province conflicts (multi-army) ──
                 const provinceConflicts = detectProvinceConflicts(currentPositions, playerDests, currentEnemies, enemyDests);
 
-                // Roaming enemy aggression: roaming enemies attack weaker player armies entering their province
-                const roamingEnemies = currentEnemies.filter(e => e.status === 'roaming');
-                for (const re of roamingEnemies) {
-                  // Check if any player army is moving TO the roaming enemy's province
-                  for (const [bidStr, dest] of Object.entries(playerDests)) {
-                    if (dest !== re.provinceId) continue;
-                    const bid = Number(bidStr);
-                    const banner = banners.find(b => b.id === bid);
-                    if (!banner) continue;
-                    const playerTroops = banner.squads.reduce((s, sq) => s + sq.currentSize, 0);
-                    // Only attack if player is weaker
-                    if (playerTroops >= re.totalTroops) continue;
-                    // Check if this conflict already exists
-                    const existing = provinceConflicts.find(c => c.provinceId === re.provinceId);
-                    if (existing) {
-                      if (!existing.enemyIds.includes(re.id)) {
-                        existing.enemyIds.push(re.id);
-                        existing.enemyOrigins[re.id] = re.provinceId;
-                      }
-                    } else {
-                      provinceConflicts.push({
-                        provinceId: re.provinceId,
-                        playerBannerIds: [bid],
-                        enemyIds: [re.id],
-                        playerOrigins: { [bid]: currentPositions[bid] || dest },
-                        enemyOrigins: { [re.id]: re.provinceId },
-                      });
-                    }
-                  }
-                }
+                // Roaming enemy conflicts now handled inside detectProvinceConflicts
 
                 // Classify battle roles and resolve weak flanks for each conflict
                 const conflictRoles: Array<{ playerRoles: Record<number, BattleRole>; enemyRoles: Record<number, BattleRole> }> = [];

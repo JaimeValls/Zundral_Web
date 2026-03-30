@@ -863,21 +863,16 @@ const MapView: React.FC<MapViewProps> = ({
           />
         ))}
 
-        {/* Roaming enemy markers (amber, different from marching) */}
+        {/* Roaming enemy markers (hostile bandits — same red style as marching enemies) */}
         {roamingMarkers.map(m => (
-          <div
+          <ArmyMarker
             key={m.key}
-            className="absolute pointer-events-none"
-            style={{ left: m.screenX, top: m.screenY, transform: 'translate(-50%, -50%)', zIndex: 30 }}
-          >
-            <div className="flex flex-col items-center">
-              <div className="text-lg drop-shadow-lg">🐺</div>
-              <div className="text-xs font-bold border px-1.5 py-0.5 rounded whitespace-nowrap mt-0.5 flex items-center gap-1 bg-amber-900/90 border-amber-500/70 text-amber-200">
-                🐺 {m.name}
-                <span className="text-amber-400 ml-1">({m.size})</span>
-              </div>
-            </div>
-          </div>
+            screenX={m.screenX}
+            screenY={m.screenY}
+            armyName={m.name}
+            armySize={m.size}
+            hostile
+          />
         ))}
 
         {/* Enemy stack tooltips: show when 2+ hostile armies share a province */}
